@@ -33,3 +33,6 @@ output-metadata.json
 
 # Agent local settings (not shared)
 .claude/settings.local.json
+
+# Local agent notes and plans (not shared)
+.agent/thoughts/
