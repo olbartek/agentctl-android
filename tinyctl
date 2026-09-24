@@ -1,0 +1,26 @@
+#!/bin/sh
+# TinyApp's copy of Templates/appctl: the wrapper every AgentCtl host copies to the root of its repository.
+#
+# It rebuilds the host's own CLI executable incrementally (Gradle's `installDist`, a few seconds when nothing
+# changed) and then execs it, so the CLI is always current and agents call `./appctl …` instead of
+# `./gradlew run`, which mixes its build log into the step output a script is meant to be read from. Here the
+# build log goes to stderr and a build failure exits 3, the CLI's "internal or build error" code.
+#
+# --- Change these two lines for your repo ---------------------------------------------------------------------
+MODULE=":examples:tinyctl"  # TinyApp's CLI module
+NAME="tinyctl"
+# ------------------------------------------------------------------------------------------------------------
+#
+# Name this file whatever your agents should type (`./appctl`, `./myappctl`) and set the same spelling as
+# `HelpExamples.invocation` in your AppCtlConfig, so the CLI's help pages name the command that exists here.
+#
+# APPCTL_ROOT tells the CLI where the repository root is, which is where `scenariosPath` and `docsPath` are
+# resolved from. Without it the CLI walks up from the working directory looking for the config's `rootMarker`
+# (`settings.gradle.kts` by default).
+#
+# JAVA_HOME must name a JDK 17 or newer, as for any Gradle build.
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+MODULE_DIR="$(echo "${MODULE#:}" | tr ':' '/')"
+"$ROOT/gradlew" -p "$ROOT" -q --console=plain "$MODULE:installDist" >&2 || exit 3
+APPCTL_ROOT="$ROOT" exec "$ROOT/$MODULE_DIR/build/install/$NAME/bin/$NAME" "$@"

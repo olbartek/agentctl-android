@@ -1,0 +1,15 @@
+# The cooldown: a second save while the countdown is running is refused with error=cooldown, and the countdown
+# keeps going. `pending=1` is that countdown waiting on the clock; `advance` is what releases it.
+open 2
+expect screen=items/2 cooldown=0 error=none
+save
+expect saved=true cooldown=3 pending=1 error=none
+save
+expect error=cooldown saved=true cooldown=3 pending=1
+advance 1s
+expect cooldown=2 pending=1 error=cooldown
+advance 2s
+expect cooldown=0 pending=0 error=none
+# Saving is allowed again.
+save
+expect saved=true cooldown=3 pending=1 error=none
