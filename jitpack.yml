@@ -1,0 +1,3 @@
+# JitPack builds a tag with `./gradlew publishToMavenLocal`; the Android bridge needs a JDK 17+ for AGP 9.
+jdk:
+  - openjdk21

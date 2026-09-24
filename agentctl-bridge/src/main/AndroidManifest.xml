@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The bridge listens on 127.0.0.1, which needs the INTERNET permission. Add this library with
+  debugImplementation only, so a release build carries neither the bridge nor the permission.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>

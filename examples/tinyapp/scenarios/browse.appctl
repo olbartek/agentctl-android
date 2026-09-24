@@ -1,0 +1,11 @@
+# The happy path: the list loads on appearance, an item opens, a save starts the cooldown, and back returns
+# to the list. `call=items.fetch` asserts on the mock call the previous step made.
+expect screen=items items=3 loading=false error=none call=items.fetch
+open 2
+expect screen=items/2 title="Second item" saved=false cooldown=0
+save
+expect saved=true cooldown=3 pending=1
+advance 3s
+expect cooldown=0 pending=0 error=none
+back
+expect screen=items items=3

@@ -1,0 +1,25 @@
+[versions]
+kotlin = "2.4.20"
+agp = "9.4.1"
+coroutines = "1.11.0"
+clikt = "5.1.0"
+junit = "4.13.2"
+# The Android bridge module only.
+sdk-min = "28"
+sdk-compile = "36"
+
+[libraries]
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+# The core only: plain-text help, no terminal library (Mordant), so help pages print the same everywhere.
+clikt-core = { module = "com.github.ajalt.clikt:clikt-core", version.ref = "clikt" }
+junit = { module = "junit:junit", version.ref = "junit" }
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+# Compile-only dependencies of build-logic.
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+android-application = { id = "com.android.application", version.ref = "agp" }
