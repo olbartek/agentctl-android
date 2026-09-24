@@ -548,8 +548,7 @@ On the contract's open questions, this port follows the reference in every case,
 - the JSON uses sorted keys laid out as Foundation's encoder lays them out;
 - the "Valid here" list ends in the same tail.
 
-It also counts script columns in grapheme clusters, as Swift does. The design notes of the port are in
-[`.agent/thoughts/plans/2026-09-24-kotlin-port.md`](.agent/thoughts/plans/2026-09-24-kotlin-port.md).
+It also counts script columns in grapheme clusters, as Swift does.
 
 ## Building this repository
 

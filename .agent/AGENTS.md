@@ -18,12 +18,12 @@ modules.
    has a KDoc.
 4. **Keep the two ports parallel.** Name things as the Swift package does (`ScriptRunner`, `HeadlessHost`,
    `AppCtlConfig`, `AgentCoverage`…) unless Kotlin makes that wrong, and record any deliberate difference in the
-   README's contract section or the plan below.
+   README's contract section.
 
 ## Layout
 
 ```
-.agent/                 AGENTS.md (this file; CLAUDE.md, AGENTS.md, GEMINI.md link here), thoughts/plans/ (design notes)
+.agent/                 AGENTS.md (this file; CLAUDE.md, AGENTS.md, GEMINI.md link here); thoughts/ (local notes, gitignored)
 agentctl-core/          vocabulary, script parser, expect, step format + JSON, renderers, mocking, clock, Store, AgentEnvironment
 agentctl-runtime/       VirtualTimeDispatcher, HeadlessHost/LiveHost, settling, ScriptRunner, scenarios, AppCtlConfig,
                         BridgeRouter/BridgeServer/HttpParser, AgentLaunchSession (the bridge minus Android)
