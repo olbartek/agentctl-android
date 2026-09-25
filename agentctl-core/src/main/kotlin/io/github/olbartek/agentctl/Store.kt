@@ -118,6 +118,22 @@ public data class ScopedId(val scope: Any, val id: Any?)
 public data class EffectScope(val scope: Any)
 
 /**
+ * Whether `Effect.cancel(cancelId)` cancels an effect running under [effectId]: the same id, or an
+ * [EffectScope] whose scope the effect's id was scoped to. Nesting is followed: once a child's
+ * `Cancel(EffectScope(inner))` is itself scoped by its parent, it becomes
+ * `ScopedId(outer, EffectScope(inner))` and cancels `ScopedId(outer, ScopedId(inner, …))`, so a
+ * container nested in another still cancels only its own children's effects.
+ */
+public fun cancellationMatches(cancelId: Any, effectId: Any): Boolean = when {
+    cancelId == effectId -> true
+    effectId !is ScopedId -> false
+    cancelId is EffectScope -> effectId.scope == cancelId.scope
+    cancelId is ScopedId -> cancelId.scope == effectId.scope && cancelId.id != null && effectId.id != null &&
+        cancellationMatches(cancelId.id, effectId.id)
+    else -> false
+}
+
+/**
  * Embeds a child reducer in a parent's state and actions. `extract` returns the child's action for a parent
  * action meant for the child, or `null` for any other, which the child never sees.
  */
@@ -192,7 +208,7 @@ public class Store<S, A>(
     }
 
     private fun cancel(id: Any) {
-        val keys = if (id is EffectScope) cancellable.keys.filter { it is ScopedId && it.scope == id.scope } else listOf(id)
+        val keys = cancellable.keys.filter { cancellationMatches(id, it) }
         keys.flatMap { cancellable.remove(it)?.toList() ?: emptyList() }.forEach { it.cancel() }
     }
 
