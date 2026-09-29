@@ -88,7 +88,7 @@ dependencyResolutionManagement {
 
 // a module's build.gradle.kts
 dependencies {
-    implementation("com.github.olbartek.agentctl-android:agentctl-core:v0.1.0")
+    implementation("com.github.olbartek.agentctl-android:agentctl-core:v0.2.0")
 }
 ```
 
@@ -287,7 +287,7 @@ which you can copy).
 dependencies {
     implementation(project(":feature:items"))           // screens and store: agentctl-core
     debugImplementation(project(":appctl-config"))      // the AppCtlConfig: agentctl-runtime
-    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:v0.1.0")
+    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:v0.2.0")
 }
 ```
 
@@ -629,5 +629,5 @@ Android modules.
 
 ## Status
 
-Version 0.1, a port of agentctl-ios 0.3. The example app is the only integration CI exercises. The API may still
+Version 0.2, a port of agentctl-ios 0.4. The example app is the only integration CI exercises. The API may still
 change between minor versions before 1.0. MIT licensed.
