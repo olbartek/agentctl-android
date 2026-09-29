@@ -59,7 +59,7 @@ The sources are in [`src/main/kotlin/…/tinyapp`](src/main/kotlin/io/github/olb
 
 These are executable specifications. `./tinyctl test` runs them, and so does the repository's
 [`ScenarioTest`](../../tests/src/test/kotlin/io/github/olbartek/agentctl/tests/ScenarioTest.kt), ten times over
-for determinism. They are copied from agentctl-ios; only their `# app-test: skip` lines, for `./tinyctl app test`, are this port's own.
+for determinism. They are agentctl-ios's, byte for byte, including their `# app-test: skip` lines for `./tinyctl app test`.
 
 | File | What it pins down |
 |---|---|
