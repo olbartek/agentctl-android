@@ -36,4 +36,6 @@ include(":examples:tinyapp-android")
 include(":examples:agentshop:shop")
 include(":examples:agentshop:ctl")
 include(":examples:agentshop:shopctl")
+// The Compose app: the bridge in debug builds, the UI tests generated from the scenarios (bench/gen_uitests.py).
+include(":examples:agentshop:app")
 include(":tests")

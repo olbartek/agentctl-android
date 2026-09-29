@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- From the reference's DesignSystem assets (checkmark.svg). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M13.8162,4.20701C14.0701,4.47369 14.0597,4.89568 13.793,5.14954L6.08928,12.4829C5.95773,12.6081 5.78077,12.6742 5.59932,12.666C5.41788,12.6577 5.24766,12.5758 5.12802,12.4391L2.16505,9.05451C1.92253,8.77747 1.95051,8.35629 2.22754,8.11377C2.50458,7.87125 2.92576,7.89923 3.16828,8.17626L5.67341,11.0379L12.8737,4.1838C13.1404,3.92994 13.5623,3.94033 13.8162,4.20701Z" />
+</vector>

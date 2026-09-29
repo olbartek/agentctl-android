@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- From the reference's DesignSystem assets (warning.svg). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14.6667dp"
+    android:height="12.6667dp"
+    android:viewportWidth="14.6667"
+    android:viewportHeight="12.6667">
+    <path
+        android:fillColor="#EA2A2A"
+        android:pathData="M0,12.6667H14.6667L7.33333,0L0,12.6667ZM8,10.6667H6.66667V9.33333H8V10.6667ZM8,8H6.66667V5.33333H8V8Z" />
+</vector>

@@ -38,10 +38,10 @@ jobs:
       - name: Generated command reference is current
         run: ./tinyctl docs --check
 
-      # The release APK holds none of AgentCtl's runtime, CLI, test support or bridge: TinyApp's config is a
-      # debugImplementation dependency, as a host's should be. (`build` has run it already, as part of `check`.)
+      # The release APK holds none of AgentCtl's runtime, CLI, test support or bridge: TinyApp's and AgentShop's
+      # configs are debugImplementation dependencies, as a host's should be. (`build` has run it already, as part of `check`.)
       - name: Release build leaves out AgentCtl
-        run: ./gradlew :examples:tinyapp-android:verifyReleaseLeavesOutAgentCtl
+        run: ./gradlew :examples:tinyapp-android:verifyReleaseLeavesOutAgentCtl :examples:agentshop:app:verifyReleaseLeavesOutAgentCtl
 
       # AgentShop, the showcase: its 105 scenarios (the reference's, byte for byte) through its own CLI, run from
       # examples/agentshop, its root.
