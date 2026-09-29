@@ -112,7 +112,7 @@ dependencyResolutionManagement {
 
 // a module's build.gradle.kts
 dependencies {
-    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.4.1")
+    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.4.2")
 }
 ```
 
@@ -311,7 +311,7 @@ which you can copy).
 dependencies {
     implementation(project(":feature:items"))           // screens and store: agentctl-core
     debugImplementation(project(":appctl-config"))      // the AppCtlConfig: agentctl-runtime
-    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.4.1")
+    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.4.2")
 }
 ```
 
@@ -665,9 +665,11 @@ Android modules.
 
 ## Status
 
-Version 0.4.1. The two example apps in this repository are the integrations CI exercises, and the API may still
+Version 0.4.2. The two example apps in this repository are the integrations CI exercises, and the API may still
 change between minor versions before 1.0. MIT licensed.
 
 This port and [agentctl-ios](https://github.com/olbartek/agentctl-ios) move in lockstep: the same features, the same
-example apps with the same scenario files, and the same version number, so 0.4.1 here and 0.4.1 there implement the
-same [`CONTRACT.md`](CONTRACT.md). (Before 0.4.1 this port had its own numbers: v0.1.0–v0.2.0.)
+example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.4.x here and 0.4.x there implement the
+same [`CONTRACT.md`](CONTRACT.md). A patch release is one repository's own fix, so the two patch numbers can differ:
+0.4.2 here fixes the running app's clock, which the Swift package did not need. (Before 0.4.1 this port had its own
+numbers: v0.1.0–v0.2.0.)
