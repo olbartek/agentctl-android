@@ -177,6 +177,11 @@ internal class Cli<S, A>(
         BridgeClient(port).send("POST", if (json) "/run?format=json" else "/run", script)
     }
 
+    fun appTest(paths: List<String>, options: AppTest.Options): Int {
+        val root = root() ?: return RunStatus.INTERNAL_ERROR.code
+        return AppTest(this, root).run(paths, options)
+    }
+
     fun appGet(path: String, port: Int): Int = bridgeCall(port) { BridgeClient(port).send("GET", path) }
 
     private fun bridgeCall(port: Int, call: () -> BridgeClient.Response): Int = try {

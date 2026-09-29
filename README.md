@@ -365,6 +365,7 @@ exit=1
 | `snapshots` | The screenshot tests (Roborazzi's or Paparazzi's, found in the config's `gradle.snapshotModules`); `--record` re-records the references. |
 | `check` | The verification ladder below; `--ui` adds its last two rungs. |
 | `app launch` / `app run` / `app state` / `app screens` | The same commands, against the real app on a device or emulator, through the in-app bridge. |
+| `app test [files…]` | The scenario files, in the real app on a device: one fresh launch each, one PASS/FAIL/SKIP line each. `--record <mp4>` records the run, `--step-delay <s>` sends a line at a time so the recording can be followed. |
 
 Exit codes are part of the contract:
 
@@ -536,7 +537,24 @@ works there too: the live host's clock is an `AdvanceableClock`, which `advance`
 letting the app settle between them, so a countdown ticks once per second advanced, as it does headlessly, and its
 `now()` moves with it. Only what sleeps on `environment.clock` moves; a bare `delay`, a `Handler` or a `Timer` keeps
 real time. A backend of yours that reads the time or sleeps should do it on `environment.clock`, as it would
-headlessly. The wire protocol (routes, the `X-Appctl-Exit` header, the JSON form) is
+headlessly.
+
+`app test` runs the scenario files this way, as `test` runs them headlessly: it builds and installs once, then for
+each file launches the app with no saved session (`clear-session`) and sends the file through the bridge.
+`--latency <ms>` sets the mock latency (0 unless given, as for L4, so the first screen has loaded when the script
+starts), `--no-build` uses the installed app, `--record <mp4>` records the device
+for the whole run (`adb shell screenrecord`, in back-to-back chunks under its three-minute limit, joined with
+`ffmpeg` when it is installed) and writes `<mp4>.chapters.txt` with the time each scenario started, and
+`--step-delay <s>` sends one line at a time so the video can be followed. A few scenarios are true headlessly but
+not in a running app: a first `expect` on the launch's own calls (`app launch` has made them before the script
+starts), a countdown's exact value (it also ticks in real time), or a date that is in the future only against the
+headless fixed date. Such a file says so on a comment line, and `app test` prints it as skipped:
+
+```
+# app-test: skip the countdown also ticks in real time
+```
+
+The wire protocol (routes, the `X-Appctl-Exit` header, the JSON form) is
 [CONTRACT.md §8](CONTRACT.md#8-the-in-app-bridge), so either port's CLI can drive either port's app.
 
 ## The contract
@@ -569,6 +587,8 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
 - The live host's `AdvanceableClock` is itself the `AgentClock` that counts sleeps for `pending=`, where the
   reference wraps it in a `CountingClock`; and a backend reads the moved time from `environment.clock.now()`, where
   the reference adds `LiveEnvironment.now`.
+- `app test` runs on a device through `adb` (`screenrecord` for `--record`), and fixes the mock latency at 0 unless
+  `--latency` is given, as L4 does, where the reference uses the app's own latency.
 
 ## Building this repository
 

@@ -1,5 +1,6 @@
 # The cooldown: a second save while the countdown is running is refused with error=cooldown, and the countdown
 # keeps going. `pending=1` is that countdown waiting on the clock; `advance` is what releases it.
+# app-test: skip it checks the countdown's exact values, which in the app also tick in real time
 open 2
 expect screen=items/2 cooldown=0 error=none
 save

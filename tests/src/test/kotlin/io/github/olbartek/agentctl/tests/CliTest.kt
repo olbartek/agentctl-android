@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 class CliTest {
     private val subcommands = listOf(
         listOf("run"), listOf("state"), listOf("screens"), listOf("docs"), listOf("test"), listOf("snapshots"), listOf("check"),
-        listOf("app"), listOf("app", "launch"), listOf("app", "run"), listOf("app", "state"), listOf("app", "screens"),
+        listOf("app"), listOf("app", "launch"), listOf("app", "run"), listOf("app", "test"), listOf("app", "state"), listOf("app", "screens"),
     )
 
     @Test
