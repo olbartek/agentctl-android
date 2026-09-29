@@ -1,0 +1,8 @@
+# A catalog that fails to load shows the error with retry; retry loads it.
+mock catalog.fetchProducts network
+email alice@example.com
+password Passw0rd!
+submit
+expect screen=home/shop products=0 error=network call=catalog.fetchProducts
+retry
+expect products=12 error=none call=catalog.fetchProducts

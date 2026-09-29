@@ -1,0 +1,14 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+card 4242 4242 4242 4242
+place-order
+# After an order, the cart is empty and "Continue shopping" goes back to the shop.
+continue-shopping
+expect screen=home/shop products=12
+tab cart
+expect screen=home/cart items=0 lines=none

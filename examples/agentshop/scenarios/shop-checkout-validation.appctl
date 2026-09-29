@@ -1,0 +1,18 @@
+email bob@example.com
+password Hunter22x
+submit
+# Bob has no saved address: checkout needs one, and a card number, before placing.
+open 103
+add-to-cart
+view-cart
+checkout
+expect screen=home/cart/checkout name="" canPlace=false
+name Bob Builder
+street 3 Oak Ave
+city Austin
+zip 73301
+expect canPlace=false
+card 4242 4242 4242 4242
+expect canPlace=true
+place-order
+expect screen=home/cart/confirmation order=1001 total=$29.00

@@ -1,0 +1,11 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Search and filter combine.
+filter shoes
+search city
+expect filter=shoes query=city products=1
+filter all
+expect products=1
+clear-search
+expect products=12

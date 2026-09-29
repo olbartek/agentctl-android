@@ -1,0 +1,10 @@
+email alice@example.com
+password Passw0rd!
+submit
+# The orders tab lists Alice's three orders.
+tab orders
+expect screen=home/orders orders=3 statuses=delivered,shipped,pending call=orders.fetchOrders
+open 1001
+expect screen=home/orders/1001 status=delivered total=$43.99 canCancel=false
+back
+expect screen=home/orders

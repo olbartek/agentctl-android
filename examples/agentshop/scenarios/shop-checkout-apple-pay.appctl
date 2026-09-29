@@ -1,0 +1,12 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+# Apple Pay needs no card number.
+payment apple-pay
+expect payment=apple-pay canPlace=true
+place-order
+expect screen=home/cart/confirmation order=1004 total=$29.00 call=orders.placeOrder

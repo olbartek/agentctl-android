@@ -1,0 +1,23 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> filter shoes
+  screen=home/shop products=2 filter=shoes query="" sort=featured loading=false
+> search city
+  screen=home/shop products=1 filter=shoes query=city sort=featured loading=false
+> expect filter=shoes query=city products=1
+  screen=home/shop products=1 filter=shoes query=city sort=featured loading=false
+> filter all
+  screen=home/shop products=1 filter=all query=city sort=featured loading=false
+> expect products=1
+  screen=home/shop products=1 filter=all query=city sort=featured loading=false
+> clear-search
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false
+> expect products=12
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false
+exit=0

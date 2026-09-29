@@ -1,0 +1,8 @@
+email nina@example.com
+password Passw0rd!
+submit
+# Skip leaves the introduction from any page.
+next
+expect page=2
+skip
+expect screen=onboarding/interests selected=0 canContinue=false

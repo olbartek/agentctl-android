@@ -1,0 +1,14 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+# The mock declines one card; another payment method goes through.
+card 4000 0000 0000 0002
+place-order
+expect screen=home/cart/checkout error=paymentDeclined call=orders.placeOrder
+payment apple-pay
+place-order
+expect screen=home/cart/confirmation

@@ -1,0 +1,11 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+# Tapping a picked interest again unpicks it.
+toggle shoes
+toggle bags
+toggle shoes
+expect selected=1 interests=bags canContinue=false
+toggle home
+expect selected=2 interests=bags,home

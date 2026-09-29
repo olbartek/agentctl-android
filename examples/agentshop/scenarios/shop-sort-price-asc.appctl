@@ -1,0 +1,8 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Sorting by price, cheapest first; opening the first product shows the cheapest.
+sort price-asc
+expect sort=price-asc products=12
+open 111
+expect screen=home/shop/111 name="Ceramic Mug" price=$14.00

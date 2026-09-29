@@ -1,0 +1,10 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Favoriting a product and taking it back.
+open 105
+expect favorite=false
+favorite on
+expect favorite=true
+favorite off
+expect favorite=false

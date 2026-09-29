@@ -1,0 +1,202 @@
+launching  [AppFeature]
+  login-as <alice|bob>    Save a seeded account's session and go straight home.
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).
+  back                    Fails with 'nothing to go back to' when no screen is pushed.
+auth/login  [Login]
+  email <text>             Set the email field.
+  password <text>          Set the password field.
+  show-password <on|off>   Show or hide the password.
+  keep-signed-in <on|off>  Tick "Keep me signed in" (on by default). Off: the session is not restored on relaunch.
+  submit                   Log in with the email and password. [disabled when canSubmit=false]
+  google                   Sign in with Google (the mock signs in as becca@gmail.com). [disabled when loading=true]
+  use-otp                  Switch to login with a one-time code (keeps the email).
+  register                 Open registration ("Sign up here").
+  forgot                   Open forgot password (keeps the email).
+  login-as <alice|bob>     Save a seeded account's session and go straight home.  (AppFeature)
+  reset                    Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  back                     Fails with 'nothing to go back to' when no screen is pushed.  (AppFeature)
+  summary: email keepSignedIn revealed canSubmit loading
+auth/otp/email  [OTPLogin]
+  email <text>            Set the email field.
+  send                    Email a one-time code. [disabled when canSend=false]
+  back                    Go back to the previous screen.  (AuthFlow)
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: email canSend resendIn attemptsLeft canVerify loading
+auth/otp/code  [OTPLogin]
+  code <digits>           Type the 6-digit code.
+  verify                  Verify the code and log in. [disabled when canVerify=false]
+  resend                  Send a new code (blocked while resendIn > 0).
+  back                    Go back to the previous screen.  (AuthFlow)
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: email canSend resendIn attemptsLeft canVerify loading
+auth/register  [Register]
+  name <text>             Set the full name field.
+  email <text>            Set the email field.
+  password <text>         Set the password field.
+  confirm <text>          Set the confirm-password field.
+  show-password <on|off>  Show or hide the password.
+  show-confirm <on|off>   Show or hide the confirm-password field.
+  terms <on|off>          Accept or decline the terms.
+  submit                  Create the account; a verification code is emailed (verify it next). [disabled when canSubmit=false]
+  google                  Sign up with Google (the mock signs in as becca@gmail.com). [disabled when loading=true]
+  back                    Go back to the previous screen.  (AuthFlow)
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: email terms revealed issues canSubmit loading
+auth/register/verify  [VerifyEmail]
+  code <digits>           Type the 6-digit verification code.
+  verify                  Verify the email and sign in ("Create Account"). [disabled when canVerify=false]
+  resend                  Email a new code (blocked while resendIn > 0).
+  back                    Go back to the previous screen.  (AuthFlow)
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: email resendIn canVerify loading
+auth/forgot/email  [ForgotPassword]
+  email <text>            Set the email field.
+  send                    Request a reset code (always succeeds). [disabled when canSend=false]
+  back                    Go back to the previous screen.  (AuthFlow)
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: email canSend revealed issues canSubmit loading
+auth/forgot/reset  [ForgotPassword]
+  code <digits>           Type the 6-digit reset code.
+  password <text>         Set the new password.
+  confirm <text>          Confirm the new password.
+  show-password <on|off>  Show or hide the new password.
+  show-confirm <on|off>   Show or hide the confirm field.
+  submit                  Reset the password. [disabled when canSubmit=false]
+  back                    Go back to the previous screen.  (AuthFlow)
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: email canSend revealed issues canSubmit loading
+auth/forgot/done  [ForgotPassword]
+  to-login                Go back to login with the email prefilled.
+  back                    Go back to the previous screen.  (AuthFlow)
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: email canSend revealed issues canSubmit loading
+onboarding/welcome  [Welcome]
+  next                    The next page; on the last one, go on to interests.
+  skip                    Skip the introduction and go to interests.
+  back                    The previous page. [disabled when page=1]
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: page pages
+onboarding/interests  [Interests]
+  toggle <shoes|bags|watches|jackets|accessories|home>  Pick or unpick a category (2–4); a fifth reports error=tooMany.
+  continue                                              Save the picks and go on to the address. [disabled when canContinue=false]
+  back                                                  Go back to the previous step.  (OnboardingFlow)
+  login-as <alice|bob>                                  Save a seeded account's session and go straight home.  (AppFeature)
+  reset                                                 Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: selected interests canContinue
+onboarding/address  [AddressForm]
+  name <text>             Set the full name.
+  street <text>           Set the street.
+  city <text>             Set the city.
+  zip <text>              Set the zip code (five digits).
+  continue                Save the address for checkout; a zip that isn't five digits reports error=invalidZip. [disabled when canContinue=false]
+  skip                    Go on without an address.
+  back                    Go back to the previous step.  (OnboardingFlow)
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: name street city zip canContinue
+onboarding/notifications  [Notifications]
+  allow                   Allow notifications and finish onboarding (account.completeOnboarding).
+  not-now                 Finish onboarding without notifications.
+  retry                   Save onboarding again after a failure. [disabled when error=none]
+  back                    Go back to the previous step.  (OnboardingFlow)
+  login-as <alice|bob>    Save a seeded account's session and go straight home.  (AppFeature)
+  reset                   Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: notifications loading
+home/shop  [ShopFeed]
+  filter <all|shoes|bags|watches|jackets|accessories|home>  Show one category, or all.
+  search <text>                                             Type in the search field; matches product names as you type.
+  clear-search                                              Clear the search field.
+  sort <featured|price-asc|price-desc>                      Sort the products.
+  open <sku>                                                Open a product, e.g. open 101. [disabled when products=0]
+  refresh                                                   Load the catalog again.
+  retry                                                     Load the catalog again after a failure. [disabled when error=none]
+  tab <shop|cart|orders|profile>                            Switch tab.  (HomeTabs)
+  login-as <alice|bob>                                      Save a seeded account's session and go straight home.  (AppFeature)
+  reset                                                     Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  back                                                      Fails with 'nothing to go back to' when no screen is pushed.  (AppFeature)
+  summary: products filter query sort loading
+home/shop/<sku>  [ProductDetail]
+  size <size>                     Pick a size, e.g. size 42 or size M.
+  qty-up                          One more (at most 5; beyond that error=maxQuantity).
+  qty-down                        One fewer (at least 1; below that error=minQuantity).
+  favorite <on|off>               Mark or unmark as a favorite.
+  add-to-cart                     Add the quantity in the chosen size to the cart. Needs a size when the product has sizes. [disabled when canAdd=false]
+  view-cart                       Switch to the cart tab.
+  tab <shop|cart|orders|profile>  Switch tab.  (HomeTabs)
+  back                            Go back to the previous screen.  (HomeTabs)
+  login-as <alice|bob>            Save a seeded account's session and go straight home.  (AppFeature)
+  reset                           Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: name price size qty inStock favorite canAdd added
+home/cart  [Cart]
+  inc <line>                      One more of a line, e.g. inc 101-42 or inc 103.
+  dec <line>                      One fewer of a line; at one, the line is removed.
+  remove <line>                   Remove a line.
+  promo-code <text>               Type in the promo code field (SAVE10 and HALF exist).
+  apply-promo                     Apply the typed code (cart.applyPromo); an unknown one reports error=invalidPromo. [disabled when no code typed]
+  clear-promo                     Remove the applied promo code. [disabled when promo=none]
+  checkout                        Go to checkout. [disabled when canCheckout=false]
+  tab <shop|cart|orders|profile>  Switch tab.  (HomeTabs)
+  login-as <alice|bob>            Save a seeded account's session and go straight home.  (AppFeature)
+  reset                           Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  back                            Fails with 'nothing to go back to' when no screen is pushed.  (AppFeature)
+  summary: lines items subtotal discount total promo canCheckout
+home/cart/checkout  [Checkout]
+  name <text>                     Set the full name.
+  street <text>                   Set the street.
+  city <text>                     Set the city.
+  zip <text>                      Set the zip code (five digits).
+  shipping <standard|express>     Standard is free; express adds $15.00.
+  payment <card|apple-pay>        Pay by card or with Apple Pay.
+  card <number>                   Type the card number (16 digits; 4000 0000 0000 0002 is declined). [disabled when payment=apple-pay]
+  place-order                     Place the order (orders.placeOrder). Reports invalidZip, invalidCard, paymentDeclined or network. [disabled when canPlace=false]
+  tab <shop|cart|orders|profile>  Switch tab.  (HomeTabs)
+  back                            Go back to the previous screen.  (HomeTabs)
+  login-as <alice|bob>            Save a seeded account's session and go straight home.  (AppFeature)
+  reset                           Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: name street city zip shipping payment total canPlace loading
+home/cart/confirmation  [OrderConfirmation]
+  view-order                      Open the new order in the orders tab.
+  continue-shopping               Back to the shop, with an empty cart.
+  tab <shop|cart|orders|profile>  Switch tab.  (HomeTabs)
+  login-as <alice|bob>            Save a seeded account's session and go straight home.  (AppFeature)
+  reset                           Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  back                            Fails with 'nothing to go back to' when no screen is pushed.  (AppFeature)
+  summary: order total
+home/orders  [OrdersList]
+  open <id>                       Open an order, e.g. open 1003.
+  refresh                         Pull to refresh.
+  retry                           Retry after a failed load. [disabled when error=none]
+  tab <shop|cart|orders|profile>  Switch tab.  (HomeTabs)
+  login-as <alice|bob>            Save a seeded account's session and go straight home.  (AppFeature)
+  reset                           Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  back                            Fails with 'nothing to go back to' when no screen is pushed.  (AppFeature)
+  summary: orders loading statuses
+home/orders/<id>  [OrderDetail]
+  cancel                          Cancel the order (pending orders only). [disabled when canCancel=false]
+  retry                           Reload the order after an error. [disabled when error=none]
+  tab <shop|cart|orders|profile>  Switch tab.  (HomeTabs)
+  back                            Go back to the previous screen.  (HomeTabs)
+  login-as <alice|bob>            Save a seeded account's session and go straight home.  (AppFeature)
+  reset                           Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  summary: id status items total date canCancel loading
+home/profile  [Profile]
+  logout                          Ask to log out (shows a confirmation alert).
+  confirm                         Confirm logging out in the alert. [disabled when alert=none]
+  dismiss                         Dismiss the alert. [disabled when alert=none]
+  tab <shop|cart|orders|profile>  Switch tab.  (HomeTabs)
+  login-as <alice|bob>            Save a seeded account's session and go straight home.  (AppFeature)
+  reset                           Restart from a fresh launch (keeps the saved session and the mock data).  (AppFeature)
+  back                            Fails with 'nothing to go back to' when no screen is pushed.  (AppFeature)
+  summary: name email alert
+every screen  [runtime]
+  expect k=v [k=v …]            Assert on screen, any summary key, call=<client.method> (called during the previous step), error=<code|none> or pending=<n>. A failed assertion fails the script.
+  advance <duration>            Move the app's clock forward, e.g. 500ms, 30s, 5m, 1h, firing the timers due.
+  mock <client.method> <error>  Make the next call to that method fail, e.g. mock orders.fetchOrders network.

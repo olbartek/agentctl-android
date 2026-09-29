@@ -1,0 +1,13 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Cancel a pending order; the list reflects it after going back.
+tab orders
+open 1003
+expect screen=home/orders/1003 status=pending canCancel=true total=$59.80 call=orders.fetchOrder
+cancel
+expect status=cancelled canCancel=false call=orders.cancelOrder
+back
+expect screen=home/orders statuses=delivered,shipped,cancelled
+open 1002
+expect status=shipped canCancel=false

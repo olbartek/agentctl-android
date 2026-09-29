@@ -1,0 +1,39 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email nina@example.com
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=onboarding/welcome page=1 pages=3 calls=auth.login,session.save,account.fetchProfile
+> skip
+  screen=onboarding/interests selected=0 interests=none canContinue=false
+> toggle bags
+  screen=onboarding/interests selected=1 interests=bags canContinue=false
+> toggle home
+  screen=onboarding/interests selected=2 interests=bags,home canContinue=true
+> continue
+  screen=onboarding/address name="" street="" city="" zip="" canContinue=false
+> name Nina Park
+  screen=onboarding/address name="Nina Park" street="" city="" zip="" canContinue=false
+> street 2 Elm St
+  screen=onboarding/address name="Nina Park" street="2 Elm St" city="" zip="" canContinue=false
+> city Portland
+  screen=onboarding/address name="Nina Park" street="2 Elm St" city=Portland zip="" canContinue=false
+> zip 97201
+  screen=onboarding/address name="Nina Park" street="2 Elm St" city=Portland zip=97201 canContinue=true
+> continue
+  screen=onboarding/notifications notifications=undecided loading=false
+> allow
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
+> open 103
+  screen=home/shop/103 name="Canvas Tote" price=$29.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=0
+> add-to-cart
+  screen=home/shop/103 name="Canvas Tote" price=$29.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=1
+> view-cart
+  screen=home/cart lines=103 items=1 subtotal=$29.00 discount=$0.00 total=$29.00 promo=none canCheckout=true
+> checkout
+  screen=home/cart/checkout name="Nina Park" street="2 Elm St" city=Portland zip=97201 shipping=standard payment=card total=$29.00 canPlace=false loading=false calls=account.fetchProfile
+> expect screen=home/cart/checkout name="Nina Park" street="2 Elm St" city=Portland zip=97201 call=account.fetchProfile
+  screen=home/cart/checkout name="Nina Park" street="2 Elm St" city=Portland zip=97201 shipping=standard payment=card total=$29.00 canPlace=false loading=false calls=account.fetchProfile
+exit=0

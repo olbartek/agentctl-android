@@ -1,0 +1,11 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+skip
+# "Not now" also finishes onboarding.
+not-now
+expect screen=home/shop call=account.completeOnboarding

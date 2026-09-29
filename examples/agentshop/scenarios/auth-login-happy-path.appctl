@@ -1,0 +1,10 @@
+# Password login with a seeded account saves the session and goes home.
+expect screen=auth/login canSubmit=false
+email alice@example.com
+expect canSubmit=false
+password Passw0rd!
+expect canSubmit=true revealed=none
+show-password on
+expect revealed=password
+submit
+expect screen=home/shop products=12 call=auth.login call=session.save call=account.fetchProfile call=catalog.fetchProducts

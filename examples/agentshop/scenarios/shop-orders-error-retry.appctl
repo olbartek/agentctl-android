@@ -1,0 +1,12 @@
+email alice@example.com
+password Passw0rd!
+submit
+# A failed orders load shows the error with retry; a failed refresh keeps the rows.
+mock orders.fetchOrders network
+tab orders
+expect screen=home/orders orders=0 error=network call=orders.fetchOrders
+retry
+expect orders=3 error=none
+mock orders.fetchOrders network
+refresh
+expect orders=3 error=network

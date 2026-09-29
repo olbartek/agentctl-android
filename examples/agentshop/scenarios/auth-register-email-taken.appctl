@@ -1,0 +1,13 @@
+# An email that already has an account is refused by the server.
+register
+name Alice Again
+email alice@example.com
+password Secret123
+confirm Secret123
+terms on
+submit
+expect screen=auth/register error=emailTaken call=auth.register
+email alice2@example.com
+expect error=none canSubmit=true
+submit
+expect screen=auth/register/verify email=alice2@example.com call=auth.register

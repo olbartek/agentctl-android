@@ -1,0 +1,18 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+# Editing the zip clears the error; a valid one moves on.
+name Nina Park
+street 2 Elm St
+city Portland
+zip 97-01
+continue
+expect error=invalidZip
+zip 97201
+expect error=none canContinue=true
+continue
+expect screen=onboarding/notifications notifications=undecided

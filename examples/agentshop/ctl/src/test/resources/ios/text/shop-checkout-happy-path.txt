@@ -1,0 +1,41 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> filter shoes
+  screen=home/shop products=2 filter=shoes query="" sort=featured loading=false
+> open 101
+  screen=home/shop/101 name="Trail Runner" price=$89.00 size=none qty=1 inStock=true favorite=false canAdd=false added=0
+> size 42
+  screen=home/shop/101 name="Trail Runner" price=$89.00 size=42 qty=1 inStock=true favorite=false canAdd=true added=0
+> qty-up
+  screen=home/shop/101 name="Trail Runner" price=$89.00 size=42 qty=2 inStock=true favorite=false canAdd=true added=0
+> add-to-cart
+  screen=home/shop/101 name="Trail Runner" price=$89.00 size=42 qty=2 inStock=true favorite=false canAdd=true added=2
+> view-cart
+  screen=home/cart lines=101-42 items=2 subtotal=$178.00 discount=$0.00 total=$178.00 promo=none canCheckout=true
+> promo-code SAVE10
+  screen=home/cart lines=101-42 items=2 subtotal=$178.00 discount=$0.00 total=$178.00 promo=none canCheckout=true
+> apply-promo
+  screen=home/cart lines=101-42 items=2 subtotal=$178.00 discount=$17.80 total=$160.20 promo=SAVE10 canCheckout=true calls=cart.applyPromo
+> checkout
+  screen=home/cart/checkout name="Alice Liddell" street="1 Rabbit Hole Ln" city=Oxford zip=10001 shipping=standard payment=card total=$160.20 canPlace=false loading=false calls=account.fetchProfile
+> card 4242 4242 4242 4242
+  screen=home/cart/checkout name="Alice Liddell" street="1 Rabbit Hole Ln" city=Oxford zip=10001 shipping=standard payment=card total=$160.20 canPlace=true loading=false
+> shipping express
+  screen=home/cart/checkout name="Alice Liddell" street="1 Rabbit Hole Ln" city=Oxford zip=10001 shipping=express payment=card total=$175.20 canPlace=true loading=false
+> expect total=$175.20
+  screen=home/cart/checkout name="Alice Liddell" street="1 Rabbit Hole Ln" city=Oxford zip=10001 shipping=express payment=card total=$175.20 canPlace=true loading=false
+> place-order
+  screen=home/cart/confirmation order=1004 total=$175.20 calls=orders.placeOrder
+> expect screen=home/cart/confirmation order=1004 total=$175.20
+  screen=home/cart/confirmation order=1004 total=$175.20 calls=orders.placeOrder
+> tab cart
+  screen=home/cart lines=none items=0 subtotal=$0.00 discount=$0.00 total=$0.00 promo=none canCheckout=false
+> expect screen=home/cart items=0
+  screen=home/cart lines=none items=0 subtotal=$0.00 discount=$0.00 total=$0.00 promo=none canCheckout=false
+exit=0

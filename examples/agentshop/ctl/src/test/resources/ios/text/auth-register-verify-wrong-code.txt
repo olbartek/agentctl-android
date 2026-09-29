@@ -1,0 +1,33 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> register
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> name Grace
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> email grace@example.com
+  screen=auth/register email=grace@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> password Secret123
+  screen=auth/register email=grace@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> confirm Secret123
+  screen=auth/register email=grace@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> terms on
+  screen=auth/register email=grace@example.com terms=true revealed=none issues=none canSubmit=true loading=false
+> submit
+  screen=auth/register/verify email=grace@example.com resendIn=30 canVerify=false loading=false calls=auth.register pending=1
+> expect screen=auth/register/verify email=grace@example.com
+  screen=auth/register/verify email=grace@example.com resendIn=30 canVerify=false loading=false calls=auth.register pending=1
+> code 000000
+  screen=auth/register/verify email=grace@example.com resendIn=30 canVerify=true loading=false pending=1
+> verify
+  screen=auth/register/verify email=grace@example.com resendIn=30 canVerify=false loading=false calls=auth.verifyEmail error=invalidCode pending=1
+> expect error=invalidCode call=auth.verifyEmail
+  screen=auth/register/verify email=grace@example.com resendIn=30 canVerify=false loading=false calls=auth.verifyEmail error=invalidCode pending=1
+> code 123456
+  screen=auth/register/verify email=grace@example.com resendIn=30 canVerify=true loading=false pending=1
+> expect error=none canVerify=true
+  screen=auth/register/verify email=grace@example.com resendIn=30 canVerify=true loading=false pending=1
+> verify
+  screen=onboarding/welcome page=1 pages=3 calls=auth.verifyEmail,session.save,account.fetchProfile
+> expect screen=onboarding/welcome call=auth.verifyEmail call=account.fetchProfile
+  screen=onboarding/welcome page=1 pages=3 calls=auth.verifyEmail,session.save,account.fetchProfile
+exit=0

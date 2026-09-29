@@ -1,0 +1,17 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email bob@example.com
+  screen=auth/login email=bob@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Hunter22x
+  screen=auth/login email=bob@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> tab orders
+  screen=home/orders orders=0 loading=false statuses=none calls=orders.fetchOrders
+> expect screen=home/orders orders=0 loading=false statuses=none call=orders.fetchOrders
+  screen=home/orders orders=0 loading=false statuses=none calls=orders.fetchOrders
+> refresh
+  screen=home/orders orders=0 loading=false statuses=none calls=orders.fetchOrders
+> expect orders=0 call=orders.fetchOrders
+  screen=home/orders orders=0 loading=false statuses=none calls=orders.fetchOrders
+exit=0

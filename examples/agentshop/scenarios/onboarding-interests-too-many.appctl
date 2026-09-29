@@ -1,0 +1,16 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+# A fifth interest is refused; unpicking one makes room again.
+toggle shoes
+toggle bags
+toggle watches
+toggle jackets
+expect selected=4 error=none
+toggle home
+expect selected=4 error=tooMany
+toggle shoes
+expect selected=3 error=none
+toggle home
+expect selected=4 interests=bags,watches,jackets,home

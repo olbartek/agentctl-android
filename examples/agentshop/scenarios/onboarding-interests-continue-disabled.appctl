@@ -1,0 +1,10 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+# Continue needs at least two interests.
+expect screen=onboarding/interests selected=0 canContinue=false
+toggle shoes
+expect selected=1 canContinue=false
+toggle watches
+expect selected=2 canContinue=true interests=shoes,watches

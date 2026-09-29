@@ -1,0 +1,11 @@
+# Every field can be valid and signing up still needs the terms accepted.
+register
+name Dana
+email dana@example.com
+password Secret123
+confirm Secret123
+expect issues=none canSubmit=false terms=false
+terms on
+expect canSubmit=true terms=true
+terms off
+expect canSubmit=false

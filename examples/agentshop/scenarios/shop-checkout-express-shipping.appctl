@@ -1,0 +1,13 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+# Express shipping adds $15.00.
+expect shipping=standard total=$29.00
+shipping express
+expect shipping=express total=$44.00
+shipping standard
+expect total=$29.00

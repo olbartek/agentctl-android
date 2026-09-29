@@ -1,0 +1,33 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email nina@example.com
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=onboarding/welcome page=1 pages=3 calls=auth.login,session.save,account.fetchProfile
+> skip
+  screen=onboarding/interests selected=0 interests=none canContinue=false
+> toggle shoes
+  screen=onboarding/interests selected=1 interests=shoes canContinue=false
+> toggle bags
+  screen=onboarding/interests selected=2 interests=shoes,bags canContinue=true
+> toggle watches
+  screen=onboarding/interests selected=3 interests=shoes,bags,watches canContinue=true
+> toggle jackets
+  screen=onboarding/interests selected=4 interests=shoes,bags,watches,jackets canContinue=true
+> expect selected=4 error=none
+  screen=onboarding/interests selected=4 interests=shoes,bags,watches,jackets canContinue=true
+> toggle home
+  screen=onboarding/interests selected=4 interests=shoes,bags,watches,jackets canContinue=true error=tooMany
+> expect selected=4 error=tooMany
+  screen=onboarding/interests selected=4 interests=shoes,bags,watches,jackets canContinue=true error=tooMany
+> toggle shoes
+  screen=onboarding/interests selected=3 interests=bags,watches,jackets canContinue=true
+> expect selected=3 error=none
+  screen=onboarding/interests selected=3 interests=bags,watches,jackets canContinue=true
+> toggle home
+  screen=onboarding/interests selected=4 interests=bags,watches,jackets,home canContinue=true
+> expect selected=4 interests=bags,watches,jackets,home
+  screen=onboarding/interests selected=4 interests=bags,watches,jackets,home canContinue=true
+exit=0

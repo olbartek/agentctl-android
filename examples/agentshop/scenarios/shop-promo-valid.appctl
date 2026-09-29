@@ -1,0 +1,11 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+# A valid promo code takes its percentage off.
+inc 103
+promo-code SAVE10
+apply-promo
+expect promo=SAVE10 subtotal=$58.00 discount=$5.80 total=$52.20 call=cart.applyPromo

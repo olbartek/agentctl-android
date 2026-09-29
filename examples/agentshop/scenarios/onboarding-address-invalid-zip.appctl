@@ -1,0 +1,14 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+# A zip code that isn't five digits is refused on continue.
+name Nina Park
+street 2 Elm St
+city Portland
+zip 9720
+continue
+expect screen=onboarding/address error=invalidZip

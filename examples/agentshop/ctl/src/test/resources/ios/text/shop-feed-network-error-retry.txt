@@ -1,0 +1,17 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> mock catalog.fetchProducts network
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=0 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts error=network
+> expect screen=home/shop products=0 error=network call=catalog.fetchProducts
+  screen=home/shop products=0 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts error=network
+> retry
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=catalog.fetchProducts
+> expect products=12 error=none call=catalog.fetchProducts
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=catalog.fetchProducts
+exit=0

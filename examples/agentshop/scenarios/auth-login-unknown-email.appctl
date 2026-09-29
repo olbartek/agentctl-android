@@ -1,0 +1,7 @@
+# An email no account uses is refused the same way as a wrong password, so the app never reveals which accounts exist.
+email nobody@example.com
+password Passw0rd!
+submit
+expect screen=auth/login error=invalidCredentials call=auth.login
+email alice@example.com
+expect error=none

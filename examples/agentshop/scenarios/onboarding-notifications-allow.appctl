@@ -1,0 +1,11 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+skip
+# Allowing notifications saves onboarding and goes home.
+allow
+expect screen=home/shop products=12 call=account.completeOnboarding

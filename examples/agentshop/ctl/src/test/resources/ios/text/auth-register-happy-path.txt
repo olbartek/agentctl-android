@@ -1,0 +1,45 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> register
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> name Carol Smith
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> email carol@example.com
+  screen=auth/register email=carol@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> password Secret123
+  screen=auth/register email=carol@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> confirm Secret123
+  screen=auth/register email=carol@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> terms on
+  screen=auth/register email=carol@example.com terms=true revealed=none issues=none canSubmit=true loading=false
+> submit
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.register pending=1
+> expect screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false call=auth.register
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.register pending=1
+> code 123456
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=true loading=false pending=1
+> expect canVerify=true
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=true loading=false pending=1
+> verify
+  screen=onboarding/welcome page=1 pages=3 calls=auth.verifyEmail,session.save,account.fetchProfile
+> expect screen=onboarding/welcome call=auth.verifyEmail call=session.save call=account.fetchProfile
+  screen=onboarding/welcome page=1 pages=3 calls=auth.verifyEmail,session.save,account.fetchProfile
+> skip
+  screen=onboarding/interests selected=0 interests=none canContinue=false
+> toggle shoes
+  screen=onboarding/interests selected=1 interests=shoes canContinue=false
+> toggle bags
+  screen=onboarding/interests selected=2 interests=shoes,bags canContinue=true
+> continue
+  screen=onboarding/address name="" street="" city="" zip="" canContinue=false
+> skip
+  screen=onboarding/notifications notifications=undecided loading=false
+> not-now
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
+> expect screen=home/shop products=12 call=account.completeOnboarding
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
+> tab profile
+  screen=home/profile name="Carol Smith" email=carol@example.com alert=none
+> expect name="Carol Smith" email=carol@example.com
+  screen=home/profile name="Carol Smith" email=carol@example.com alert=none
+exit=0

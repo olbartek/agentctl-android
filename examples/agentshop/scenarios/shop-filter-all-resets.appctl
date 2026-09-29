@@ -1,0 +1,8 @@
+email alice@example.com
+password Passw0rd!
+submit
+# "All" clears the category filter.
+filter home
+expect products=2 filter=home
+filter all
+expect products=12 filter=all

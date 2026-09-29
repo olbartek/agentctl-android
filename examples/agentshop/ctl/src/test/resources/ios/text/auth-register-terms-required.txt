@@ -1,0 +1,23 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> register
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> name Dana
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> email dana@example.com
+  screen=auth/register email=dana@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> password Secret123
+  screen=auth/register email=dana@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> confirm Secret123
+  screen=auth/register email=dana@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> expect issues=none canSubmit=false terms=false
+  screen=auth/register email=dana@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> terms on
+  screen=auth/register email=dana@example.com terms=true revealed=none issues=none canSubmit=true loading=false
+> expect canSubmit=true terms=true
+  screen=auth/register email=dana@example.com terms=true revealed=none issues=none canSubmit=true loading=false
+> terms off
+  screen=auth/register email=dana@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> expect canSubmit=false
+  screen=auth/register email=dana@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+exit=0

@@ -1,0 +1,8 @@
+email alice@example.com
+password Passw0rd!
+submit
+# A search that matches nothing shows no products; clearing it brings them back.
+search zzz
+expect products=0 error=none
+clear-search
+expect query="" products=12

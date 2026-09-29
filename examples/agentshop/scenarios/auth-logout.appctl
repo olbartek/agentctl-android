@@ -1,0 +1,11 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Logging out asks first, then clears the session and returns to an empty login.
+expect screen=home/shop
+tab profile
+expect screen=home/profile name=Alice email=alice@example.com
+logout
+expect alert=logout
+confirm
+expect screen=auth/login email="" call=session.clear

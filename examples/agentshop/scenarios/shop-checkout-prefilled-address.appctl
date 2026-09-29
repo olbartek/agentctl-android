@@ -1,0 +1,11 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+# Checkout fills in the address saved on the account.
+expect screen=home/cart/checkout name="Alice Liddell" street="1 Rabbit Hole Ln" city=Oxford zip=10001 shipping=standard payment=card total=$29.00 canPlace=false call=account.fetchProfile
+card 4242 4242 4242 4242
+expect canPlace=true

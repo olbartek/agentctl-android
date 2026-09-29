@@ -1,0 +1,10 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Search matches product names as you type, ignoring case.
+search watch
+expect query=watch products=2
+search JACKET
+expect products=2
+search Trail
+expect products=1

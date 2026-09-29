@@ -1,0 +1,16 @@
+email alice@example.com
+password Passw0rd!
+submit
+# An order placed after the orders tab has loaded shows up in it.
+tab orders
+expect orders=3
+tab shop
+open 111
+add-to-cart
+view-cart
+checkout
+payment apple-pay
+place-order
+expect screen=home/cart/confirmation order=1004
+tab orders
+expect screen=home/orders orders=4 statuses=delivered,shipped,pending,pending

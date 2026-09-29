@@ -1,0 +1,9 @@
+email alice@example.com
+password Passw0rd!
+submit
+# A one-size product goes straight into the cart.
+open 103
+add-to-cart
+expect added=1
+view-cart
+expect screen=home/cart lines=103 items=1 subtotal=$29.00 total=$29.00 canCheckout=true
