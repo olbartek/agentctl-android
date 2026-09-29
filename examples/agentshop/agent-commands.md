@@ -39,7 +39,7 @@ Scenarios in `scenarios/*.appctl` use the same syntax plus `expect` lines; `./ap
 | Command | Description |
 |---|---|
 | `expect k=v [k=v …]` | Assert on screen, any summary key, call=<client.method> (called during the previous step), error=<code\|none> or pending=<n>. A failed assertion fails the script. |
-| `advance <duration>` | Advance the test clock, e.g. 500ms, 30s, 5m, 1h. Headless only. |
+| `advance <duration>` | Move the app's clock forward, e.g. 500ms, 30s, 5m, 1h, firing the timers due. |
 | `mock <client.method> <error>` | Make the next call to that method fail, e.g. mock orders.fetchOrders network. |
 
 ## Screens
