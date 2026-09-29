@@ -19,6 +19,9 @@ modules.
 4. **Keep the two ports parallel.** Name things as the Swift package does (`ScriptRunner`, `HeadlessHost`,
    `AppCtlConfig`, `AgentCoverage`…) unless Kotlin makes that wrong, and record any deliberate difference in the
    README's contract section.
+5. **Two ports, one product: every change lands in both repositories.** The same features, the same CLI commands
+   and options, the same example apps (TinyApp, AgentShop) with byte-identical scenario files (edit them in
+   agentctl-ios, copy them here), and the same version number. A fix found here goes to the Swift package too.
 
 ## Layout
 
@@ -56,8 +59,10 @@ export JAVA_HOME=$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home
 
 ## Releases
 
-Tag `vX.Y.Z` on `main` and push the tag; JitPack builds it (`jitpack.yml`) as
-`com.github.olbartek.agentctl-android:<module>:vX.Y.Z`. Bump `agentctlVersion` in `gradle.properties` with it.
+Both ports release together with the same version and the same tag format: a bare `X.Y.Z` tag on `main` (`0.4.1`,
+no `v`; tags before 0.4.1 were `vX.Y.Z`). Push the tag; JitPack builds it (`jitpack.yml`) as
+`com.github.olbartek.agentctl-android:<module>:X.Y.Z`. Bump `agentctlVersion` in `gradle.properties` and the README's
+pins and Status with it, and tag agentctl-ios with the same number.
 
 ## Git workflow
 
