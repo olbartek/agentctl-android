@@ -8,7 +8,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -71,11 +70,23 @@ class AdvanceableClockTest {
         val clock = AdvanceableClock()
         val ticks = AtomicInteger(0)
         val timer = scope.launch {
-            clock.every(1.seconds) { ticks.incrementAndGet() }
+            // A tick that takes a while, as on a loaded CI runner or in a real app: longer than a fixed wait between
+            // deadlines would have allowed.
+            clock.every(1.seconds) {
+                delay(50)
+                ticks.incrementAndGet()
+            }
         }
         until { clock.activeSleeps == 1 }
-        // Between deadlines, a moment for the loop to start its next sleep.
-        clock.advance(3.seconds, between = { delay(20.milliseconds) })
+        // Between deadlines, the app settles: here, until the timer has ticked for the deadline just passed and is
+        // sleeping again (a sleep that counts in `activeSleeps` is one `advance` sees). A fixed 20 ms wait raced on a
+        // loaded CI runner: when the timer had not started its next sleep yet, `advance` found nothing due and jumped
+        // to the end, and the timer ticked once instead of three times.
+        var deadlines = 0
+        clock.advance(3.seconds, between = {
+            deadlines++
+            until { ticks.get() >= minOf(deadlines, 3) && clock.activeSleeps == 1 }
+        })
         assertEquals(3, ticks.get())
         timer.cancel()
     }

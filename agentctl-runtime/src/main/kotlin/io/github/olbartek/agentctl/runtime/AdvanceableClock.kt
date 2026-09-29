@@ -39,27 +39,38 @@ public class AdvanceableClock : AgentClock {
     override val activeSleeps: Int get() = sleeping.get()
 
     override suspend fun sleep(duration: Duration) {
-        sleeping.incrementAndGet()
+        // Counted and registered in one step, under the lock `advance` reads the sleeps under: once [activeSleeps]
+        // counts a sleep, `advance` sees its deadline. (Counting first left a moment in which a timer that had just
+        // started its next sleep was counted but not yet due, and `advance` moved past its deadline.)
+        val deadline: Duration
+        var waiting = synchronized(lock) {
+            deadline = time() + duration
+            sleeping.incrementAndGet()
+            register(deadline)
+        }
         try {
-            val deadline = synchronized(lock) { time() } + duration
-            while (true) {
+            while (waiting != null) {
                 // Wait out the rest in real time, unless `advance` wakes this sleep first; then look at the time again.
                 // Registering under the lock `advance` moves the offset under means a sleep either sees the new
                 // offset or is among the sleeps that `advance` wakes.
-                val sleeper = Sleeper(deadline)
-                val remaining = synchronized(lock) {
-                    (deadline - time()).also { if (it > Duration.ZERO) sleepers.add(sleeper) }
-                }
-                if (remaining <= Duration.ZERO) return
+                val (sleeper, remaining) = waiting
                 try {
                     withTimeoutOrNull(remaining) { sleeper.woken.await() }
                 } finally {
                     synchronized(lock) { sleepers.remove(sleeper) }
                 }
+                waiting = synchronized(lock) { register(deadline) }
             }
         } finally {
             sleeping.decrementAndGet()
         }
+    }
+
+    /** A sleeper for [deadline] and the real time left until it, or `null` once it has passed. Call under [lock]. */
+    private fun register(deadline: Duration): Pair<Sleeper, Duration>? {
+        val remaining = deadline - time()
+        if (remaining <= Duration.ZERO) return null
+        return Sleeper(deadline).also { sleepers.add(it) } to remaining
     }
 
     /**
