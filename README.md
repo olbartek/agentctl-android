@@ -322,7 +322,7 @@ items/<id>  [ItemDetail]
   summary: title saved cooldown
 every screen  [runtime]
   expect k=v [k=v …]            Assert on screen, any summary key, call=<client.method> (called during the previous step), error=<code|none> or pending=<n>. A failed assertion fails the script.
-  advance <duration>            Advance the test clock, e.g. 500ms, 30s, 5m, 1h. Headless only.
+  advance <duration>            Move the app's clock forward, e.g. 500ms, 30s, 5m, 1h, firing the timers due.
   mock <client.method> <error>  Make the next call to that method fail, e.g. mock items.fetch network.
 ```
 
@@ -378,8 +378,8 @@ Exit codes are part of the contract:
 Three runtime commands work on every screen:
 
 - `expect k=v [k=v …]`;
-- `advance <duration>`, headless only: a running app's timers are real, so `advance` is rejected there rather than
-  silently slept;
+- `advance <duration>`: the virtual clock headlessly; in the running app, the app's real-time clock jumped forward
+  (see [the bridge](#the-in-app-bridge));
 - `mock <client.method> <error>`.
 
 Headless runs are deterministic by construction, so the same script always prints the same bytes. That makes step
@@ -531,8 +531,12 @@ A seed is a script and fails like one: at its first failing step, or at a `(laun
 logs `AgentCtlBridge: seed applied` or `AgentCtlBridge: seed FAILED (exit <code>)`, with its steps, under the
 logcat tag `AgentCtlBridge`.
 
-The same scripts then run against the real app (`app run`), on the live clock and with real mock latency. That is
-why `advance` is rejected there. The wire protocol (routes, the `X-Appctl-Exit` header, the JSON form) is
+The same scripts then run against the real app (`app run`), on real time and with real mock latency. `advance`
+works there too: the live host's clock is an `AdvanceableClock`, which `advance` moves forward deadline by deadline,
+letting the app settle between them, so a countdown ticks once per second advanced, as it does headlessly, and its
+`now()` moves with it. Only what sleeps on `environment.clock` moves; a bare `delay`, a `Handler` or a `Timer` keeps
+real time. A backend of yours that reads the time or sleeps should do it on `environment.clock`, as it would
+headlessly. The wire protocol (routes, the `X-Appctl-Exit` header, the JSON form) is
 [CONTRACT.md §8](CONTRACT.md#8-the-in-app-bridge), so either port's CLI can drive either port's app.
 
 ## The contract
@@ -562,6 +566,9 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
 - L3 finds each snapshot module's Roborazzi or Paparazzi tasks (`gradle.snapshotModules`) where the reference finds
   a package's Xcode scheme and its `*SnapshotTests` targets (`snapshotPackages`), and runs them on the JVM, with no
   device.
+- The live host's `AdvanceableClock` is itself the `AgentClock` that counts sleeps for `pending=`, where the
+  reference wraps it in a `CountingClock`; and a backend reads the moved time from `environment.clock.now()`, where
+  the reference adds `LiveEnvironment.now`.
 
 ## Building this repository
 

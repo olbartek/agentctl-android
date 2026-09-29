@@ -80,7 +80,7 @@ object TinyAppConfig {
             scenariosPath = "examples/tinyapp/scenarios",
             // The app is not at the root of its repository, so its command reference lives beside it.
             docsPath = "examples/tinyapp/agent-commands.md",
-            // L4 sends this scenario through the bridge. The others use `advance`, which a running app refuses.
+            // L4 sends this scenario through the bridge: it starts no countdown, which also ticks in real time there.
             appCheck = AppCheck(scenario = "refresh-error", expectScreen = "items"),
             help = HelpExamples(
                 invocation = "./tinyctl",

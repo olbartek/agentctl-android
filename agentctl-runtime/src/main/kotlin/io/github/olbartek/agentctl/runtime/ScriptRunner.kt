@@ -19,7 +19,10 @@ import io.github.olbartek.agentctl.StepRecord
 /** How a [ScriptRunner] waits for the app and whether it can control time. */
 public class RunnerEnvironment(
     public val settle: suspend () -> SettleResult,
-    /** Advances the virtual clock. `null` in the running app, where `advance` is not available. */
+    /**
+     * Moves the app's clock forward: the virtual clock headlessly, the [AdvanceableClock] in the running app. `null`
+     * where the runtime controls no clock, and `advance` is then rejected.
+     */
     public val advance: (suspend (AgentDuration) -> Unit)?,
     /** Headless runs send each screen's `onAppear` action when it becomes active (no views exist to do it). */
     public val synthesizesAppearance: Boolean,

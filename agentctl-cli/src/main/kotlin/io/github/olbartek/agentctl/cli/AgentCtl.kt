@@ -260,7 +260,7 @@ public object AgentCtl {
 
     private class AppRunCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
         "run",
-        "Run a script in the running app (headless-only commands such as advance are rejected).",
+        "Run a script in the running app; advance moves its clock forward.",
         examples(
             "${cli.config.help.invocation} app run \"${cli.config.help.appScript(0)}\"",
             "${cli.config.help.invocation} app run --json \"${cli.config.help.appScript(1)}\"",

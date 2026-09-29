@@ -217,14 +217,19 @@ virtual clock past 2^63−1 seconds in total over one run
 overflow not far beyond that. A port has its own limit; that a script can never crash the engine
 through `advance` is the requirement.
 
-**Headless only.** Issuing `advance` against a running app with no virtual clock — i.e. one driven
-by a real, wall-clock timer — is rejected with a usage error (exit 2):
-`advance is only available headlessly, not in the running app`. This is deliberate rather than a
-missing feature: a live run's timers are real, so "advancing" them can't be done deterministically
-or instantaneously, and silently ignoring the command (or turning it into a real sleep) would make
-the same script behave differently in the two modes without warning. A conforming implementation
-must reject `advance` outright wherever it has no virtual clock to move. (The duration is checked
-first, so a malformed or oversized one is the same usage error in both modes.)
+**Wherever the runtime controls the app's clock.** Headlessly that clock is virtual: no time passes
+except through `advance`. In the running app (§8.5) it is real time that `advance` can move forward:
+the clock stops at each deadline in the window, earliest first, fires the timers that are due, and
+lets the app settle before moving on, so a countdown ticks once per interval advanced, as it does
+headlessly. Only timers on that clock move; one on a time source the runtime does not control keeps
+real time, which the implementation should document.
+
+An implementation that has no clock it controls — a running app driven by real, wall-clock timers
+alone — must reject `advance` outright, with a usage error (exit 2):
+`advance is only available headlessly, not in the running app`. Silently ignoring the command (or
+turning it into a real sleep) would make the same script behave differently in the two modes
+without warning. (The duration is checked first, so a malformed or oversized one is the same usage
+error in both modes.)
 
 ### 2.3 `mock <client.method> <error>`
 
@@ -380,7 +385,7 @@ $ swift run tinyctl run 'mock items.fetch network; refresh; expect error=network
 |---|---|
 | 0 | Every line in the script ran and every `expect` passed. |
 | 1 | A command or an `expect` failed. This covers: an unmet `expect` pair (including an unknown key); an unresolvable command name; a gated command that is currently disabled; a command argument that is missing, unexpected, invalid, or inapplicable right now; a `mock` naming an unknown method or an error code not valid for that method; and any step that did not settle within its time limit (`settled=false`), the `(launch)` step included. |
-| 2 | A usage or parse error: an unterminated quote (§1.4); `expect` with no argument or a malformed `key=value` token; `advance` with a missing, unparseable or unrepresentable duration, one that would take the virtual clock past its limit (§2.2), or one issued where there is no virtual clock to move; `mock` with a wrong number of tokens. In every case here, the *shape* of the line itself was wrong, before anything was resolved against the app's current state. The same code covers a tool's own malformed command line — a missing argument, an unknown option or subcommand — whatever code its argument parser would use by default. |
+| 2 | A usage or parse error: an unterminated quote (§1.4); `expect` with no argument or a malformed `key=value` token; `advance` with a missing, unparseable or unrepresentable duration, one that would take the virtual clock past its limit (§2.2), or one issued where there is no clock the runtime controls; `mock` with a wrong number of tokens. In every case here, the *shape* of the line itself was wrong, before anything was resolved against the app's current state. The same code covers a tool's own malformed command line — a missing argument, an unknown option or subcommand — whatever code its argument parser would use by default. |
 | 3 | An internal or environment error: a failure outside the script engine itself. A script or scenario file that does not exist or cannot be read; no scenario files where a tool was told to look for them; no repository root to resolve paths against; a host process that could not be built or started; and similar environment problems. Not something a script's own lines can trigger. |
 
 A script stops at its first failing line; exit code 0 requires every line to have run.
@@ -601,10 +606,12 @@ and the steps — none — under `steps`.
 
 ### 8.5 How a live run differs from a headless one
 
-- **Time is real.** `advance` is rejected (§2.2); a mocked call takes the app's live latency (or
-  `-mock-latency`); and settling waits until no mocked call is in flight and the state has been
-  quiet for a moment (the reference: 250 ms quiet, a 3 s ceiling). A step that starts a timer can
-  therefore read differently from its headless counterpart once a tick has fired.
+- **Time is real, and `advance` moves it forward.** The app's clock runs in real time, and `advance`
+  jumps it deadline by deadline (§2.2); the reference also moves the app's date with it. A mocked
+  call takes the app's live latency (or `-mock-latency`), and settling waits until no mocked call is
+  in flight and the state has been quiet for a moment (the reference: 250 ms quiet, a 3 s ceiling).
+  A step that starts a timer can therefore read differently from its headless counterpart once a
+  tick has fired on its own.
 - **Views appear by themselves.** The app's views send their own appearance actions, so the bridge
   does not send them — except during a launch seed (§8.3), when there are no views yet.
 - **State carries over.** Each `POST /run` continues from the app's current state; nothing is reset

@@ -26,7 +26,7 @@ public object AgentRegistry {
         CommandDoc(
             name = "advance",
             argument = "<duration>",
-            help = "Advance the test clock, e.g. 500ms, 30s, 5m, 1h. Headless only.",
+            help = "Move the app's clock forward, e.g. 500ms, 30s, 5m, 1h, firing the timers due.",
             source = "runtime",
         ),
         CommandDoc(

@@ -5,6 +5,7 @@ import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.ScreensRenderer
 import io.github.olbartek.agentctl.StepFormatter
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
+import io.github.olbartek.agentctl.examples.tinyapp.TinyRootAgent
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.AgentLaunchSession
 import io.github.olbartek.agentctl.runtime.BridgeRequest
@@ -13,6 +14,8 @@ import io.github.olbartek.agentctl.runtime.BridgeRouter
 import io.github.olbartek.agentctl.runtime.BridgeServer
 import io.github.olbartek.agentctl.runtime.HttpParser
 import io.github.olbartek.agentctl.runtime.RunStatus
+import io.github.olbartek.agentctl.runtime.RunnerEnvironment
+import io.github.olbartek.agentctl.runtime.ScriptRunner
 import java.net.HttpURLConnection
 import java.net.Socket
 import java.net.URI
@@ -183,11 +186,40 @@ class BridgeServerTest {
         assertEquals("0", request("POST", "/run", port, "expect screen=items").exit)
         assertEquals("1", request("POST", "/run", port, "expect screen=nope").exit)
         assertEquals("2", request("POST", "/run", port, "expect \"open").exit)
-        val advance = request("POST", "/run", port, "advance 1s")
+        // `advance` works in the running app; a malformed duration is the same usage error as headlessly.
+        val advance = request("POST", "/run", port, "advance 1x")
         assertEquals("2", advance.exit)
-        assertTrue("FAIL advance is only available headlessly, not in the running app" in advance.body, advance.body)
-        // `advance`'s duration is checked first, so a malformed one is the same usage error in both modes.
-        assertTrue("advance needs a duration" in request("POST", "/run", port, "advance soon").body)
+        assertTrue("advance needs a duration" in advance.body, advance.body)
+    }
+
+    /**
+     * `advance` in the running app: the three-second cooldown `save` starts is over after `advance 3s`, every tick
+     * fired, whatever real time did meanwhile (a tick that fired on its own just leaves fewer to advance).
+     */
+    @Test
+    fun advanceMovesTheRunningAppsClock() {
+        val response = request("POST", "/run", startBridge(), "open 2; save; advance 3s; expect cooldown=0 pending=0")
+        assertEquals("0", response.exit, response.body)
+    }
+
+    /** Where the runtime controls no clock, `advance` is refused rather than silently slept (CONTRACT.md §2.2). */
+    @Test
+    fun advanceIsRefusedWhereNoClockIsControlled() = runBlocking {
+        val host = TinyAppConfig.headless()
+        val runner = ScriptRunner(
+            store = host.store,
+            container = TinyRootAgent,
+            callLog = host.callLog,
+            faults = host.faults,
+            pending = { host.clock.activeSleeps },
+            environment = RunnerEnvironment(settle = { host.settle() }, advance = null, synthesizesAppearance = true),
+            mockMethods = host.mockMethods,
+        )
+        val result = runner.run("advance 1s")
+        assertEquals(RunStatus.USAGE, result.status)
+        assertEquals("advance is only available headlessly, not in the running app", result.steps.last().message)
+        // The duration is checked first, so a malformed one is the same usage error in both modes.
+        assertEquals("advance needs a duration such as 500ms, 30s, 5m or 1h", runner.run("advance soon").steps.last().message)
     }
 
     @Test
