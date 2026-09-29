@@ -97,6 +97,9 @@ class SnapshotsTest {
         assertEquals("feature-items", Snapshots.logName(":feature:items"))
         assertEquals("feature/items", Snapshots.directory(":feature:items"))
         assertEquals("app", Snapshots.directory("app"))
+        assertEquals(":feature:items:tasks", Snapshots.taskPath(":feature:items", "tasks"))
+        // The root project's tasks are `:tasks`, not `::tasks`.
+        assertEquals(":verifyRoborazziDebug", Snapshots.taskPath(":", "verifyRoborazziDebug"))
     }
 
     @Test

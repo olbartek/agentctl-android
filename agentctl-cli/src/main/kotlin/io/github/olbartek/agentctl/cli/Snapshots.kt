@@ -27,7 +27,7 @@ internal class Snapshots(private val cli: Cli<*, *>, private val root: File) {
         val problems = mutableListOf<String>()
         for (module in gradle.snapshotModules) {
             val log = File(layout.logs, "L3-tasks-${logName(module)}.log")
-            val status = Shell.run(Gradle.command(root, listOf("$module:tasks", "--all")), root, log, timeoutSeconds = 600)
+            val status = Shell.run(Gradle.command(root, listOf(taskPath(module, "tasks"), "--all")), root, log, timeoutSeconds = 600)
             if (status != 0) {
                 problems.add("$module: cannot list its tasks; log: ${log.path}")
                 continue
@@ -42,7 +42,7 @@ internal class Snapshots(private val cli: Cli<*, *>, private val root: File) {
                 )
                 continue
             }
-            tasks.addAll(found.map { "$module:$it" })
+            tasks.addAll(found.map { taskPath(module, it) })
         }
         if (problems.isNotEmpty()) return Result(false, "no snapshot tasks found", problems)
         val log = File(layout.logs, if (record) "L3-snapshots-record.log" else "L3-snapshots.log")
@@ -87,6 +87,9 @@ internal class Snapshots(private val cli: Cli<*, *>, private val root: File) {
         }
 
         private val taskName = Regex("[a-z][A-Za-z0-9]*")
+
+        /** A task of a module: `:feature:items` + `tasks` → `:feature:items:tasks`, and the root `:` → `:tasks`. */
+        fun taskPath(module: String, task: String): String = if (module == ":") ":$task" else "$module:$task"
 
         /** A module path as part of a file name: `:feature:items` → `feature-items`. */
         fun logName(module: String): String = module.trim(':').replace(':', '-').ifEmpty { "root" }

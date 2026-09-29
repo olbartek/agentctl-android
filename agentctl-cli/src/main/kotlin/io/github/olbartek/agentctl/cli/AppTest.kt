@@ -10,6 +10,7 @@ import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /**
@@ -70,7 +71,9 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
                     AppTestSkip.reason(source) != null -> Result(name, Outcome.Skipped(AppTestSkip.reason(source)!!))
                     else -> {
                         recording?.chapter(name)
-                        runScenario(name, source, launcher, device, build = !built, options).also { built = true }
+                        // Built once the first launch has really run with the build, not merely been attempted: a parse error
+                        // or a failed install would otherwise leave every later file running a stale app.
+                        runScenario(name, source, launcher, device, build = !built, options) { built = true }
                     }
                 }
                 results.add(result)
@@ -88,7 +91,15 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
     }
 
     /** A fresh launch with no saved session, then the script through the bridge: whole, or a line at a time. */
-    private fun runScenario(name: String, source: String, launcher: AppLauncher, device: Device, build: Boolean, options: Options): Result {
+    private fun runScenario(
+        name: String,
+        source: String,
+        launcher: AppLauncher,
+        device: Device,
+        build: Boolean,
+        options: Options,
+        launched: () -> Unit,
+    ): Result {
         val start = TimeSource.Monotonic.markNow()
         val lines = try {
             ScriptParser.parse(source)
@@ -100,6 +111,7 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
         } catch (error: AppCtlException) {
             return Result(name, Outcome.Broken("launch failed: ${error.message}"))
         }
+        launched()
         val client = BridgeClient(options.port)
         // One request for the script, or one per line: the app keeps one runner across requests, so `expect` still
         // sees the calls of the step before it.
@@ -150,7 +162,9 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
     /**
      * `adb shell screenrecord` for the whole run, and a chapters file with the time each scenario started.
      * `screenrecord` stops after three minutes, so the run is recorded in back-to-back chunks, which are joined with
-     * `ffmpeg` when it is installed and kept as numbered parts when it is not.
+     * `ffmpeg` when it is installed and kept as numbered parts when it is not. Chapters are timed from the start of
+     * the run, so on a run longer than one chunk they drift later than the joined video by the gaps between chunks
+     * (about a second each).
      */
     class Recording private constructor(
         private val adb: String,
@@ -173,12 +187,18 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             while (!stopping) {
                 val remote = "/sdcard/appctl-record-${index++}.mp4"
                 synchronized(chunks) { chunks.add(remote) }
+                val chunkStarted = TimeSource.Monotonic.markNow()
                 val process = ProcessBuilder(adb, "-s", device.serial, "shell", "screenrecord", "--time-limit", "$CHUNK_SECONDS", remote)
                     .redirectErrorStream(true)
-                    .redirectOutput(File(work, "screenrecord.log"))
+                    .redirectOutput(ProcessBuilder.Redirect.appendTo(File(work, "screenrecord.log")))
                     .start()
                 current = process
-                process.waitFor()
+                val status = process.waitFor()
+                // A chunk that ends early and badly means screenrecord cannot run (the device went away, say):
+                // stop rather than respawn adb as fast as it exits.
+                if (!stopping && status != 0 && chunkStarted.elapsedNow() < CHUNK_SECONDS.seconds / 2) {
+                    stopping = true
+                }
             }
         }
 
@@ -206,7 +226,12 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
                 local
             }.filter { it.isFile && it.length() > 0 }
             chaptersFile.writeText(chapters.joinToString("\n") + "\n")
-            val files = join(parts)
+            if (parts.isEmpty()) return "warning: nothing was recorded; see ${File(work, "screenrecord.log").path}"
+            val files = try {
+                join(parts)
+            } catch (error: IOException) {
+                return "warning: the recording could not be saved to ${video.path}: ${error.message}"
+            }
             return "recorded ${files.joinToString(", ") { it.path }} (chapters: ${chaptersFile.name})"
         }
 
@@ -240,7 +265,11 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
                 recording.recorder.start()
                 // screenrecord prints nothing when it starts; give it a moment to write its first frames.
                 Thread.sleep(1000)
-                if (recording.current?.isAlive != true) throw AppCtlException("adb shell screenrecord did not start; log: ${File(work, "screenrecord.log").path}")
+                if (recording.current?.isAlive != true) {
+                    recording.stopping = true
+                    Shell.capture(listOf(adb, "-s", device.serial, "shell", "pkill", "-2", "screenrecord"))
+                    throw AppCtlException("adb shell screenrecord did not start; log: ${File(work, "screenrecord.log").path}")
+                }
                 return recording
             }
         }

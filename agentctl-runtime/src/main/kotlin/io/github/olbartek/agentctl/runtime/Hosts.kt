@@ -150,6 +150,11 @@ public class LiveHost<S, A>(
 
     public val store: AgentStore<S, A> = makeStore(environment)
 
+    /** Cancels every effect still running (its timers and mocked calls). The host is unusable afterwards. */
+    public fun close() {
+        scope.cancel()
+    }
+
     /**
      * Settles on real time — no mock call in flight, and the state quiet for a moment — because a running app's
      * latency and timers are real, unlike the headless host's. Call on [dispatcher].

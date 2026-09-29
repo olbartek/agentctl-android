@@ -57,7 +57,10 @@ public class AgentLaunch<S, A>(config: AppCtlConfig<S, A>, intent: Intent?) {
         ready.value = true
     }
 
-    /** Stops the bridge, e.g. from the `Application`'s or `ViewModel`'s teardown. */
+    /**
+     * Stops the bridge and cancels the store's running effects, e.g. from the `Application`'s or `ViewModel`'s
+     * teardown. The store is unusable afterwards.
+     */
     public fun stop() {
         session.stop()
     }

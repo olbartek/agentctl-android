@@ -10,6 +10,7 @@ import io.github.olbartek.agentctl.examples.agentshop.ctl.AgentShopConfig
 import io.github.olbartek.agentctl.examples.agentshop.models.ScheduledFaults
 import java.io.File
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -29,9 +30,18 @@ class AppStore private constructor(activity: Activity) {
         activity.intent,
     )
 
+    /** Where the seed is applied and the bridge started; cancelled with the store when a UI test relaunches. */
+    private val startup = MainScope()
+
     init {
         // Applies the seed, then starts the bridge.
-        MainScope().launch { launch.start() }
+        startup.launch { launch.start() }
+    }
+
+    /** Ends this store: the bridge, the store's effects and a seed still being applied. */
+    private fun close() {
+        startup.cancel()
+        launch.stop()
     }
 
     val store: AgentStore<AppFeature.State, AppFeature.Action> get() = launch.store
@@ -44,7 +54,7 @@ class AppStore private constructor(activity: Activity) {
 
         fun get(activity: Activity, isFreshLaunch: Boolean): AppStore {
             if (isFreshLaunch && UiTesting.isOn) {
-                instance?.launch?.stop()
+                instance?.close()
                 instance = null
             }
             return instance ?: AppStore(activity).also { instance = it }
