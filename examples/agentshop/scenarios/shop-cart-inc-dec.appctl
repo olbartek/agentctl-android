@@ -1,0 +1,12 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+# Plus and minus change a line's quantity and the totals.
+inc 103
+inc 103
+expect items=3 subtotal=$87.00
+dec 103
+expect items=2 subtotal=$58.00

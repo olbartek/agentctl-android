@@ -1,0 +1,8 @@
+# A failed login request shows the network error on the form; submitting again succeeds.
+email bob@example.com
+password Hunter22x
+mock auth.login network
+submit
+expect screen=auth/login error=network call=auth.login loading=false
+submit
+expect screen=home/shop products=12 call=auth.login

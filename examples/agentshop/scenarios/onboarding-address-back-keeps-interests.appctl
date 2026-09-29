@@ -1,0 +1,13 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+# Back from the address shows the interests as they were picked.
+expect screen=onboarding/address
+back
+expect screen=onboarding/interests selected=2 interests=bags,home canContinue=true
+continue
+expect screen=onboarding/address

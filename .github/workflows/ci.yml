@@ -38,6 +38,14 @@ jobs:
       - name: Generated command reference is current
         run: ./tinyctl docs --check
 
+      # AgentShop, the showcase: its 105 scenarios (the reference's, byte for byte) through its own CLI, run from
+      # examples/agentshop, its root.
+      - name: AgentShop scenarios
+        run: examples/agentshop/appctl test
+
+      - name: AgentShop command reference is current
+        run: examples/agentshop/appctl docs --check
+
       # What JitPack runs for a tag: every published module installs.
       - name: Publish locally
         run: ./gradlew publishToMavenLocal

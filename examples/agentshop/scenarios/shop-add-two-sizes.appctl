@@ -1,0 +1,13 @@
+email alice@example.com
+password Passw0rd!
+submit
+# The same product in two sizes makes two lines.
+open 101
+size 41
+add-to-cart
+size 43
+qty-up
+add-to-cart
+expect added=3
+view-cart
+expect lines=101-41,101-43 items=3 subtotal=$267.00

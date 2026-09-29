@@ -1,0 +1,13 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+# A failed promo request reports the error; applying again works.
+promo-code SAVE10
+mock cart.applyPromo network
+apply-promo
+expect error=network promo=none
+apply-promo
+expect promo=SAVE10 error=none

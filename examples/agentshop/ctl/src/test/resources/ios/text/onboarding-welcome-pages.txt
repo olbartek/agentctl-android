@@ -1,0 +1,23 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email nina@example.com
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=onboarding/welcome page=1 pages=3 calls=auth.login,session.save,account.fetchProfile
+> expect screen=onboarding/welcome page=1
+  screen=onboarding/welcome page=1 pages=3 calls=auth.login,session.save,account.fetchProfile
+> next
+  screen=onboarding/welcome page=2 pages=3
+> expect page=2
+  screen=onboarding/welcome page=2 pages=3
+> next
+  screen=onboarding/welcome page=3 pages=3
+> expect page=3
+  screen=onboarding/welcome page=3 pages=3
+> next
+  screen=onboarding/interests selected=0 interests=none canContinue=false
+> expect screen=onboarding/interests selected=0
+  screen=onboarding/interests selected=0 interests=none canContinue=false
+exit=0

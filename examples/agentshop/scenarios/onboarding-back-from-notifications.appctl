@@ -1,0 +1,16 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+name Nina Park
+street 2 Elm St
+city Portland
+zip 97201
+# Back from notifications returns to the address with everything still filled in.
+continue
+expect screen=onboarding/notifications
+back
+expect screen=onboarding/address name="Nina Park" zip=97201 canContinue=true

@@ -1,0 +1,14 @@
+email alice@example.com
+password Passw0rd!
+submit
+# After logging out, another account signs in on the same launch.
+tab profile
+logout
+confirm
+expect screen=auth/login
+email bob@example.com
+password Hunter22x
+submit
+expect screen=home/shop
+tab profile
+expect name=Bob email=bob@example.com

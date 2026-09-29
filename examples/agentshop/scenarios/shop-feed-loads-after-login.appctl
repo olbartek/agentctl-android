@@ -1,0 +1,5 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Signing in lands on the shop with the whole catalog, featured first.
+expect screen=home/shop products=12 filter=all query="" sort=featured loading=false call=catalog.fetchProducts

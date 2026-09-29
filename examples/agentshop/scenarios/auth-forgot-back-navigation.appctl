@@ -1,0 +1,10 @@
+# Back and "Login to your account" leave the reset flow without changing anything.
+forgot
+expect screen=auth/forgot/email
+back
+expect screen=auth/login
+email alice@example.com
+forgot
+expect screen=auth/forgot/email email=alice@example.com
+back
+expect screen=auth/login email=alice@example.com

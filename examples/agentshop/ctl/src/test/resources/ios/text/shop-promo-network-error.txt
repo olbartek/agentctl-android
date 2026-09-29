@@ -1,0 +1,27 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> open 103
+  screen=home/shop/103 name="Canvas Tote" price=$29.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=0
+> add-to-cart
+  screen=home/shop/103 name="Canvas Tote" price=$29.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=1
+> view-cart
+  screen=home/cart lines=103 items=1 subtotal=$29.00 discount=$0.00 total=$29.00 promo=none canCheckout=true
+> promo-code SAVE10
+  screen=home/cart lines=103 items=1 subtotal=$29.00 discount=$0.00 total=$29.00 promo=none canCheckout=true
+> mock cart.applyPromo network
+  screen=home/cart lines=103 items=1 subtotal=$29.00 discount=$0.00 total=$29.00 promo=none canCheckout=true
+> apply-promo
+  screen=home/cart lines=103 items=1 subtotal=$29.00 discount=$0.00 total=$29.00 promo=none canCheckout=true calls=cart.applyPromo error=network
+> expect error=network promo=none
+  screen=home/cart lines=103 items=1 subtotal=$29.00 discount=$0.00 total=$29.00 promo=none canCheckout=true calls=cart.applyPromo error=network
+> apply-promo
+  screen=home/cart lines=103 items=1 subtotal=$29.00 discount=$2.90 total=$26.10 promo=SAVE10 canCheckout=true calls=cart.applyPromo
+> expect promo=SAVE10 error=none
+  screen=home/cart lines=103 items=1 subtotal=$29.00 discount=$2.90 total=$26.10 promo=SAVE10 canCheckout=true calls=cart.applyPromo
+exit=0

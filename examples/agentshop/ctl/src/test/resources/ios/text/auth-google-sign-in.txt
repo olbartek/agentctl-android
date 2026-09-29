@@ -1,0 +1,49 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> google
+  screen=onboarding/welcome page=1 pages=3 calls=auth.signInWithGoogle,session.save,account.fetchProfile
+> expect screen=onboarding/welcome call=auth.signInWithGoogle call=session.save call=account.fetchProfile
+  screen=onboarding/welcome page=1 pages=3 calls=auth.signInWithGoogle,session.save,account.fetchProfile
+> skip
+  screen=onboarding/interests selected=0 interests=none canContinue=false
+> toggle watches
+  screen=onboarding/interests selected=1 interests=watches canContinue=false
+> toggle home
+  screen=onboarding/interests selected=2 interests=watches,home canContinue=true
+> continue
+  screen=onboarding/address name="" street="" city="" zip="" canContinue=false
+> skip
+  screen=onboarding/notifications notifications=undecided loading=false
+> not-now
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
+> expect screen=home/shop products=12
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
+> tab profile
+  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=none
+> expect name="Becca Ade" email=becca@gmail.com
+  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=none
+> logout
+  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=logout
+> confirm
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.clear
+> expect screen=auth/login
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.clear
+> register
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> google
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.signInWithGoogle,session.save,account.fetchProfile,catalog.fetchProducts
+> expect screen=home/shop call=auth.signInWithGoogle
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.signInWithGoogle,session.save,account.fetchProfile,catalog.fetchProducts
+> tab profile
+  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=none
+> logout
+  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=logout
+> confirm
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.clear
+> mock auth.signInWithGoogle network
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false
+> google
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=auth.signInWithGoogle error=network
+> expect screen=auth/login error=network loading=false
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=auth.signInWithGoogle error=network
+exit=0

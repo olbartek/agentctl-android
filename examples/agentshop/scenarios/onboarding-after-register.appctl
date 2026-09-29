@@ -1,0 +1,22 @@
+# A freshly registered account is onboarded after verifying its email.
+register
+name Ivy
+email ivy@example.com
+password Secret123
+confirm Secret123
+terms on
+submit
+code 123456
+verify
+expect screen=onboarding/welcome page=1
+skip
+toggle shoes
+toggle watches
+continue
+name Ivy Chen
+street 9 Pine Rd
+city Denver
+zip 80202
+continue
+allow
+expect screen=home/shop

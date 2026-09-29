@@ -1,0 +1,6 @@
+# If the profile can't be loaded after signing in, the shopper goes home rather than being stuck.
+mock account.fetchProfile network
+email nina@example.com
+password Passw0rd!
+submit
+expect screen=home/shop call=account.fetchProfile

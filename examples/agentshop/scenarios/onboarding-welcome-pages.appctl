@@ -1,0 +1,11 @@
+email nina@example.com
+password Passw0rd!
+submit
+# Next walks the three welcome pages; next on the last one moves on to interests.
+expect screen=onboarding/welcome page=1
+next
+expect page=2
+next
+expect page=3
+next
+expect screen=onboarding/interests selected=0

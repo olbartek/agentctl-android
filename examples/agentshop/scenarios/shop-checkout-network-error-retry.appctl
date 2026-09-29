@@ -1,0 +1,14 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+card 4242 4242 4242 4242
+# A failed order request keeps checkout open; placing again succeeds.
+mock orders.placeOrder network
+place-order
+expect error=network loading=false call=orders.placeOrder
+place-order
+expect screen=home/cart/confirmation order=1004

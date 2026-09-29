@@ -1,0 +1,14 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+card 4242 4242 4242 4242
+# A zip code that isn't five digits is refused before anything is sent.
+zip 1000
+place-order
+expect screen=home/cart/checkout error=invalidZip
+zip 10001
+expect error=none

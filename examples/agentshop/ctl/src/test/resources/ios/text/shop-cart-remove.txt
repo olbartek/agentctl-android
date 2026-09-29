@@ -1,0 +1,29 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> open 103
+  screen=home/shop/103 name="Canvas Tote" price=$29.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=0
+> qty-up
+  screen=home/shop/103 name="Canvas Tote" price=$29.00 size=one-size qty=2 inStock=true favorite=false canAdd=true added=0
+> add-to-cart
+  screen=home/shop/103 name="Canvas Tote" price=$29.00 size=one-size qty=2 inStock=true favorite=false canAdd=true added=2
+> back
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false
+> open 111
+  screen=home/shop/111 name="Ceramic Mug" price=$14.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=0
+> add-to-cart
+  screen=home/shop/111 name="Ceramic Mug" price=$14.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=1
+> view-cart
+  screen=home/cart lines=103,111 items=3 subtotal=$72.00 discount=$0.00 total=$72.00 promo=none canCheckout=true
+> expect lines=103,111 items=3
+  screen=home/cart lines=103,111 items=3 subtotal=$72.00 discount=$0.00 total=$72.00 promo=none canCheckout=true
+> remove 103
+  screen=home/cart lines=111 items=1 subtotal=$14.00 discount=$0.00 total=$14.00 promo=none canCheckout=true
+> expect lines=111 items=1 subtotal=$14.00
+  screen=home/cart lines=111 items=1 subtotal=$14.00 discount=$0.00 total=$14.00 promo=none canCheckout=true
+exit=0

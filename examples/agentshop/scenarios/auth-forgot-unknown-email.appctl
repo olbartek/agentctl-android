@@ -1,0 +1,10 @@
+# Requesting a reset always looks like it worked, but an unknown email gets no code.
+forgot
+email nobody@example.com
+send
+expect screen=auth/forgot/reset call=auth.requestPasswordReset
+code 654321
+password NewPass123
+confirm NewPass123
+submit
+expect error=invalidCode call=auth.resetPassword

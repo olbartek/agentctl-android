@@ -1,0 +1,21 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> open 107
+  screen=home/shop/107 name="Rain Jacket" price=$119.00 size=none qty=1 inStock=true favorite=false canAdd=false added=0
+> expect screen=home/shop/107 size=none canAdd=false
+  screen=home/shop/107 name="Rain Jacket" price=$119.00 size=none qty=1 inStock=true favorite=false canAdd=false added=0
+> size M
+  screen=home/shop/107 name="Rain Jacket" price=$119.00 size=M qty=1 inStock=true favorite=false canAdd=true added=0
+> expect size=M canAdd=true
+  screen=home/shop/107 name="Rain Jacket" price=$119.00 size=M qty=1 inStock=true favorite=false canAdd=true added=0
+> size L
+  screen=home/shop/107 name="Rain Jacket" price=$119.00 size=L qty=1 inStock=true favorite=false canAdd=true added=0
+> expect size=L
+  screen=home/shop/107 name="Rain Jacket" price=$119.00 size=L qty=1 inStock=true favorite=false canAdd=true added=0
+exit=0

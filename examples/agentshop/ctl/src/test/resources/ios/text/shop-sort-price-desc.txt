@@ -1,0 +1,23 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> sort price-desc
+  screen=home/shop products=12 filter=all query="" sort=price-desc loading=false
+> expect sort=price-desc
+  screen=home/shop products=12 filter=all query="" sort=price-desc loading=false
+> open 106
+  screen=home/shop/106 name="Dive Watch" price=$249.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=0
+> expect screen=home/shop/106 name="Dive Watch" price=$249.00
+  screen=home/shop/106 name="Dive Watch" price=$249.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=0
+> back
+  screen=home/shop products=12 filter=all query="" sort=price-desc loading=false
+> sort featured
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false
+> expect screen=home/shop sort=featured
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false
+exit=0

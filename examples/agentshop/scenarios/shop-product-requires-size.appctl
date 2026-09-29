@@ -1,0 +1,10 @@
+email alice@example.com
+password Passw0rd!
+submit
+# A product with sizes can't be added until a size is picked.
+open 107
+expect screen=home/shop/107 size=none canAdd=false
+size M
+expect size=M canAdd=true
+size L
+expect size=L

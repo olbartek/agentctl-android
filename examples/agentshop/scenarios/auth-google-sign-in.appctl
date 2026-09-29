@@ -1,0 +1,26 @@
+# "Sign in with Google" and "Sign up with Google" both sign in as the Google test account. The first time,
+# the new account is onboarded; after that it goes straight home.
+google
+expect screen=onboarding/welcome call=auth.signInWithGoogle call=session.save call=account.fetchProfile
+skip
+toggle watches
+toggle home
+continue
+skip
+not-now
+expect screen=home/shop products=12
+tab profile
+expect name="Becca Ade" email=becca@gmail.com
+logout
+confirm
+expect screen=auth/login
+register
+google
+expect screen=home/shop call=auth.signInWithGoogle
+# A failure stays on the screen.
+tab profile
+logout
+confirm
+mock auth.signInWithGoogle network
+google
+expect screen=auth/login error=network loading=false

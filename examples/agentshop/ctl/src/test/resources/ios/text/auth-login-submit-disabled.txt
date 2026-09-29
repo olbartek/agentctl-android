@@ -1,0 +1,23 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> expect screen=auth/login canSubmit=false
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@
+  screen=auth/login email=alice@ keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@ keepSignedIn=true revealed=none canSubmit=false loading=false
+> expect canSubmit=false
+  screen=auth/login email=alice@ keepSignedIn=true revealed=none canSubmit=false loading=false
+> email alice@example
+  screen=auth/login email=alice@example keepSignedIn=true revealed=none canSubmit=false loading=false
+> expect canSubmit=false
+  screen=auth/login email=alice@example keepSignedIn=true revealed=none canSubmit=false loading=false
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> expect canSubmit=true
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> email alice.example.com
+  screen=auth/login email=alice.example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> expect canSubmit=false
+  screen=auth/login email=alice.example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+exit=0

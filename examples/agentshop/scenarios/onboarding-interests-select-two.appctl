@@ -1,0 +1,10 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+# Two interests are enough to go on to the address.
+toggle jackets
+toggle accessories
+expect interests=jackets,accessories canContinue=true
+continue
+expect screen=onboarding/address canContinue=false

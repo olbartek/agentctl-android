@@ -1,0 +1,6 @@
+email alice@example.com
+password Passw0rd!
+submit
+# An empty cart can't be checked out.
+tab cart
+expect screen=home/cart lines=none items=0 total=$0.00 canCheckout=false

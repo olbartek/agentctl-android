@@ -1,0 +1,11 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Sorting by price, most expensive first, and back to featured.
+sort price-desc
+expect sort=price-desc
+open 106
+expect screen=home/shop/106 name="Dive Watch" price=$249.00
+back
+sort featured
+expect screen=home/shop sort=featured

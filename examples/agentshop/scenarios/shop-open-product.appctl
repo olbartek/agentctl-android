@@ -1,0 +1,8 @@
+email alice@example.com
+password Passw0rd!
+submit
+# A product opens on top of the shop; back returns to it.
+open 104
+expect screen=home/shop/104 name="Leather Backpack" price=$129.00 size=one-size qty=1 inStock=true canAdd=true added=0
+back
+expect screen=home/shop products=12

@@ -1,0 +1,23 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> open 101
+  screen=home/shop/101 name="Trail Runner" price=$89.00 size=none qty=1 inStock=true favorite=false canAdd=false added=0
+> size 42
+  screen=home/shop/101 name="Trail Runner" price=$89.00 size=42 qty=1 inStock=true favorite=false canAdd=true added=0
+> add-to-cart
+  screen=home/shop/101 name="Trail Runner" price=$89.00 size=42 qty=1 inStock=true favorite=false canAdd=true added=1
+> add-to-cart
+  screen=home/shop/101 name="Trail Runner" price=$89.00 size=42 qty=1 inStock=true favorite=false canAdd=true added=2
+> expect added=2
+  screen=home/shop/101 name="Trail Runner" price=$89.00 size=42 qty=1 inStock=true favorite=false canAdd=true added=2
+> view-cart
+  screen=home/cart lines=101-42 items=2 subtotal=$178.00 discount=$0.00 total=$178.00 promo=none canCheckout=true
+> expect lines=101-42 items=2 subtotal=$178.00
+  screen=home/cart lines=101-42 items=2 subtotal=$178.00 discount=$0.00 total=$178.00 promo=none canCheckout=true
+exit=0

@@ -1,0 +1,14 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+skip
+# A failed save keeps the shopper on the last step with retry; retrying finishes.
+mock account.completeOnboarding network
+allow
+expect screen=onboarding/notifications error=network notifications=allowed loading=false call=account.completeOnboarding
+retry
+expect screen=home/shop call=account.completeOnboarding

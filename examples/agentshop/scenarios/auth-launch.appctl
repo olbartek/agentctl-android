@@ -1,0 +1,2 @@
+# A fresh launch restores no session and lands on login.
+expect screen=auth/login call=session.current pending=0 email=""

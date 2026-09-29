@@ -1,0 +1,9 @@
+# A one-time code can't be sent to an email no account uses.
+use-otp
+email nobody@example.com
+send
+expect screen=auth/otp/email error=unknownEmail call=auth.sendOTP
+email bob@example.com
+expect error=none canSend=true
+send
+expect screen=auth/otp/code call=auth.sendOTP

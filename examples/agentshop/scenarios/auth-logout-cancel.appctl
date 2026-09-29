@@ -1,0 +1,11 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Cancelling the log-out alert keeps the shopper signed in.
+tab profile
+logout
+expect alert=logout
+dismiss
+expect screen=home/profile alert=none
+tab shop
+expect screen=home/shop

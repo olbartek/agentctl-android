@@ -1,0 +1,10 @@
+# Login with a one-time code. The email typed on login is carried over.
+email alice@example.com
+use-otp
+expect screen=auth/otp/email email=alice@example.com canSend=true
+send
+expect screen=auth/otp/code resendIn=30 attemptsLeft=3 call=auth.sendOTP pending=1
+code 12a3456
+expect canVerify=true
+verify
+expect screen=home/shop products=12 call=auth.verifyOTP call=session.save pending=0

@@ -1,0 +1,29 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email nina@example.com
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=onboarding/welcome page=1 pages=3 calls=auth.login,session.save,account.fetchProfile
+> skip
+  screen=onboarding/interests selected=0 interests=none canContinue=false
+> toggle bags
+  screen=onboarding/interests selected=1 interests=bags canContinue=false
+> toggle home
+  screen=onboarding/interests selected=2 interests=bags,home canContinue=true
+> continue
+  screen=onboarding/address name="" street="" city="" zip="" canContinue=false
+> name Nina Park
+  screen=onboarding/address name="Nina Park" street="" city="" zip="" canContinue=false
+> street 2 Elm St
+  screen=onboarding/address name="Nina Park" street="2 Elm St" city="" zip="" canContinue=false
+> city Portland
+  screen=onboarding/address name="Nina Park" street="2 Elm St" city=Portland zip="" canContinue=false
+> zip 9720
+  screen=onboarding/address name="Nina Park" street="2 Elm St" city=Portland zip=9720 canContinue=true
+> continue
+  screen=onboarding/address name="Nina Park" street="2 Elm St" city=Portland zip=9720 canContinue=true error=invalidZip
+> expect screen=onboarding/address error=invalidZip
+  screen=onboarding/address name="Nina Park" street="2 Elm St" city=Portland zip=9720 canContinue=true error=invalidZip
+exit=0

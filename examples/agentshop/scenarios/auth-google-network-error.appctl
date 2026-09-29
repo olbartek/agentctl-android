@@ -1,0 +1,6 @@
+# A failed Google sign-in stays on login with the error; trying again signs in.
+mock auth.signInWithGoogle network
+google
+expect screen=auth/login error=network call=auth.signInWithGoogle
+google
+expect screen=onboarding/welcome call=auth.signInWithGoogle

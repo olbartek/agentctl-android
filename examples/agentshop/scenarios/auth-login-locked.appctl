@@ -1,0 +1,19 @@
+# The seeded locked account is always locked.
+email locked@example.com
+password anything1
+submit
+expect error=accountLocked
+# Five wrong passwords lock an account; after that even the right password is refused.
+email alice@example.com
+password nope
+submit
+expect error=invalidCredentials
+submit
+submit
+submit
+expect error=invalidCredentials
+submit
+expect error=accountLocked
+password Passw0rd!
+submit
+expect screen=auth/login error=accountLocked

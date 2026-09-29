@@ -1,0 +1,19 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+name Nina Park
+street 2 Elm St
+city Portland
+zip 97201
+continue
+allow
+# The address saved during onboarding fills in checkout.
+open 103
+add-to-cart
+view-cart
+checkout
+expect screen=home/cart/checkout name="Nina Park" street="2 Elm St" city=Portland zip=97201 call=account.fetchProfile

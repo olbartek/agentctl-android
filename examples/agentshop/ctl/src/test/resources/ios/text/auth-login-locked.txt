@@ -1,0 +1,37 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email locked@example.com
+  screen=auth/login email=locked@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password anything1
+  screen=auth/login email=locked@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=auth/login email=locked@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=accountLocked
+> expect error=accountLocked
+  screen=auth/login email=locked@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=accountLocked
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> password nope
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=invalidCredentials
+> expect error=invalidCredentials
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=invalidCredentials
+> submit
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=invalidCredentials
+> submit
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=invalidCredentials
+> submit
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=invalidCredentials
+> expect error=invalidCredentials
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=invalidCredentials
+> submit
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=accountLocked
+> expect error=accountLocked
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=accountLocked
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=accountLocked
+> expect screen=auth/login error=accountLocked
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=accountLocked
+exit=0
