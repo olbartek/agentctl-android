@@ -51,6 +51,13 @@ jobs:
       - name: AgentShop command reference is current
         run: examples/agentshop/appctl docs --check
 
+      # AgentShop's Compose UI tests are generated from its scenarios (they run on an emulator, not here); --check
+      # fails if a scenario or a screen's commands changed and the generated tests were not regenerated.
+      - name: AgentShop generated UI tests are current
+        run: |
+          python3 examples/agentshop/bench/gen_uitests.py --self-test
+          python3 examples/agentshop/bench/gen_uitests.py --check
+
       # What JitPack runs for a tag: every published module installs.
       - name: Publish locally
         run: ./gradlew publishToMavenLocal
