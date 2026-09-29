@@ -8,7 +8,7 @@ dependencies {
     testImplementation(project(":agentctl-runtime"))
     testImplementation(project(":agentctl-cli"))
     testImplementation(project(":agentctl-test-support"))
-    testImplementation(project(":examples:tinyapp"))
+    testImplementation(project(":examples:tinyapp-config"))
 }
 
 tasks.test {

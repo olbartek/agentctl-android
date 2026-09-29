@@ -38,6 +38,11 @@ jobs:
       - name: Generated command reference is current
         run: ./tinyctl docs --check
 
+      # The release APK holds none of AgentCtl's runtime, CLI, test support or bridge: TinyApp's config is a
+      # debugImplementation dependency, as a host's should be. (`build` has run it already, as part of `check`.)
+      - name: Release build leaves out AgentCtl
+        run: ./gradlew :examples:tinyapp-android:verifyReleaseLeavesOutAgentCtl
+
       # What JitPack runs for a tag: every published module installs.
       - name: Publish locally
         run: ./gradlew publishToMavenLocal

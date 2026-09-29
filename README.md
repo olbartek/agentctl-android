@@ -95,7 +95,7 @@ dependencies {
 | Artifact | Who depends on it | What for |
 |---|---|---|
 | `agentctl-core` | the modules holding your screens | `AgentScreen`, `AgentCommand`, `SummaryItem`, `Store`, `AgentEnvironment`, `MockBackend` |
-| `agentctl-runtime` | the module holding your config | `AppCtlConfig`, `ScriptRunner`, the deterministic headless host, the bridge's server |
+| `agentctl-runtime` | your config module, which only your debug app (`debugImplementation`), your CLI and your tests depend on | `AppCtlConfig`, `ScriptRunner`, the deterministic headless host, the bridge's server |
 | `agentctl-cli` | your CLI's module | `AgentCtl.main(config, args)` |
 | `agentctl-bridge` | your app, as `debugImplementation` | `AgentLaunch`, the debug-only in-app bridge |
 | `agentctl-test-support` | your tests | the coverage guards |
@@ -226,7 +226,9 @@ The app's store and clients take everything outside themselves from an `AgentEnv
 - identifiers, randomness, the zone and the locale.
 
 Each host fills it differently. The headless host fills it deterministically, the live host with real values, and a
-release build with `AgentEnvironment.system(scope)`:
+release build with `AgentEnvironment.system(scope)`. TinyApp's
+([`TinyApp.kt`](examples/tinyapp/src/main/kotlin/io/github/olbartek/agentctl/examples/tinyapp/TinyApp.kt)) needs
+nothing but `agentctl-core`, so it ships:
 
 ```kotlin
 fun store(environment: AgentEnvironment): Store<TinyRoot.State, TinyRoot.Action> = Store(
@@ -245,7 +247,7 @@ One value describes your app to AgentCtl:
 - the functions that build your store.
 
 Abridged from
-[`TinyAppConfig.kt`](examples/tinyapp/src/main/kotlin/io/github/olbartek/agentctl/examples/tinyapp/TinyAppConfig.kt):
+[`TinyAppConfig.kt`](examples/tinyapp-config/src/main/kotlin/io/github/olbartek/agentctl/examples/tinyapp/TinyAppConfig.kt):
 
 ```kotlin
 val appCtl: AppCtlConfig<TinyRoot.State, TinyRoot.Action>
@@ -266,7 +268,27 @@ val appCtl: AppCtlConfig<TinyRoot.State, TinyRoot.Action>
         makeLive = { latency, dispatcher -> live(latency, dispatcher) },
     )
 
-fun headless() = HeadlessHost(TinyRootAgent, mockMethods, ::store)
+fun headless() = HeadlessHost(TinyRootAgent, mockMethods, TinyApp::store)
+```
+
+**Debug builds only.** The config needs `agentctl-runtime`, so keep it in a module of its own, apart from your
+screens, and let only your debug app (`debugImplementation`), your CLI and your tests depend on it. Your screens'
+`…Agent.kt` files and your store use only `agentctl-core`, and ship. A release build then carries none of AgentCtl's
+runtime, CLI or test support. TinyApp does exactly this:
+[`examples/tinyapp`](examples/tinyapp/build.gradle.kts) is the app, on `agentctl-core`;
+[`examples/tinyapp-config`](examples/tinyapp-config/build.gradle.kts) is its config; and
+[`examples/tinyapp-android`](examples/tinyapp-android/build.gradle.kts) takes the config with
+`debugImplementation` and checks, as part of `check`, that its release APK holds no class of
+`agentctl-runtime`, `agentctl-cli`, `agentctl-test-support` or `agentctl-bridge` (`verifyReleaseLeavesOutAgentCtl`,
+which you can copy).
+
+```kotlin
+// your app's build.gradle.kts
+dependencies {
+    implementation(project(":feature:items"))           // screens and store: agentctl-core
+    debugImplementation(project(":appctl-config"))      // the AppCtlConfig: agentctl-runtime
+    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:v0.1.0")
+}
 ```
 
 Your executable is then the whole of
@@ -469,8 +491,9 @@ asserted.
 
 ## The in-app bridge
 
-Add `agentctl-bridge` with **`debugImplementation`** only, and keep the code that names it in `src/debug`. A release
-build then carries neither the bridge nor the `INTERNET` permission its manifest adds. The server listens on
+Add `agentctl-bridge` with **`debugImplementation`** only, as your config module, and keep the code that names them
+in `src/debug`. A release build then carries neither the bridge, nor AgentCtl's runtime, nor the `INTERNET`
+permission the bridge's manifest adds. The server listens on
 `127.0.0.1` only; the CLI reaches it with `adb forward`.
 
 [`examples/tinyapp-android`](examples/tinyapp-android) is TinyApp as a real app: plain views that render the store
@@ -589,6 +612,9 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   the reference adds `LiveEnvironment.now`.
 - `app test` runs on a device through `adb` (`screenrecord` for `--record`), and fixes the mock latency at 0 unless
   `--latency` is given, as L4 does, where the reference uses the app's own latency.
+- A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
+  which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
+  support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.
 
 ## Building this repository
 
