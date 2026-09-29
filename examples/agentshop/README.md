@@ -73,14 +73,73 @@ examples/agentshop/bench/ios_transcripts.sh            # or: … path/to/agentct
 
 ## The app
 
-> **TODO** (next stage): the Compose app in `app/` (`:examples:agentshop:app`, application id
-> `io.github.olbartek.agentctl.examples.agentshop`, `.app.MainActivity`), with the agent bridge in debug builds, and
-> how to drive it: `examples/agentshop/appctl app launch --clear-session --latency 0` and `app run`.
+`app/` (`:examples:agentshop:app`, application id `io.github.olbartek.agentctl.examples.agentshop`, `.app.MainActivity`)
+is the Compose port of the reference's SwiftUI views: the same screens, colors, type and spacing (`app/…/design`, the
+reference's `DesignSystem`), rendering the logic in `shop/` and sending it the same actions the agent commands do. It
+depends on `:shop` only; the agent bridge and `AgentShopConfig` are `debugImplementation` dependencies, and the
+debug and release builds each have their own `AppStore` (`src/debug`, `src/release`):
+
+- **debug**: `AgentLaunch(AgentShopConfig.appCtl(SessionStorage.file(…), ScheduledFaults(<mock-fault extras>)), intent)`:
+  the bridge, launch seeding, `clear-session` (which deletes the app's session file), `mock-latency` and live `advance`.
+- **release**: `AgentShop.store(AgentEnvironment.system(MainScope()), SessionStorage.file(…))`, and none of AgentCtl
+  but `agentctl-core`. `./gradlew build` checks that on the release APK (`verifyReleaseLeavesOutAgentCtl`, from
+  build-logic's `agentctl.release.check`, shared with TinyApp).
+
+## The three modes
+
+The same file, [`scenarios/shop-checkout-happy-path.appctl`](scenarios/shop-checkout-happy-path.appctl), three ways:
+
+```bash
+cd examples/agentshop
+
+# 1. Headless: on the JVM, no emulator, no views.
+./appctl test scenarios/shop-checkout-happy-path.appctl
+
+# 2. The real app on an emulator, driven through its debug-only agent bridge.
+./appctl app launch --clear-session --latency 0 --port 8799
+./appctl app run --port 8799 "$(cat scenarios/shop-checkout-happy-path.appctl)"
+./appctl app test --port 8799                        # every scenario, one fresh launch each
+
+# 3. The Compose UI test generated from it: taps and typing through the real UI.
+../../gradlew -p ../.. :examples:agentshop:app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_happy_path
+```
+
+`app test` runs 103 of the 105 scenarios green in the app. The two that fail do so for the same reasons as on iOS:
+`auth-launch` expects the launch's `call=session.current`, which happens before `app run` starts, and
+`auth-otp-resend-countdown` expects `resendIn=20` after `advance 10s`, while the real clock also ticked during the
+steps before it (`resendIn=19`).
 
 ## UI tests
 
-> **TODO** (next stage): the UI tests generated from the scenarios, and how `mock` becomes a `mock-fault` intent
-> extra (`orders.placeOrder#1=network`, read by `ScheduledFaults`).
+Hand-writing a hundred UI tests that do exactly what the scenarios do would be slow and would drift.
+[`bench/gen_uitests.py`](bench/gen_uitests.py), the port of the reference's generator, writes them instead
+(`app/src/androidTest/…/generated/{Auth,Onboarding,Shop}UiTests.kt`, and [`bench/uitests.json`](bench/uitests.json),
+which records per scenario what is asserted through the UI and what only headlessly):
+
+1. It runs each scenario headlessly with `--json`, so it knows the screen every command is sent on.
+2. Each command becomes one call to [`ShopUiTestCase`](app/src/androidTest/kotlin/io/github/olbartek/agentctl/examples/agentshop/app/ShopUiTestCase.kt):
+   a tap, some typing or a switch, found by a test tag derived from the command
+   ([`design/UiTestTags.kt`](app/src/main/kotlin/io/github/olbartek/agentctl/examples/agentshop/app/design/UiTestTags.kt)):
+   `Login.submit`, `ShopFeed.open.101`, `screen:home/cart`, `error:paymentDeclined`. Values shown on screen carry
+   what the step output prints as a `UiTestValue` semantics property (`Cart.total` = `$80.10`).
+3. `expect` becomes waits for what the screen shows. `mock` becomes a `mock-fault` launch extra that fails the same
+   call, `orders.placeOrder#1=network`, read by `ScheduledFaults`.
+
+99 of the 105 scenarios become UI tests, the same 99 as on iOS. The other six move a virtual clock (`advance 30s`),
+seed (`login-as`) or relaunch (`reset`), which a UI test can only do by really waiting. They stay headless.
+
+```bash
+python3 bench/gen_uitests.py          # after changing a scenario or a screen's commands
+python3 bench/gen_uitests.py --check  # CI: fails if the generated tests are stale
+```
+
+The tests run on the debug app (`createEmptyComposeRule` and `ActivityScenario`), launched with `clear-session`,
+`mock-latency 0`, `agent-port 0` (the idle bridge takes any free port) and `ui-testing`, which gives each launch a
+fresh store (the tests share one process) and drops the fields' autofill hints. Compose's test APIs set a field's text
+and click by semantics, so the keyboard never covers anything; `performScrollTo` brings rows and chips into view.
+Each test logs its duration under the logcat tag `ShopUiTiming`. On a Pixel 7 emulator (API 36) all 99 pass in about
+5 minutes (299 s of test time).
 
 ## The benchmark
 
@@ -95,7 +154,8 @@ examples/agentshop/bench/ios_transcripts.sh            # or: … path/to/agentct
 | `ctl/` | `:examples:agentshop:ctl`: `AgentShopConfig`, the whole AgentCtl integration — one `AppCtlConfig`, and the headless and live hosts — and the tests that drive AgentShop through it. |
 | `shopctl/` | `:examples:agentshop:shopctl`: the CLI executable (`shopctl`). |
 | `scenarios/` | `<group>-<name>.appctl`, 105 of them, byte for byte the reference's. |
-| `bench/` | `ios_transcripts.sh`, which regenerates the reference transcripts the parity test compares against. |
+| `bench/` | `gen_uitests.py` and `uitests.json` (the UI tests), and `ios_transcripts.sh`, which regenerates the reference transcripts the parity test compares against. |
+| `app/` | `:examples:agentshop:app`: the Compose app (`design/` is the design system), and in `src/androidTest` the UI test driver and the generated tests. |
 | `appctl` | The wrapper: rebuilds `shopctl`, then runs it with this directory as the root. |
 | `gradlew` | Forwards to the repository's Gradle wrapper, for `check` and `app launch`. |
 

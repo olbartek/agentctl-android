@@ -32,9 +32,11 @@ agentctl-bridge/        Android library: AgentLaunch (intent extras → session 
 agentctl-test-support/  AgentCoverage, NoScenariosFound
 examples/tinyapp/       TinyApp (JVM): the fixture; scenarios/, agent-commands.md (generated)
 examples/tinyctl/       TinyApp's CLI (application plugin); ./tinyctl at the root is its wrapper (Templates/appctl)
+examples/tinyapp-config/   TinyApp's AppCtlConfig, apart from the app so its release build leaves agentctl-runtime out
 examples/tinyapp-android/  TinyApp as an Android app with the bridge (debug) and without it (release)
+examples/agentshop/     the showcase (iOS's AgentShop): shop/ ctl/ shopctl/ app/ (Compose), scenarios/, bench/, appctl
 tests/                  the suite, driven against TinyApp (like AgentCtlTests in Swift)
-build-logic/            convention plugins: agentctl.jvm.library, agentctl.published
+build-logic/            convention plugins: agentctl.jvm.library, agentctl.published, agentctl.release.check
 Templates/appctl        the wrapper hosts copy
 ```
 
