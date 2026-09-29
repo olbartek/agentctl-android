@@ -3,6 +3,7 @@
 The showcase app for [AgentCtl](../../README.md): a small but complete shop whose 105 scenario files run
 **unchanged** on both ports. It is the Kotlin port of agentctl-ios's `Examples/AgentShop` (the TCA app), screen
 for screen and command for command, and every scenario prints the same bytes here as it does there.
+[`docs/APP.md`](docs/APP.md) shows the app, screen by screen.
 
 | Group | Screens | Scenarios |
 |---|---|---|
@@ -141,9 +142,33 @@ and click by semantics, so the keyboard never covers anything; `performScrollTo`
 Each test logs its duration under the logcat tag `ShopUiTiming`. On a Pixel 7 emulator (API 36) all 99 pass in about
 5 minutes (299 s of test time).
 
-## The benchmark
+## The benchmark, the video and the screenshots
 
-> **TODO** (next stage): headless vs. the app through the bridge vs. UI tests, as `bench/` measures it on iOS.
+```bash
+python3 bench/bench.py            # every group, every mode: about 12 minutes on a Pixel 7 emulator
+python3 bench/bench.py --quick --groups auth
+python3 bench/bench.py --report .bench/<timestamp>.json   # rewrite the report from saved numbers
+python3 bench/video.py            # three scenarios recorded side by side, with timers
+python3 bench/screenshots.py      # docs/screenshots, for docs/APP.md
+```
+
+They need a running emulator (or `--device <serial or AVD>` when several are connected); they build and install
+the debug app and its tests themselves. `bench.py` writes
+[`docs/benchmarks/<date>-agentshop.md`](../../docs/benchmarks/2026-09-29-agentshop.md) and the raw numbers to
+`.bench/<timestamp>.json`, and times these:
+
+- every comparable scenario in every mode: `shopctl test` per scenario (3 runs, median); `app launch --no-build
+  --clear-session --latency 0` then `app run` through the bridge; each group's UI test class in one
+  `adb shell am instrument`, with every test's own time read from logcat (`ShopUiTiming`);
+- each group, and all 99 scenarios, as one headless process;
+- the loop an agent actually runs: change a line of the `ShopFeed` reducer, then verify `shop-filter-category`
+  headlessly (`installDist` + the scenario) or through the UI (`assembleDebug assembleDebugAndroidTest`, installing
+  both APKs, and its UI test). The change is always reverted.
+
+`bench.py --rerun .bench/<timestamp>.json` reruns a run's unexpected failures alone and lists them in the report's
+caveats, beside the full run's numbers. `video.py` records the emulator with `adb shell screenrecord` and composes
+the panels with [`bench/compose.py`](bench/compose.py) (Pillow and ffmpeg) into `.bench/video/agentshop-three-modes.mp4`,
+then copies it next to the latest report. [`docs/APP.md`](docs/APP.md) shows the app, screen by screen.
 
 ## Layout
 
@@ -154,7 +179,8 @@ Each test logs its duration under the logcat tag `ShopUiTiming`. On a Pixel 7 em
 | `ctl/` | `:examples:agentshop:ctl`: `AgentShopConfig`, the whole AgentCtl integration — one `AppCtlConfig`, and the headless and live hosts — and the tests that drive AgentShop through it. |
 | `shopctl/` | `:examples:agentshop:shopctl`: the CLI executable (`shopctl`). |
 | `scenarios/` | `<group>-<name>.appctl`, 105 of them, byte for byte the reference's. |
-| `bench/` | `gen_uitests.py` and `uitests.json` (the UI tests), and `ios_transcripts.sh`, which regenerates the reference transcripts the parity test compares against. |
+| `bench/` | `gen_uitests.py` and `uitests.json` (the UI tests); `bench.py`, `video.py` + `compose.py` and `screenshots.py` (the benchmark, its video and `docs/screenshots`); and `ios_transcripts.sh`, which regenerates the reference transcripts the parity test compares against. |
+| `docs/` | `APP.md`, the app screen by screen, and its screenshots. |
 | `app/` | `:examples:agentshop:app`: the Compose app (`design/` is the design system), and in `src/androidTest` the UI test driver and the generated tests. |
 | `appctl` | The wrapper: rebuilds `shopctl`, then runs it with this directory as the root. |
 | `gradlew` | Forwards to the repository's Gradle wrapper, for `check` and `app launch`. |

@@ -50,6 +50,30 @@ expect cooldown=2 pending=1 error=cooldown
 This one is from [`examples/tinyapp/scenarios/save-cooldown.appctl`](examples/tinyapp/scenarios/save-cooldown.appctl).
 `./tinyctl test` runs it, and so does this repository's own test suite.
 
+## How much faster
+
+[`examples/agentshop`](examples/agentshop) (sign-in, onboarding, a shop) has 99 scenarios that run unchanged in
+three modes: headlessly, through the bridge in the real app on an emulator, and as Compose UI tests generated from
+the same files. On an Apple M4 Max, with a Pixel 7 emulator (API 36):
+
+| | Headless | Emulator, via the bridge | Compose UI tests |
+|---|---|---|---|
+| All 99 scenarios (1,104 steps) | **291 ms** | 5 min 48 s | 5 min 12 s |
+| A typical 12-step scenario | **32 ms** | 3.7 s | 3.3 s |
+| Change a line of a reducer, then check it | **1.1 s** | — | 5.0 s |
+
+Headless has nothing to wait for: no emulator, no app to launch, no views, and a virtual clock instead of real time.
+Starting its JVM (143 ms) is about half of that total. The bridge pays for a real app, a launch per scenario and a
+250 ms quiet window per command. The Compose UI tests run inside the app's process and wait only until the app is
+idle, so here they cost about what the bridge does, far less than the XCUITests of
+[the iOS port](https://github.com/olbartek/agentctl-ios#how-much-faster) (30 minutes for the same scenarios). They
+also share one process per group instead of relaunching the app for every test.
+[The full report](docs/benchmarks/2026-09-29-agentshop.md) explains where the time goes, and
+[this video](docs/benchmarks/2026-09-29-agentshop.mp4) runs three scenarios side by side.
+
+The modes check different things, so this is not a case for deleting UI tests. It is a case for which one an agent
+runs hundreds of times a day.
+
 ## Requirements, and what this is not
 
 - **JDK 17+ to run, Kotlin 2.4, kotlinx.coroutines 1.11.** The engine is plain Kotlin on the JVM. The bridge is an
@@ -615,6 +639,18 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.
+
+## The example apps
+
+[`examples/tinyapp`](examples/tinyapp) is the smallest complete integration and this repository's fixture: two
+screens, one mocked client, three scenarios, its own `tinyctl` CLI and a committed
+[generated command reference](examples/tinyapp/agent-commands.md). Every snippet above is from it, and
+[`examples/tinyapp-android`](examples/tinyapp-android) runs it as an Android app with the bridge.
+
+[`examples/agentshop`](examples/agentshop) is the showcase: a real Compose app (sign-in, onboarding, a shop with a
+cart and checkout), the port of the iOS one, with 105 scenarios that print the same bytes on both ports, UI tests
+generated from them, and the benchmark behind [the numbers above](#how-much-faster). See
+[its README](examples/agentshop/README.md) and [the app, screen by screen](examples/agentshop/docs/APP.md).
 
 ## Building this repository
 
