@@ -1,0 +1,15 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email nobody@example.com
+  screen=auth/login email=nobody@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=nobody@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=auth/login email=nobody@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=invalidCredentials
+> expect screen=auth/login error=invalidCredentials call=auth.login
+  screen=auth/login email=nobody@example.com keepSignedIn=true revealed=none canSubmit=true loading=false calls=auth.login error=invalidCredentials
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> expect error=none
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+exit=0

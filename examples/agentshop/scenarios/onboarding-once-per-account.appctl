@@ -1,0 +1,18 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+skip
+# Once onboarded, signing in again goes straight to the shop.
+not-now
+expect screen=home/shop
+tab profile
+logout
+confirm
+email nina@example.com
+password Passw0rd!
+submit
+expect screen=home/shop call=account.fetchProfile

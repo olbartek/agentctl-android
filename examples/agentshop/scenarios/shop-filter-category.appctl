@@ -1,0 +1,10 @@
+email alice@example.com
+password Passw0rd!
+submit
+# A category chip shows just that category.
+filter shoes
+expect filter=shoes products=2
+filter watches
+expect filter=watches products=2
+filter accessories
+expect products=2

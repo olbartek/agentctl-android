@@ -1,0 +1,11 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+# The address is optional.
+name Nina
+skip
+expect screen=onboarding/notifications notifications=undecided

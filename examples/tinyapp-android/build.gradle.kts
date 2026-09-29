@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    id("agentctl.release.check")
 }
 
 android {
@@ -19,10 +20,17 @@ android {
 }
 
 dependencies {
-    // TinyApp's screens and store. (Its module also holds the AgentCtl config, so it brings agentctl-runtime into
-    // a release build too; a real app keeps its config in a module only the debug build and the CLI depend on.)
+    // TinyApp's screens and store, on agentctl-core alone: what ships.
     implementation(project(":examples:tinyapp"))
     implementation(libs.kotlinx.coroutines.android)
-    // The bridge: debug builds only.
+    // The bridge and the config it runs on, which brings agentctl-runtime: debug builds only.
     debugImplementation(project(":agentctl-bridge"))
+    debugImplementation(project(":examples:tinyapp-config"))
+}
+
+// A release build must carry none of AgentCtl but agentctl-core, and not TinyApp's config (build-logic's
+// `agentctl.release.check`, part of `check`). TinyApp's own classes must be there under their names.
+releaseLeavesOutAgentCtl {
+    forbidden.add("io/github/olbartek/agentctl/examples/tinyapp/TinyAppConfig")
+    required.add("io/github/olbartek/agentctl/examples/tinyapp/TinyApp;")
 }

@@ -1,0 +1,22 @@
+# A new account verifies its email, signs in, and goes through onboarding once before home.
+register
+name Carol Smith
+email carol@example.com
+password Secret123
+confirm Secret123
+terms on
+submit
+expect screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false call=auth.register
+code 123456
+expect canVerify=true
+verify
+expect screen=onboarding/welcome call=auth.verifyEmail call=session.save call=account.fetchProfile
+skip
+toggle shoes
+toggle bags
+continue
+skip
+not-now
+expect screen=home/shop products=12 call=account.completeOnboarding
+tab profile
+expect name="Carol Smith" email=carol@example.com

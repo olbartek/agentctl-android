@@ -14,10 +14,12 @@ import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.types.double
 import com.github.ajalt.clikt.parameters.types.int
 import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.CLIName
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
+import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.RunStatus
 import java.io.File
 import java.io.PrintStream
@@ -86,8 +88,23 @@ public object AgentCtl {
             TestCommand(cli),
             SnapshotsCommand(cli),
             CheckCommand(cli),
-            AppGroup().subcommands(AppLaunchCommand(cli), AppRunCommand(cli), AppGetCommand(cli, "state", "/state"), AppGetCommand(cli, "screens", "/screens")),
+            AppGroup().subcommands(
+                AppLaunchCommand(cli),
+                AppRunCommand(cli),
+                AppTestCommand(cli),
+                AppGetCommand(cli, "state", "/state"),
+                AppGetCommand(cli, "screens", "/screens"),
+            ),
         )
+
+    /** What `snapshots` runs, for its help: the modules whose tasks it looks up, and the tasks named outright. */
+    internal fun snapshotsSubject(gradle: GradleTasks): String {
+        val parts = listOfNotNull(
+            gradle.snapshotModules.takeIf { it.isNotEmpty() }?.let { "the Roborazzi or Paparazzi tasks of ${it.joinToString(", ")}" },
+            gradle.snapshotsVerify.takeIf { it.isNotEmpty() }?.joinToString(" "),
+        )
+        return parts.joinToString(", and ").ifEmpty { "nothing: the config's gradle.snapshotModules is empty" }
+    }
 
     /** Example lines. The plain-text help formatter prints an epilog as it is, line breaks included. */
     internal fun examples(vararg lines: String): String = "Examples:\n" + lines.joinToString("\n") { "  $it" }
@@ -201,7 +218,7 @@ public object AgentCtl {
     private class SnapshotsCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
         "snapshots",
         "Run the L3 screenshot tests (or re-record the reference images).",
-        "Runs ${cli.config.gradle.snapshotsVerify.joinToString(" ").ifEmpty { "nothing: the config's gradle.snapshotsVerify is empty" }}. " +
+        "Runs ${snapshotsSubject(cli.config.gradle)}. " +
             "A failure prints where the report is; look at the images before deciding.\n\n" +
             examples(
                 "${cli.config.help.invocation} snapshots             # after a view change",
@@ -250,7 +267,7 @@ public object AgentCtl {
 
     private class AppRunCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
         "run",
-        "Run a script in the running app (headless-only commands such as advance are rejected).",
+        "Run a script in the running app; advance moves its clock forward.",
         examples(
             "${cli.config.help.invocation} app run \"${cli.config.help.appScript(0)}\"",
             "${cli.config.help.invocation} app run --json \"${cli.config.help.appScript(1)}\"",
@@ -261,6 +278,36 @@ public object AgentCtl {
         private val port by portOption()
 
         override fun execute(): Int = cli.appRun(script, json, port)
+    }
+
+    private class AppTestCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "test",
+        "Run scenario files in the app on a device, each from a fresh launch, and print pass/fail per file.",
+        "Builds once, then launches the app with no saved session for each file and runs it through the agent " +
+            "bridge. A file with a '# app-test: skip <reason>' line is skipped.\n\n" +
+            examples(
+                "${cli.config.help.invocation} app test",
+                "${cli.config.help.invocation} app test --no-build ${cli.config.help.scenarioPath ?: "${cli.config.scenariosPath}/<name>.appctl"}",
+                "${cli.config.help.invocation} app test --record ${cli.config.outputPath}/scenarios.mp4 --step-delay 0.5",
+            ),
+    ) {
+        private val paths by argument(help = "Scenario files. Defaults to every ${cli.config.scenariosPath}/*.appctl.").multiple()
+        private val device by option(help = "adb serial or AVD name.")
+        private val latency by option(
+            help = "Fixed mock latency in ms (default: 0, so the first screen has loaded when the script starts).",
+        ).int()
+        private val noBuild by option("--no-build", help = "Use the installed app instead of building it.").flag()
+        private val record by option(help = "Record the run to this .mp4, with a <file>.chapters.txt of when each scenario started.")
+        private val stepDelay by option(
+            "--step-delay",
+            help = "Send the scenario one line at a time, this many seconds apart, so a recording can be followed.",
+        ).double()
+        private val port by portOption()
+
+        override fun execute(): Int = cli.appTest(
+            paths,
+            AppTest.Options(device ?: cli.config.device, latency, !noBuild, port, record, stepDelay),
+        )
     }
 
     private class AppGetCommand<S, A>(private val cli: Cli<S, A>, name: String, private val path: String) : Subcommand(

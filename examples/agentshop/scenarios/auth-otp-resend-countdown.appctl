@@ -1,0 +1,13 @@
+# Resend is blocked during the 30 s countdown (spec §5.5).
+use-otp
+email alice@example.com
+send
+expect screen=auth/otp/code resendIn=30 call=auth.sendOTP
+resend
+expect error=resendNotAvailable
+advance 10s
+expect resendIn=20 pending=1
+advance 20s
+expect resendIn=0 pending=0
+resend
+expect call=auth.sendOTP resendIn=30

@@ -1,0 +1,10 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+# Back from checkout returns to the cart, unchanged.
+back
+expect screen=home/cart lines=103 items=1

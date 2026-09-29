@@ -1,0 +1,17 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Quantity goes from 1 to 5; beyond either end is refused.
+open 110
+qty-down
+expect qty=1 error=minQuantity
+qty-up
+expect qty=2 error=none
+qty-up
+qty-up
+qty-up
+expect qty=5
+qty-up
+expect qty=5 error=maxQuantity
+qty-down
+expect qty=4 error=none

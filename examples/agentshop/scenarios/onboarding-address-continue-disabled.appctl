@@ -1,0 +1,15 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+# Continue needs every address field.
+expect screen=onboarding/address canContinue=false
+name Nina Park
+street 2 Elm St
+city Portland
+expect canContinue=false
+zip 97201
+expect canContinue=true

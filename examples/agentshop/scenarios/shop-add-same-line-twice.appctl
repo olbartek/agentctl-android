@@ -1,0 +1,11 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Adding the same product in the same size again raises the quantity of one line.
+open 101
+size 42
+add-to-cart
+add-to-cart
+expect added=2
+view-cart
+expect lines=101-42 items=2 subtotal=$178.00

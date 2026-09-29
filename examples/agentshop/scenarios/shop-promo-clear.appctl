@@ -1,0 +1,12 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+# An applied code can be removed.
+promo-code HALF
+apply-promo
+expect promo=HALF total=$14.50
+clear-promo
+expect promo=none discount=$0.00 total=$29.00

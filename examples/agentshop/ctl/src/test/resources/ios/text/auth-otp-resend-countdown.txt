@@ -1,0 +1,27 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> use-otp
+  screen=auth/otp/email email="" canSend=false loading=false
+> email alice@example.com
+  screen=auth/otp/email email=alice@example.com canSend=true loading=false
+> send
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1
+> expect screen=auth/otp/code resendIn=30 call=auth.sendOTP
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1
+> resend
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable pending=1
+> expect error=resendNotAvailable
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable pending=1
+> advance 10s
+  screen=auth/otp/code email=alice@example.com resendIn=20 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable pending=1
+> expect resendIn=20 pending=1
+  screen=auth/otp/code email=alice@example.com resendIn=20 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable pending=1
+> advance 20s
+  screen=auth/otp/code email=alice@example.com resendIn=0 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable
+> expect resendIn=0 pending=0
+  screen=auth/otp/code email=alice@example.com resendIn=0 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable
+> resend
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1
+> expect call=auth.sendOTP resendIn=30
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1
+exit=0

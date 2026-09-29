@@ -1,0 +1,10 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+# Back from interests returns to the welcome carousel, and the picks survive a round trip.
+toggle shoes
+back
+expect screen=onboarding/welcome
+skip
+expect screen=onboarding/interests selected=1 interests=shoes

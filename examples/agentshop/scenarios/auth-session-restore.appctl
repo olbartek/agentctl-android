@@ -1,0 +1,10 @@
+# A relaunch restores the saved session; the mock backend keeps its data.
+login-as alice
+tab orders
+open 1003
+cancel
+expect status=cancelled
+reset
+expect screen=home/shop call=session.current
+tab orders
+expect screen=home/orders call=orders.fetchOrders statuses=delivered,shipped,cancelled

@@ -50,6 +50,30 @@ expect cooldown=2 pending=1 error=cooldown
 This one is from [`examples/tinyapp/scenarios/save-cooldown.appctl`](examples/tinyapp/scenarios/save-cooldown.appctl).
 `./tinyctl test` runs it, and so does this repository's own test suite.
 
+## How much faster
+
+[`examples/agentshop`](examples/agentshop) (sign-in, onboarding, a shop) has 99 scenarios that run unchanged in
+three modes: headlessly, through the bridge in the real app on an emulator, and as Compose UI tests generated from
+the same files. On an Apple M4 Max, with a Pixel 7 emulator (API 36):
+
+| | Headless | Emulator, via the bridge | Compose UI tests |
+|---|---|---|---|
+| All 99 scenarios (1,104 steps) | **291 ms** | 5 min 48 s | 5 min 12 s |
+| A typical 12-step scenario | **32 ms** | 3.7 s | 3.3 s |
+| Change a line of a reducer, then check it | **1.1 s** | — | 5.0 s |
+
+Headless has nothing to wait for: no emulator, no app to launch, no views, and a virtual clock instead of real time.
+Starting its JVM (143 ms) is about half of that total. The bridge pays for a real app, a launch per scenario and a
+250 ms quiet window per command. The Compose UI tests run inside the app's process and wait only until the app is
+idle, so here they cost about what the bridge does, far less than the XCUITests of
+[the iOS port](https://github.com/olbartek/agentctl-ios#how-much-faster) (30 minutes for the same scenarios). They
+also share one process per group instead of relaunching the app for every test.
+[The full report](docs/benchmarks/2026-09-29-agentshop.md) explains where the time goes, and
+[this video](docs/benchmarks/2026-09-29-agentshop.mp4) runs three scenarios side by side.
+
+The modes check different things, so this is not a case for deleting UI tests. It is a case for which one an agent
+runs hundreds of times a day.
+
 ## Requirements, and what this is not
 
 - **JDK 17+ to run, Kotlin 2.4, kotlinx.coroutines 1.11.** The engine is plain Kotlin on the JVM. The bridge is an
@@ -88,14 +112,14 @@ dependencyResolutionManagement {
 
 // a module's build.gradle.kts
 dependencies {
-    implementation("com.github.olbartek.agentctl-android:agentctl-core:v0.1.0")
+    implementation("com.github.olbartek.agentctl-android:agentctl-core:v0.2.0")
 }
 ```
 
 | Artifact | Who depends on it | What for |
 |---|---|---|
 | `agentctl-core` | the modules holding your screens | `AgentScreen`, `AgentCommand`, `SummaryItem`, `Store`, `AgentEnvironment`, `MockBackend` |
-| `agentctl-runtime` | the module holding your config | `AppCtlConfig`, `ScriptRunner`, the deterministic headless host, the bridge's server |
+| `agentctl-runtime` | your config module, which only your debug app (`debugImplementation`), your CLI and your tests depend on | `AppCtlConfig`, `ScriptRunner`, the deterministic headless host, the bridge's server |
 | `agentctl-cli` | your CLI's module | `AgentCtl.main(config, args)` |
 | `agentctl-bridge` | your app, as `debugImplementation` | `AgentLaunch`, the debug-only in-app bridge |
 | `agentctl-test-support` | your tests | the coverage guards |
@@ -226,7 +250,9 @@ The app's store and clients take everything outside themselves from an `AgentEnv
 - identifiers, randomness, the zone and the locale.
 
 Each host fills it differently. The headless host fills it deterministically, the live host with real values, and a
-release build with `AgentEnvironment.system(scope)`:
+release build with `AgentEnvironment.system(scope)`. TinyApp's
+([`TinyApp.kt`](examples/tinyapp/src/main/kotlin/io/github/olbartek/agentctl/examples/tinyapp/TinyApp.kt)) needs
+nothing but `agentctl-core`, so it ships:
 
 ```kotlin
 fun store(environment: AgentEnvironment): Store<TinyRoot.State, TinyRoot.Action> = Store(
@@ -245,7 +271,7 @@ One value describes your app to AgentCtl:
 - the functions that build your store.
 
 Abridged from
-[`TinyAppConfig.kt`](examples/tinyapp/src/main/kotlin/io/github/olbartek/agentctl/examples/tinyapp/TinyAppConfig.kt):
+[`TinyAppConfig.kt`](examples/tinyapp-config/src/main/kotlin/io/github/olbartek/agentctl/examples/tinyapp/TinyAppConfig.kt):
 
 ```kotlin
 val appCtl: AppCtlConfig<TinyRoot.State, TinyRoot.Action>
@@ -266,7 +292,27 @@ val appCtl: AppCtlConfig<TinyRoot.State, TinyRoot.Action>
         makeLive = { latency, dispatcher -> live(latency, dispatcher) },
     )
 
-fun headless() = HeadlessHost(TinyRootAgent, mockMethods, ::store)
+fun headless() = HeadlessHost(TinyRootAgent, mockMethods, TinyApp::store)
+```
+
+**Debug builds only.** The config needs `agentctl-runtime`, so keep it in a module of its own, apart from your
+screens, and let only your debug app (`debugImplementation`), your CLI and your tests depend on it. Your screens'
+`…Agent.kt` files and your store use only `agentctl-core`, and ship. A release build then carries none of AgentCtl's
+runtime, CLI or test support. TinyApp does exactly this:
+[`examples/tinyapp`](examples/tinyapp/build.gradle.kts) is the app, on `agentctl-core`;
+[`examples/tinyapp-config`](examples/tinyapp-config/build.gradle.kts) is its config; and
+[`examples/tinyapp-android`](examples/tinyapp-android/build.gradle.kts) takes the config with
+`debugImplementation` and checks, as part of `check`, that its release APK holds no class of
+`agentctl-runtime`, `agentctl-cli`, `agentctl-test-support` or `agentctl-bridge` (`verifyReleaseLeavesOutAgentCtl`,
+which you can copy).
+
+```kotlin
+// your app's build.gradle.kts
+dependencies {
+    implementation(project(":feature:items"))           // screens and store: agentctl-core
+    debugImplementation(project(":appctl-config"))      // the AppCtlConfig: agentctl-runtime
+    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:v0.2.0")
+}
 ```
 
 Your executable is then the whole of
@@ -322,7 +368,7 @@ items/<id>  [ItemDetail]
   summary: title saved cooldown
 every screen  [runtime]
   expect k=v [k=v …]            Assert on screen, any summary key, call=<client.method> (called during the previous step), error=<code|none> or pending=<n>. A failed assertion fails the script.
-  advance <duration>            Advance the test clock, e.g. 500ms, 30s, 5m, 1h. Headless only.
+  advance <duration>            Move the app's clock forward, e.g. 500ms, 30s, 5m, 1h, firing the timers due.
   mock <client.method> <error>  Make the next call to that method fail, e.g. mock items.fetch network.
 ```
 
@@ -362,9 +408,10 @@ exit=1
 | `screens` | Every screen path with its commands, arguments, help and summary keys, as above. |
 | `docs` | Write the generated command reference (`docsPath`) from the registry. `--check` exits 1 when it is stale. |
 | `test [files…]` | Run `*.appctl` scenario files (by default all of `scenariosPath`), one PASS/FAIL line each. Finding no scenario files to run is a failure, not "0 passed". |
-| `snapshots` | The screenshot tests (the config's Gradle tasks, e.g. Roborazzi's); `--record` re-records the references. |
+| `snapshots` | The screenshot tests (Roborazzi's or Paparazzi's, found in the config's `gradle.snapshotModules`); `--record` re-records the references. |
 | `check` | The verification ladder below; `--ui` adds its last two rungs. |
 | `app launch` / `app run` / `app state` / `app screens` | The same commands, against the real app on a device or emulator, through the in-app bridge. |
+| `app test [files…]` | The scenario files, in the real app on a device: one fresh launch each, one PASS/FAIL/SKIP line each. `--record <mp4>` records the run, `--step-delay <s>` sends a line at a time so the recording can be followed. |
 
 Exit codes are part of the contract:
 
@@ -378,8 +425,8 @@ Exit codes are part of the contract:
 Three runtime commands work on every screen:
 
 - `expect k=v [k=v …]`;
-- `advance <duration>`, headless only: a running app's timers are real, so `advance` is rejected there rather than
-  silently slept;
+- `advance <duration>`: the virtual clock headlessly; in the running app, the app's real-time clock jumped forward
+  (see [the bridge](#the-in-app-bridge));
 - `mock <client.method> <error>`.
 
 Headless runs are deterministic by construction, so the same script always prints the same bytes. That makes step
@@ -419,8 +466,15 @@ L4 app        ok    refresh-error via the agent bridge 2.9s
 | L1 | its `gradle.test` tasks, with the number of tests from the JUnit reports |
 | L2 | every scenario file, in-process |
 | docs | `docs --check`: the generated command reference is not stale |
-| L3 (`--ui`) | the `gradle.snapshotsVerify` tasks (e.g. `verifyRoborazziDebug`); none configured passes, as TinyApp has none |
+| L3 (`--ui`) | the screenshot tests of each module in `gradle.snapshotModules` (see below), plus any `gradle.snapshotsVerify` tasks; none configured passes, as TinyApp has none |
 | L4 (`--ui`) | the real app, in four steps: installed (`gradle.install`), launched on a device (seeded with `appCheck.seed`, zero mock latency), `appCheck.scenario` sent through the bridge, one screenshot |
+
+L3 assumes no task names. For each module in `gradle.snapshotModules` (a Gradle path such as `:feature:items`) it
+runs `gradlew <module>:tasks --all` and takes Roborazzi's `verifyRoborazzi<Variant>` tasks, or else Paparazzi's
+`verifyPaparazzi<Variant>`: the `Debug` variant's, every `…Debug` variant's in a module with product flavors, or the
+only variant there is. `snapshots --record` takes the matching `record…` tasks, and the review hint it prints
+names the modules' directories unless `gradle.snapshotReferences` says where the references live. A task of any
+other tool goes in `gradle.snapshotsVerify` and `gradle.snapshotsRecord`, which run as named.
 
 `--device` (or the config's `device`) names an `adb` serial or an AVD. An AVD that is not running is booted. With
 neither, the only connected device is used.
@@ -461,8 +515,9 @@ asserted.
 
 ## The in-app bridge
 
-Add `agentctl-bridge` with **`debugImplementation`** only, and keep the code that names it in `src/debug`. A release
-build then carries neither the bridge nor the `INTERNET` permission its manifest adds. The server listens on
+Add `agentctl-bridge` with **`debugImplementation`** only, as your config module, and keep the code that names them
+in `src/debug`. A release build then carries neither the bridge, nor AgentCtl's runtime, nor the `INTERNET`
+permission the bridge's manifest adds. The server listens on
 `127.0.0.1` only; the CLI reaches it with `adb forward`.
 
 [`examples/tinyapp-android`](examples/tinyapp-android) is TinyApp as a real app: plain views that render the store
@@ -524,8 +579,29 @@ A seed is a script and fails like one: at its first failing step, or at a `(laun
 logs `AgentCtlBridge: seed applied` or `AgentCtlBridge: seed FAILED (exit <code>)`, with its steps, under the
 logcat tag `AgentCtlBridge`.
 
-The same scripts then run against the real app (`app run`), on the live clock and with real mock latency. That is
-why `advance` is rejected there. The wire protocol (routes, the `X-Appctl-Exit` header, the JSON form) is
+The same scripts then run against the real app (`app run`), on real time and with real mock latency. `advance`
+works there too: the live host's clock is an `AdvanceableClock`, which `advance` moves forward deadline by deadline,
+letting the app settle between them, so a countdown ticks once per second advanced, as it does headlessly, and its
+`now()` moves with it. Only what sleeps on `environment.clock` moves; a bare `delay`, a `Handler` or a `Timer` keeps
+real time. A backend of yours that reads the time or sleeps should do it on `environment.clock`, as it would
+headlessly.
+
+`app test` runs the scenario files this way, as `test` runs them headlessly: it builds and installs once, then for
+each file launches the app with no saved session (`clear-session`) and sends the file through the bridge.
+`--latency <ms>` sets the mock latency (0 unless given, as for L4, so the first screen has loaded when the script
+starts), `--no-build` uses the installed app, `--record <mp4>` records the device
+for the whole run (`adb shell screenrecord`, in back-to-back chunks under its three-minute limit, joined with
+`ffmpeg` when it is installed) and writes `<mp4>.chapters.txt` with the time each scenario started, and
+`--step-delay <s>` sends one line at a time so the video can be followed. A few scenarios are true headlessly but
+not in a running app: a first `expect` on the launch's own calls (`app launch` has made them before the script
+starts), a countdown's exact value (it also ticks in real time), or a date that is in the future only against the
+headless fixed date. Such a file says so on a comment line, and `app test` prints it as skipped:
+
+```
+# app-test: skip the countdown also ticks in real time
+```
+
+The wire protocol (routes, the `X-Appctl-Exit` header, the JSON form) is
 [CONTRACT.md §8](CONTRACT.md#8-the-in-app-bridge), so either port's CLI can drive either port's app.
 
 ## The contract
@@ -550,6 +626,32 @@ On the contract's open questions, this port follows the reference in every case,
 
 It also counts script columns in grapheme clusters, as Swift does.
 
+Where Android differs from iOS, the port adapts the reference rather than copying it:
+
+- L3 finds each snapshot module's Roborazzi or Paparazzi tasks (`gradle.snapshotModules`) where the reference finds
+  a package's Xcode scheme and its `*SnapshotTests` targets (`snapshotPackages`), and runs them on the JVM, with no
+  device.
+- The live host's `AdvanceableClock` is itself the `AgentClock` that counts sleeps for `pending=`, where the
+  reference wraps it in a `CountingClock`; and a backend reads the moved time from `environment.clock.now()`, where
+  the reference adds `LiveEnvironment.now`.
+- `app test` runs on a device through `adb` (`screenrecord` for `--record`), and fixes the mock latency at 0 unless
+  `--latency` is given, as L4 does, where the reference uses the app's own latency.
+- A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
+  which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
+  support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.
+
+## The example apps
+
+[`examples/tinyapp`](examples/tinyapp) is the smallest complete integration and this repository's fixture: two
+screens, one mocked client, three scenarios, its own `tinyctl` CLI and a committed
+[generated command reference](examples/tinyapp/agent-commands.md). Every snippet above is from it, and
+[`examples/tinyapp-android`](examples/tinyapp-android) runs it as an Android app with the bridge.
+
+[`examples/agentshop`](examples/agentshop) is the showcase: a real Compose app (sign-in, onboarding, a shop with a
+cart and checkout), the port of the iOS one, with 105 scenarios that print the same bytes on both ports, UI tests
+generated from them, and the benchmark behind [the numbers above](#how-much-faster). See
+[its README](examples/agentshop/README.md) and [the app, screen by screen](examples/agentshop/docs/APP.md).
+
 ## Building this repository
 
 ```bash
@@ -563,5 +665,5 @@ Android modules.
 
 ## Status
 
-Version 0.1, a port of agentctl-ios 0.3. The example app is the only integration CI exercises. The API may still
+Version 0.2, a port of agentctl-ios 0.4. The example app is the only integration CI exercises. The API may still
 change between minor versions before 1.0. MIT licensed.

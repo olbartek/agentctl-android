@@ -1,0 +1,14 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+card 4242 4242 4242 4242
+place-order
+# "View order" opens the new order in the orders tab.
+view-order
+expect screen=home/orders/1004 status=pending total=$29.00 canCancel=true call=orders.fetchOrder
+back
+expect screen=home/orders orders=4

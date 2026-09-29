@@ -149,8 +149,9 @@ internal class Cli<S, A>(
             io.print("${if (result.ok) "ok" else "FAIL"} snapshot tests")
         }
         result.details.forEach(io::print)
-        if (record && result.ok && config.gradle.snapshotReferences.isNotEmpty()) {
-            io.print("Review the changes: git status --short ${config.gradle.snapshotReferences.joinToString(" ")}")
+        val references = config.gradle.snapshotReferences.ifEmpty { config.gradle.snapshotModules.map(Snapshots::directory) }
+        if (record && result.ok && references.isNotEmpty()) {
+            io.print("Review the changes: git status --short ${references.joinToString(" ")}")
         }
         return if (result.ok) 0 else 1
     }
@@ -174,6 +175,11 @@ internal class Cli<S, A>(
 
     fun appRun(script: String, json: Boolean, port: Int): Int = bridgeCall(port) {
         BridgeClient(port).send("POST", if (json) "/run?format=json" else "/run", script)
+    }
+
+    fun appTest(paths: List<String>, options: AppTest.Options): Int {
+        val root = root() ?: return RunStatus.INTERNAL_ERROR.code
+        return AppTest(this, root).run(paths, options)
     }
 
     fun appGet(path: String, port: Int): Int = bridgeCall(port) { BridgeClient(port).send("GET", path) }

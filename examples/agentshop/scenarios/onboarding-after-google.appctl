@@ -1,0 +1,12 @@
+# The Google account is onboarded the first time it signs in.
+google
+expect screen=onboarding/welcome call=auth.signInWithGoogle call=account.fetchProfile
+next
+next
+next
+toggle watches
+toggle accessories
+continue
+skip
+not-now
+expect screen=home/shop

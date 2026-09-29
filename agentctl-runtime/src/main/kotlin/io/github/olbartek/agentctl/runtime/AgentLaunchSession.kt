@@ -91,8 +91,10 @@ public class AgentLaunchSession<S, A>(
         }
     }
 
+    /** Stops the bridge and cancels the live store's running effects: the session is over. */
     public fun stop() {
         server.stop()
+        host.close()
     }
 
     public companion object {

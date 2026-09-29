@@ -1,0 +1,71 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> register
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> name Carol
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> email carol@example.com
+  screen=auth/register email=carol@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> password Secret123
+  screen=auth/register email=carol@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> confirm Secret123
+  screen=auth/register email=carol@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> terms on
+  screen=auth/register email=carol@example.com terms=true revealed=none issues=none canSubmit=true loading=false
+> submit
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.register pending=1
+> expect screen=auth/register/verify resendIn=30 pending=1
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.register pending=1
+> code 000000
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=true loading=false pending=1
+> verify
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.verifyEmail error=invalidCode pending=1
+> expect error=invalidCode canVerify=false
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.verifyEmail error=invalidCode pending=1
+> resend
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false error=resendNotAvailable pending=1
+> expect error=resendNotAvailable
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false error=resendNotAvailable pending=1
+> advance 30s
+  screen=auth/register/verify email=carol@example.com resendIn=0 canVerify=false loading=false error=resendNotAvailable
+> expect resendIn=0 pending=0
+  screen=auth/register/verify email=carol@example.com resendIn=0 canVerify=false loading=false error=resendNotAvailable
+> resend
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.resendVerification pending=1
+> expect call=auth.resendVerification resendIn=30 error=none
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.resendVerification pending=1
+> advance 5m
+  screen=auth/register/verify email=carol@example.com resendIn=0 canVerify=false loading=false
+> code 123456
+  screen=auth/register/verify email=carol@example.com resendIn=0 canVerify=true loading=false
+> verify
+  screen=auth/register/verify email=carol@example.com resendIn=0 canVerify=true loading=false calls=auth.verifyEmail error=codeExpired
+> expect error=codeExpired
+  screen=auth/register/verify email=carol@example.com resendIn=0 canVerify=true loading=false calls=auth.verifyEmail error=codeExpired
+> back
+  screen=auth/register email=carol@example.com terms=true revealed=none issues=none canSubmit=true loading=false
+> expect screen=auth/register
+  screen=auth/register email=carol@example.com terms=true revealed=none issues=none canSubmit=true loading=false
+> back
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false
+> expect screen=auth/login
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false
+> email carol@example.com
+  screen=auth/login email=carol@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Secret123
+  screen=auth/login email=carol@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=auth/register/verify email=carol@example.com resendIn=0 canVerify=false loading=false calls=auth.login
+> expect screen=auth/register/verify email=carol@example.com resendIn=0 call=auth.login
+  screen=auth/register/verify email=carol@example.com resendIn=0 canVerify=false loading=false calls=auth.login
+> resend
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.resendVerification pending=1
+> expect call=auth.resendVerification resendIn=30
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=false loading=false calls=auth.resendVerification pending=1
+> code 123456
+  screen=auth/register/verify email=carol@example.com resendIn=30 canVerify=true loading=false pending=1
+> verify
+  screen=onboarding/welcome page=1 pages=3 calls=auth.verifyEmail,session.save,account.fetchProfile
+> expect screen=onboarding/welcome call=auth.verifyEmail
+  screen=onboarding/welcome page=1 pages=3 calls=auth.verifyEmail,session.save,account.fetchProfile
+exit=0

@@ -1,0 +1,11 @@
+# Back from the one-time code screens returns to the password login.
+use-otp
+expect screen=auth/otp/email
+back
+expect screen=auth/login
+use-otp
+email alice@example.com
+send
+expect screen=auth/otp/code
+back
+expect screen=auth/login

@@ -18,6 +18,7 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -117,6 +118,10 @@ public class HeadlessHost<S, A>(
  * The app's store as the in-app bridge runs it in debug builds: real time and real mock latency, plus the hooks
  * the agent runtime needs (call log, faults, effect count and a clock that counts pending sleeps).
  *
+ * Time is real, but `advance` can move it forward: the environment's clock is an [AdvanceableClock], whose `now()`
+ * moves with it. A backend of the host's own that reads the time or sleeps should do so on `environment.clock`, so
+ * `advance` moves it too.
+ *
  * @param dispatcher the store's thread: `Dispatchers.Main.immediate` in an Android app. The bridge runs every
  *   request on it.
  */
@@ -128,7 +133,8 @@ public class LiveHost<S, A>(
     makeStore: (AgentEnvironment) -> AgentStore<S, A>,
 ) {
     public val scope: CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher)
-    public val clock: CountingClock = CountingClock.system()
+    /** The app's clock: real time that `advance` moves forward, with its sleeps counted for `pending`. */
+    public val clock: AdvanceableClock = AdvanceableClock()
     public val callLog: MockCallLog = MockCallLog()
     public val faults: MockFaults = MockFaults()
 
@@ -144,6 +150,11 @@ public class LiveHost<S, A>(
 
     public val store: AgentStore<S, A> = makeStore(environment)
 
+    /** Cancels every effect still running (its timers and mocked calls). The host is unusable afterwards. */
+    public fun close() {
+        scope.cancel()
+    }
+
     /**
      * Settles on real time — no mock call in flight, and the state quiet for a moment — because a running app's
      * latency and timers are real, unlike the headless host's. Call on [dispatcher].
@@ -154,6 +165,21 @@ public class LiveHost<S, A>(
         pending = { clock.activeSleeps },
         quietWindow = 250.milliseconds,
     )
+
+    /**
+     * The settling between two deadlines of an `advance`: long enough for what a timer fires to reach the store and
+     * start its next sleep, short enough that `advance 1m` over a one-second countdown stays quick.
+     */
+    private suspend fun settleBetweenDeadlines() {
+        settleLive(
+            state = { store.state },
+            callLog = callLog,
+            pending = { clock.activeSleeps },
+            quietWindow = 30.milliseconds,
+            pollInterval = 5.milliseconds,
+            limit = 1.seconds,
+        )
+    }
 
     /**
      * @param synthesizesAppearance `true` for launch seeding (before any view exists), `false` once the views are
@@ -167,7 +193,7 @@ public class LiveHost<S, A>(
         pending = { clock.activeSleeps },
         environment = RunnerEnvironment(
             settle = { settle() },
-            advance = null,
+            advance = { duration -> clock.advance(duration.toDuration(), between = { settleBetweenDeadlines() }) },
             synthesizesAppearance = synthesizesAppearance,
         ),
         mockMethods = mockMethods,

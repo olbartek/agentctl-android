@@ -1,0 +1,37 @@
+# Email verification: wrong and expired codes, the resend countdown, and an unverified login.
+register
+name Carol
+email carol@example.com
+password Secret123
+confirm Secret123
+terms on
+submit
+expect screen=auth/register/verify resendIn=30 pending=1
+code 000000
+verify
+expect error=invalidCode canVerify=false
+resend
+expect error=resendNotAvailable
+advance 30s
+expect resendIn=0 pending=0
+resend
+expect call=auth.resendVerification resendIn=30 error=none
+# Codes expire after 5 minutes.
+advance 5m
+code 123456
+verify
+expect error=codeExpired
+# Leave without verifying: the account exists but cannot log in yet.
+back
+expect screen=auth/register
+back
+expect screen=auth/login
+email carol@example.com
+password Secret123
+submit
+expect screen=auth/register/verify email=carol@example.com resendIn=0 call=auth.login
+resend
+expect call=auth.resendVerification resendIn=30
+code 123456
+verify
+expect screen=onboarding/welcome call=auth.verifyEmail

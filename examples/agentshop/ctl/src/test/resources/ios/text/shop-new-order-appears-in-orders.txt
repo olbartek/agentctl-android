@@ -1,0 +1,33 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> tab orders
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders
+> expect orders=3
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders
+> tab shop
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false
+> open 111
+  screen=home/shop/111 name="Ceramic Mug" price=$14.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=0
+> add-to-cart
+  screen=home/shop/111 name="Ceramic Mug" price=$14.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=1
+> view-cart
+  screen=home/cart lines=111 items=1 subtotal=$14.00 discount=$0.00 total=$14.00 promo=none canCheckout=true
+> checkout
+  screen=home/cart/checkout name="Alice Liddell" street="1 Rabbit Hole Ln" city=Oxford zip=10001 shipping=standard payment=card total=$14.00 canPlace=false loading=false calls=account.fetchProfile
+> payment apple-pay
+  screen=home/cart/checkout name="Alice Liddell" street="1 Rabbit Hole Ln" city=Oxford zip=10001 shipping=standard payment=apple-pay total=$14.00 canPlace=true loading=false
+> place-order
+  screen=home/cart/confirmation order=1004 total=$14.00 calls=orders.placeOrder
+> expect screen=home/cart/confirmation order=1004
+  screen=home/cart/confirmation order=1004 total=$14.00 calls=orders.placeOrder
+> tab orders
+  screen=home/orders orders=4 loading=false statuses=delivered,shipped,pending,pending
+> expect screen=home/orders orders=4 statuses=delivered,shipped,pending,pending
+  screen=home/orders orders=4 loading=false statuses=delivered,shipped,pending,pending
+exit=0

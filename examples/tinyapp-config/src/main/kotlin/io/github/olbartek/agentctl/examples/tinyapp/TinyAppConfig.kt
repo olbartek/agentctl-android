@@ -1,11 +1,9 @@
 package io.github.olbartek.agentctl.examples.tinyapp
 
-import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
 import io.github.olbartek.agentctl.ScreenDoc
-import io.github.olbartek.agentctl.Store
 import io.github.olbartek.agentctl.runtime.AppCheck
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
 import io.github.olbartek.agentctl.runtime.GradleTasks
@@ -21,6 +19,10 @@ import kotlinx.coroutines.CoroutineDispatcher
  * This is the whole integration. A host app writes one object like this, hands its [appCtl] to
  * `AgentCtl.run(config, args)` in its own executable (see `examples/tinyctl`) and to `AgentLaunch(config)` in its
  * debug app.
+ *
+ * It lives in a module of its own, apart from TinyApp's screens, because it needs `agentctl-runtime`: only the debug
+ * app (`debugImplementation`), the CLI and the tests depend on this module, so a release build carries none of
+ * AgentCtl's runtime. A host keeps its config the same way.
  */
 object TinyAppConfig {
     /** Every screen an agent can reach, for `screens` and the generated docs. */
@@ -80,7 +82,7 @@ object TinyAppConfig {
             scenariosPath = "examples/tinyapp/scenarios",
             // The app is not at the root of its repository, so its command reference lives beside it.
             docsPath = "examples/tinyapp/agent-commands.md",
-            // L4 sends this scenario through the bridge. The others use `advance`, which a running app refuses.
+            // L4 sends this scenario through the bridge: it starts no countdown, which also ticks in real time there.
             appCheck = AppCheck(scenario = "refresh-error", expectScreen = "items"),
             help = HelpExamples(
                 invocation = "./tinyctl",
@@ -100,17 +102,10 @@ object TinyAppConfig {
             clearSession = {},
         )
 
-    /** TinyApp's store on any environment: the headless host's, the live host's, or a release build's own. */
-    fun store(environment: AgentEnvironment): Store<TinyRoot.State, TinyRoot.Action> = Store(
-        initialState = TinyRoot.State(),
-        reducer = TinyRoot.reducer(ItemsClient.mock(environment.mocks), environment.clock),
-        scope = environment.scope,
-    )
-
     /** A deterministic store: a virtual clock, a fixed date, and everything else [HeadlessHost] pins. */
-    fun headless(): HeadlessHost<TinyRoot.State, TinyRoot.Action> = HeadlessHost(TinyRootAgent, mockMethods, ::store)
+    fun headless(): HeadlessHost<TinyRoot.State, TinyRoot.Action> = HeadlessHost(TinyRootAgent, mockMethods, TinyApp::store)
 
     /** The store the app would run in a debug build behind the bridge: real time and real mock latency. */
     fun live(latency: MockLatency, dispatcher: CoroutineDispatcher): LiveHost<TinyRoot.State, TinyRoot.Action> =
-        LiveHost(TinyRootAgent, mockMethods, latency, dispatcher, ::store)
+        LiveHost(TinyRootAgent, mockMethods, latency, dispatcher, TinyApp::store)
 }

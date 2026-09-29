@@ -1,0 +1,16 @@
+# "Keep me signed in" (on by default) decides whether a relaunch restores the session.
+expect screen=auth/login keepSignedIn=true
+keep-signed-in off
+expect keepSignedIn=false
+email alice@example.com
+password Passw0rd!
+submit
+expect screen=home/shop call=session.save
+reset
+expect screen=auth/login call=session.current
+# With it on, the session survives a relaunch.
+email alice@example.com
+password Passw0rd!
+submit
+reset
+expect screen=home/shop call=session.current

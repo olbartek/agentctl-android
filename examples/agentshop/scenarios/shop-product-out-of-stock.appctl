@@ -1,0 +1,6 @@
+email alice@example.com
+password Passw0rd!
+submit
+# An out-of-stock product can't be added.
+open 109
+expect screen=home/shop/109 name="Wool Beanie" inStock=false canAdd=false

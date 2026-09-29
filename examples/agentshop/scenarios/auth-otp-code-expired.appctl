@@ -1,0 +1,14 @@
+# A code expires 5 minutes after it was sent; a new one works.
+use-otp
+email bob@example.com
+send
+advance 5m
+code 123456
+verify
+expect error=codeExpired attemptsLeft=3
+resend
+code 123456
+verify
+expect screen=home/shop products=12
+tab orders
+expect screen=home/orders orders=0

@@ -1,0 +1,5 @@
+email nina@example.com
+password Passw0rd!
+submit
+# An account that has never been onboarded starts onboarding right after signing in.
+expect screen=onboarding/welcome page=1 pages=3 call=auth.login call=account.fetchProfile

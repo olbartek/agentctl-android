@@ -1,0 +1,21 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> search watch
+  screen=home/shop products=2 filter=all query=watch sort=featured loading=false
+> expect query=watch products=2
+  screen=home/shop products=2 filter=all query=watch sort=featured loading=false
+> search JACKET
+  screen=home/shop products=2 filter=all query=JACKET sort=featured loading=false
+> expect products=2
+  screen=home/shop products=2 filter=all query=JACKET sort=featured loading=false
+> search Trail
+  screen=home/shop products=1 filter=all query=Trail sort=featured loading=false
+> expect products=1
+  screen=home/shop products=1 filter=all query=Trail sort=featured loading=false
+exit=0

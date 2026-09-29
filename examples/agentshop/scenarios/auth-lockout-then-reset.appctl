@@ -1,0 +1,20 @@
+# Five wrong passwords lock an account; a password reset unlocks it.
+email bob@example.com
+password nope
+submit
+submit
+submit
+submit
+submit
+expect error=accountLocked
+forgot
+send
+code 654321
+password Unlock123
+confirm Unlock123
+submit
+expect screen=auth/forgot/done
+to-login
+password Unlock123
+submit
+expect screen=home/shop

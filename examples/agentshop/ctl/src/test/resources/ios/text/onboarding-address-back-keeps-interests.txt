@@ -1,0 +1,27 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email nina@example.com
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=nina@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=onboarding/welcome page=1 pages=3 calls=auth.login,session.save,account.fetchProfile
+> skip
+  screen=onboarding/interests selected=0 interests=none canContinue=false
+> toggle bags
+  screen=onboarding/interests selected=1 interests=bags canContinue=false
+> toggle home
+  screen=onboarding/interests selected=2 interests=bags,home canContinue=true
+> continue
+  screen=onboarding/address name="" street="" city="" zip="" canContinue=false
+> expect screen=onboarding/address
+  screen=onboarding/address name="" street="" city="" zip="" canContinue=false
+> back
+  screen=onboarding/interests selected=2 interests=bags,home canContinue=true
+> expect screen=onboarding/interests selected=2 interests=bags,home canContinue=true
+  screen=onboarding/interests selected=2 interests=bags,home canContinue=true
+> continue
+  screen=onboarding/address name="" street="" city="" zip="" canContinue=false
+> expect screen=onboarding/address
+  screen=onboarding/address name="" street="" city="" zip="" canContinue=false
+exit=0

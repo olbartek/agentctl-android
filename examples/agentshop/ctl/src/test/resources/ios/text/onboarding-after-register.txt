@@ -1,0 +1,45 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> register
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> name Ivy
+  screen=auth/register email="" terms=false revealed=none issues=none canSubmit=false loading=false
+> email ivy@example.com
+  screen=auth/register email=ivy@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> password Secret123
+  screen=auth/register email=ivy@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> confirm Secret123
+  screen=auth/register email=ivy@example.com terms=false revealed=none issues=none canSubmit=false loading=false
+> terms on
+  screen=auth/register email=ivy@example.com terms=true revealed=none issues=none canSubmit=true loading=false
+> submit
+  screen=auth/register/verify email=ivy@example.com resendIn=30 canVerify=false loading=false calls=auth.register pending=1
+> code 123456
+  screen=auth/register/verify email=ivy@example.com resendIn=30 canVerify=true loading=false pending=1
+> verify
+  screen=onboarding/welcome page=1 pages=3 calls=auth.verifyEmail,session.save,account.fetchProfile
+> expect screen=onboarding/welcome page=1
+  screen=onboarding/welcome page=1 pages=3 calls=auth.verifyEmail,session.save,account.fetchProfile
+> skip
+  screen=onboarding/interests selected=0 interests=none canContinue=false
+> toggle shoes
+  screen=onboarding/interests selected=1 interests=shoes canContinue=false
+> toggle watches
+  screen=onboarding/interests selected=2 interests=shoes,watches canContinue=true
+> continue
+  screen=onboarding/address name="" street="" city="" zip="" canContinue=false
+> name Ivy Chen
+  screen=onboarding/address name="Ivy Chen" street="" city="" zip="" canContinue=false
+> street 9 Pine Rd
+  screen=onboarding/address name="Ivy Chen" street="9 Pine Rd" city="" zip="" canContinue=false
+> city Denver
+  screen=onboarding/address name="Ivy Chen" street="9 Pine Rd" city=Denver zip="" canContinue=false
+> zip 80202
+  screen=onboarding/address name="Ivy Chen" street="9 Pine Rd" city=Denver zip=80202 canContinue=true
+> continue
+  screen=onboarding/notifications notifications=undecided loading=false
+> allow
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
+> expect screen=home/shop
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
+exit=0

@@ -1,0 +1,9 @@
+# "Sign in here" and back both return to login.
+register
+expect screen=auth/register
+back
+expect screen=auth/login
+register
+name Frank
+back
+expect screen=auth/login email=""

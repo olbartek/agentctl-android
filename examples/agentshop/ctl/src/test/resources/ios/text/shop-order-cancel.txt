@@ -1,0 +1,27 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> tab orders
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders
+> open 1003
+  screen=home/orders/1003 id=1003 status=pending items=2 total=$59.80 date=2025-12-30 canCancel=true loading=false calls=orders.fetchOrder
+> expect screen=home/orders/1003 status=pending canCancel=true total=$59.80 call=orders.fetchOrder
+  screen=home/orders/1003 id=1003 status=pending items=2 total=$59.80 date=2025-12-30 canCancel=true loading=false calls=orders.fetchOrder
+> cancel
+  screen=home/orders/1003 id=1003 status=cancelled items=2 total=$59.80 date=2025-12-30 canCancel=false loading=false calls=orders.cancelOrder
+> expect status=cancelled canCancel=false call=orders.cancelOrder
+  screen=home/orders/1003 id=1003 status=cancelled items=2 total=$59.80 date=2025-12-30 canCancel=false loading=false calls=orders.cancelOrder
+> back
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,cancelled
+> expect screen=home/orders statuses=delivered,shipped,cancelled
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,cancelled
+> open 1002
+  screen=home/orders/1002 id=1002 status=shipped items=1 total=$89.00 date=2025-12-22 canCancel=false loading=false calls=orders.fetchOrder
+> expect status=shipped canCancel=false
+  screen=home/orders/1002 id=1002 status=shipped items=1 total=$89.00 date=2025-12-22 canCancel=false loading=false calls=orders.fetchOrder
+exit=0

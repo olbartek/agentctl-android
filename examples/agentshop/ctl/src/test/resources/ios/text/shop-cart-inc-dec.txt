@@ -1,0 +1,25 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> open 103
+  screen=home/shop/103 name="Canvas Tote" price=$29.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=0
+> add-to-cart
+  screen=home/shop/103 name="Canvas Tote" price=$29.00 size=one-size qty=1 inStock=true favorite=false canAdd=true added=1
+> view-cart
+  screen=home/cart lines=103 items=1 subtotal=$29.00 discount=$0.00 total=$29.00 promo=none canCheckout=true
+> inc 103
+  screen=home/cart lines=103 items=2 subtotal=$58.00 discount=$0.00 total=$58.00 promo=none canCheckout=true
+> inc 103
+  screen=home/cart lines=103 items=3 subtotal=$87.00 discount=$0.00 total=$87.00 promo=none canCheckout=true
+> expect items=3 subtotal=$87.00
+  screen=home/cart lines=103 items=3 subtotal=$87.00 discount=$0.00 total=$87.00 promo=none canCheckout=true
+> dec 103
+  screen=home/cart lines=103 items=2 subtotal=$58.00 discount=$0.00 total=$58.00 promo=none canCheckout=true
+> expect items=2 subtotal=$58.00
+  screen=home/cart lines=103 items=2 subtotal=$58.00 discount=$0.00 total=$58.00 promo=none canCheckout=true
+exit=0

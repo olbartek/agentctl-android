@@ -1,0 +1,8 @@
+email bob@example.com
+password Hunter22x
+submit
+# Bob has no orders yet.
+tab orders
+expect screen=home/orders orders=0 loading=false statuses=none call=orders.fetchOrders
+refresh
+expect orders=0 call=orders.fetchOrders

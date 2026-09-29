@@ -1,0 +1,21 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> forgot
+  screen=auth/forgot/email email="" canSend=false loading=false
+> email nobody@example.com
+  screen=auth/forgot/email email=nobody@example.com canSend=true loading=false
+> send
+  screen=auth/forgot/reset email=nobody@example.com revealed=none issues=none canSubmit=false loading=false calls=auth.requestPasswordReset
+> expect screen=auth/forgot/reset call=auth.requestPasswordReset
+  screen=auth/forgot/reset email=nobody@example.com revealed=none issues=none canSubmit=false loading=false calls=auth.requestPasswordReset
+> code 654321
+  screen=auth/forgot/reset email=nobody@example.com revealed=none issues=none canSubmit=false loading=false
+> password NewPass123
+  screen=auth/forgot/reset email=nobody@example.com revealed=none issues=none canSubmit=false loading=false
+> confirm NewPass123
+  screen=auth/forgot/reset email=nobody@example.com revealed=none issues=none canSubmit=true loading=false
+> submit
+  screen=auth/forgot/reset email=nobody@example.com revealed=none issues=none canSubmit=true loading=false calls=auth.resetPassword error=invalidCode
+> expect error=invalidCode call=auth.resetPassword
+  screen=auth/forgot/reset email=nobody@example.com revealed=none issues=none canSubmit=true loading=false calls=auth.resetPassword error=invalidCode
+exit=0

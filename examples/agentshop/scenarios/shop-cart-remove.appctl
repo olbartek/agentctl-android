@@ -1,0 +1,14 @@
+email alice@example.com
+password Passw0rd!
+submit
+# Remove takes a whole line out, whatever its quantity.
+open 103
+qty-up
+add-to-cart
+back
+open 111
+add-to-cart
+view-cart
+expect lines=103,111 items=3
+remove 103
+expect lines=111 items=1 subtotal=$14.00

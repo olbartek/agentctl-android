@@ -36,3 +36,7 @@ output-metadata.json
 
 # Local agent notes and plans (not shared)
 .agent/thoughts/
+
+# AgentShop benchmark: raw results, recordings and scratch files
+examples/agentshop/.bench/
+__pycache__/

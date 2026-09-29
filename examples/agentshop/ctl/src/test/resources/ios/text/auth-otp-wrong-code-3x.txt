@@ -1,0 +1,43 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> use-otp
+  screen=auth/otp/email email="" canSend=false loading=false
+> email alice@example.com
+  screen=auth/otp/email email=alice@example.com canSend=true loading=false
+> send
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1
+> code 000000
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=true loading=false pending=1
+> verify
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=2 canVerify=false loading=false calls=auth.verifyOTP error=invalidCode pending=1
+> expect error=invalidCode attemptsLeft=2 call=auth.verifyOTP
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=2 canVerify=false loading=false calls=auth.verifyOTP error=invalidCode pending=1
+> code 111111
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=2 canVerify=true loading=false pending=1
+> verify
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=1 canVerify=false loading=false calls=auth.verifyOTP error=invalidCode pending=1
+> expect attemptsLeft=1
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=1 canVerify=false loading=false calls=auth.verifyOTP error=invalidCode pending=1
+> code 222222
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=1 canVerify=true loading=false pending=1
+> verify
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=0 canVerify=false loading=false calls=auth.verifyOTP error=invalidCode pending=1
+> expect attemptsLeft=0 error=invalidCode
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=0 canVerify=false loading=false calls=auth.verifyOTP error=invalidCode pending=1
+> code 123456
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=0 canVerify=false loading=false pending=1
+> expect canVerify=false
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=0 canVerify=false loading=false pending=1
+> advance 30s
+  screen=auth/otp/code email=alice@example.com resendIn=0 attemptsLeft=0 canVerify=false loading=false
+> resend
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1
+> expect attemptsLeft=3 resendIn=30 call=auth.sendOTP error=none
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1
+> code 123456
+  screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=true loading=false pending=1
+> verify
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.verifyOTP,session.save,account.fetchProfile,catalog.fetchProducts
+> expect screen=home/shop
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.verifyOTP,session.save,account.fetchProfile,catalog.fetchProducts
+exit=0

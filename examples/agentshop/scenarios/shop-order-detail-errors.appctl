@@ -1,0 +1,15 @@
+email alice@example.com
+password Passw0rd!
+submit
+# A failed order load can be retried, and a refused cancel leaves the order pending.
+tab orders
+mock orders.fetchOrder network
+open 1001
+expect screen=home/orders/1001 error=network
+retry
+expect status=delivered error=none
+back
+open 1003
+mock orders.cancelOrder notCancellable
+cancel
+expect error=notCancellable status=pending canCancel=true

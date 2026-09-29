@@ -1,0 +1,14 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+checkout
+# A card number that isn't 16 digits is refused before anything is sent.
+card 4242
+place-order
+expect error=invalidCard
+card 4242 4242 4242 4242
+place-order
+expect screen=home/cart/confirmation

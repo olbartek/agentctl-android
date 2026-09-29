@@ -1,0 +1,9 @@
+email alice@example.com
+password Passw0rd!
+submit
+# A failed refresh reports the error but keeps the products on screen.
+mock catalog.fetchProducts timeout
+refresh
+expect products=12 error=timeout call=catalog.fetchProducts
+refresh
+expect products=12 error=none

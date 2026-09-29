@@ -1,0 +1,5 @@
+# An account that was onboarded before goes straight to the shop.
+email alice@example.com
+password Passw0rd!
+submit
+expect screen=home/shop call=account.fetchProfile

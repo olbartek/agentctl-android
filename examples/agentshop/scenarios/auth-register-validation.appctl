@@ -1,0 +1,29 @@
+# Inline validation on the registration form.
+register
+expect screen=auth/register issues=none canSubmit=false
+email carol@
+expect issues=email
+email carol@example.com
+password short
+expect issues=passwordTooShort,passwordMissingDigit
+password longenough
+expect issues=passwordMissingDigit
+password Secret123
+confirm Secret12
+expect issues=confirmMismatch
+confirm Secret123
+expect issues=none canSubmit=false
+show-password on
+show-confirm on
+expect revealed=password,confirm
+name Carol
+expect canSubmit=false terms=false
+terms on
+expect canSubmit=true
+terms off
+expect canSubmit=false
+# An existing email is rejected by the backend.
+terms on
+email alice@example.com
+submit
+expect error=emailTaken call=auth.register screen=auth/register

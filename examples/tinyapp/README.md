@@ -52,13 +52,14 @@ The sources are in [`src/main/kotlin/…/tinyapp`](src/main/kotlin/io/github/olb
 | `TinyRoot.kt` | The root reducer AgentCtl drives: the list plus a stack of pushed screens. Each element's effects are scoped to its id, and cancelled when it is popped. |
 | `TinyRootAgent.kt` | `AgentContainer`, which does three things: resolves the active screen, lifts its commands (stack element id included), and adds `back`. It also holds the `registry` the docs are rendered from. |
 | `ItemsClient.kt` | A client whose mock goes through `MockBackend.call`. That is what makes `calls=items.fetch` appear in a step, and what lets `mock items.fetch network` fail it. `mockMethods` lists only the codes the *client* can throw, so `mock items.fetch notFound` is rightly rejected. |
-| `TinyAppConfig.kt` | The whole integration: one `AppCtlConfig`, the docs prose, the store on any `AgentEnvironment`, and the headless and live hosts. |
+| `TinyApp.kt` | The store on any `AgentEnvironment`: the headless host's, the live host's, or a release build's. With the screens, it is all this module holds, on `agentctl-core` alone, so it ships. |
+| [`../tinyapp-config/…/TinyAppConfig.kt`](../tinyapp-config/src/main/kotlin/io/github/olbartek/agentctl/examples/tinyapp/TinyAppConfig.kt) | The whole integration: one `AppCtlConfig`, the docs prose, and the headless and live hosts. It is a module of its own because it needs `agentctl-runtime`, and only the debug app, the CLI and the tests depend on it. |
 
 ## The scenarios
 
 These are executable specifications. `./tinyctl test` runs them, and so does the repository's
 [`ScenarioTest`](../../tests/src/test/kotlin/io/github/olbartek/agentctl/tests/ScenarioTest.kt), ten times over
-for determinism. They are copied unchanged from agentctl-ios.
+for determinism. They are copied from agentctl-ios; only their `# app-test: skip` lines, for `./tinyctl app test`, are this port's own.
 
 | File | What it pins down |
 |---|---|

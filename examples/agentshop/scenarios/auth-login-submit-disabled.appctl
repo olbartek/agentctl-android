@@ -1,0 +1,11 @@
+# Login needs a valid email and a password before it can be submitted.
+expect screen=auth/login canSubmit=false
+email alice@
+password Passw0rd!
+expect canSubmit=false
+email alice@example
+expect canSubmit=false
+email alice@example.com
+expect canSubmit=true
+email alice.example.com
+expect canSubmit=false

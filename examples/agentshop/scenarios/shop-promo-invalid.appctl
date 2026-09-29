@@ -1,0 +1,14 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+# An unknown code is refused; a valid one then works.
+promo-code FREESTUFF
+apply-promo
+expect error=invalidPromo promo=none call=cart.applyPromo
+promo-code half
+expect error=none
+apply-promo
+expect promo=HALF discount=$14.50 total=$14.50

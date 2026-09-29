@@ -16,11 +16,22 @@ public data class GradleTasks(
     val build: List<String> = listOf("assembleDebug"),
     /** L1: the unit tests, e.g. `test`. */
     val test: List<String> = listOf("test"),
-    /** L3: the screenshot tests against their references, e.g. `verifyRoborazziDebug`. Empty: no L3. */
+    /**
+     * L3: the modules whose screenshot tests run, as Gradle project paths such as `:feature:items`. For each one
+     * the CLI asks `gradlew <module>:tasks --all` for its tasks rather than assuming their names: Roborazzi's
+     * `verifyRoborazzi<Variant>` and `recordRoborazzi<Variant>`, or else Paparazzi's, for the `Debug` variant, every
+     * `…Debug` variant when there are several (product flavors), or the only variant there is. The counterpart of
+     * the reference's `snapshotPackages`. Empty, with [snapshotsVerify] empty too: no L3.
+     */
+    val snapshotModules: List<String> = emptyList(),
+    /** L3: screenshot tasks to run as named, besides those found in [snapshotModules], e.g. `:app:verifyPaparazziDemoDebug`. */
     val snapshotsVerify: List<String> = emptyList(),
-    /** `snapshots --record`: re-record the references, e.g. `recordRoborazziDebug`. */
+    /** `snapshots --record`: the tasks that re-record [snapshotsVerify]'s references, e.g. `:app:recordPaparazziDemoDebug`. */
     val snapshotsRecord: List<String> = emptyList(),
-    /** Where the references live, relative to the root, for the review hint after recording. */
+    /**
+     * Where the references live, relative to the root, for the review hint after recording. Empty: the directories
+     * of [snapshotModules].
+     */
     val snapshotReferences: List<String> = emptyList(),
     /** `app launch` and L4: build and install the debug app on the device, e.g. `:app:installDebug`. */
     val install: String = "installDebug",

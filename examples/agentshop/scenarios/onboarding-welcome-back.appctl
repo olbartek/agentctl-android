@@ -1,0 +1,11 @@
+email nina@example.com
+password Passw0rd!
+submit
+# Back pages the carousel backwards.
+next
+next
+expect page=3
+back
+expect page=2
+back
+expect page=1 screen=onboarding/welcome

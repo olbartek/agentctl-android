@@ -1,0 +1,951 @@
+{
+  "scenarios": {
+    "auth-forgot-back-navigation": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_forgot_back_navigation"
+    },
+    "auth-forgot-password": {
+      "assertions_checked_in_ui": 15,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 25,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_forgot_password"
+    },
+    "auth-forgot-password-mismatch": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 12,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_forgot_password_mismatch"
+    },
+    "auth-forgot-unknown-email": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_forgot_unknown_email"
+    },
+    "auth-google-network-error": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [
+        "auth.signInWithGoogle#1=network"
+      ],
+      "group": "auth",
+      "steps": 5,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_google_network_error"
+    },
+    "auth-google-sign-in": {
+      "assertions_checked_in_ui": 9,
+      "assertions_headless_only": 5,
+      "comparable": true,
+      "faults": [
+        "auth.signInWithGoogle#3=network"
+      ],
+      "group": "auth",
+      "steps": 23,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_google_sign_in"
+    },
+    "auth-keep-signed-in": {
+      "comparable": false,
+      "group": "auth",
+      "steps": 14
+    },
+    "auth-launch": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 1,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_launch"
+    },
+    "auth-lockout-then-reset": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 19,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_lockout_then_reset"
+    },
+    "auth-login-happy-path": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 6,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_login_happy_path"
+    },
+    "auth-login-locked": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 17,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_login_locked"
+    },
+    "auth-login-network-error-retry": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [
+        "auth.login#1=network"
+      ],
+      "group": "auth",
+      "steps": 7,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_login_network_error_retry"
+    },
+    "auth-login-show-password": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_login_show_password"
+    },
+    "auth-login-submit-disabled": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_login_submit_disabled"
+    },
+    "auth-login-unknown-email": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 6,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_login_unknown_email"
+    },
+    "auth-login-wrong-password": {
+      "assertions_checked_in_ui": 7,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [
+        "auth.login#2=network"
+      ],
+      "group": "auth",
+      "steps": 11,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_login_wrong_password"
+    },
+    "auth-logout": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_logout"
+    },
+    "auth-logout-cancel": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_logout_cancel"
+    },
+    "auth-otp-back-to-login": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_otp_back_to_login"
+    },
+    "auth-otp-code-expired": {
+      "comparable": false,
+      "group": "auth",
+      "steps": 13
+    },
+    "auth-otp-happy-path": {
+      "assertions_checked_in_ui": 7,
+      "assertions_headless_only": 7,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_otp_happy_path"
+    },
+    "auth-otp-resend-countdown": {
+      "comparable": false,
+      "group": "auth",
+      "steps": 12
+    },
+    "auth-otp-unknown-email": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 8,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_otp_unknown_email"
+    },
+    "auth-otp-wrong-code": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 4,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_otp_wrong_code"
+    },
+    "auth-otp-wrong-code-3x": {
+      "comparable": false,
+      "group": "auth",
+      "steps": 20
+    },
+    "auth-register-back-to-login": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 8,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_register_back_to_login"
+    },
+    "auth-register-email-taken": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 12,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_register_email_taken"
+    },
+    "auth-register-happy-path": {
+      "assertions_checked_in_ui": 8,
+      "assertions_headless_only": 7,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 21,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_register_happy_path"
+    },
+    "auth-register-password-mismatch": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 11,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_register_password_mismatch"
+    },
+    "auth-register-terms-required": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_register_terms_required"
+    },
+    "auth-register-validation": {
+      "assertions_checked_in_ui": 8,
+      "assertions_headless_only": 9,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 27,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_register_validation"
+    },
+    "auth-register-verify-errors": {
+      "comparable": false,
+      "group": "auth",
+      "steps": 34
+    },
+    "auth-register-verify-wrong-code": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 4,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 15,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_register_verify_wrong_code"
+    },
+    "auth-session-restore": {
+      "comparable": false,
+      "group": "auth",
+      "steps": 9
+    },
+    "auth-sign-in-again-after-logout": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "auth",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.AuthUiTests#test_sign_in_again_after_logout"
+    },
+    "onboarding-address-back-keeps-interests": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 12,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_address_back_keeps_interests"
+    },
+    "onboarding-address-continue-disabled": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 14,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_address_continue_disabled"
+    },
+    "onboarding-address-fix-zip": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 17,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_address_fix_zip"
+    },
+    "onboarding-address-invalid-zip": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_address_invalid_zip"
+    },
+    "onboarding-address-prefills-checkout": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 18,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_address_prefills_checkout"
+    },
+    "onboarding-address-skip": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_address_skip"
+    },
+    "onboarding-address-valid": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 14,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_address_valid"
+    },
+    "onboarding-after-google": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 11,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_after_google"
+    },
+    "onboarding-after-register": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 21,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_after_register"
+    },
+    "onboarding-back-from-notifications": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 15,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_back_from_notifications"
+    },
+    "onboarding-complete-lands-on-shop": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_complete_lands_on_shop"
+    },
+    "onboarding-complete-network-error-retry": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [
+        "account.completeOnboarding#1=network"
+      ],
+      "group": "onboarding",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_complete_network_error_retry"
+    },
+    "onboarding-interests-back": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_interests_back"
+    },
+    "onboarding-interests-continue-disabled": {
+      "assertions_checked_in_ui": 7,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_interests_continue_disabled"
+    },
+    "onboarding-interests-select-two": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_interests_select_two"
+    },
+    "onboarding-interests-toggle-off": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_interests_toggle_off"
+    },
+    "onboarding-interests-too-many": {
+      "assertions_checked_in_ui": 7,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 15,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_interests_too_many"
+    },
+    "onboarding-notifications-allow": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_notifications_allow"
+    },
+    "onboarding-notifications-not-now": {
+      "assertions_checked_in_ui": 1,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_notifications_not_now"
+    },
+    "onboarding-onboarded-user-skips": {
+      "assertions_checked_in_ui": 1,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 4,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_onboarded_user_skips"
+    },
+    "onboarding-once-per-account": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 17,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_once_per_account"
+    },
+    "onboarding-profile-error-goes-home": {
+      "assertions_checked_in_ui": 1,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [
+        "account.fetchProfile#1=network"
+      ],
+      "group": "onboarding",
+      "steps": 5,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_profile_error_goes_home"
+    },
+    "onboarding-starts-after-first-login": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 4,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_starts_after_first_login"
+    },
+    "onboarding-welcome-back": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_welcome_back"
+    },
+    "onboarding-welcome-pages": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_welcome_pages"
+    },
+    "onboarding-welcome-skip": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "onboarding",
+      "steps": 7,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.OnboardingUiTests#test_welcome_skip"
+    },
+    "shop-add-same-line-twice": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_add_same_line_twice"
+    },
+    "shop-add-to-cart": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 8,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_add_to_cart"
+    },
+    "shop-add-two-sizes": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 12,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_add_two_sizes"
+    },
+    "shop-cart-dec-removes-line": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 8,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_cart_dec_removes_line"
+    },
+    "shop-cart-empty-checkout-disabled": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 5,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_cart_empty_checkout_disabled"
+    },
+    "shop-cart-inc-dec": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 11,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_cart_inc_dec"
+    },
+    "shop-cart-remove": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_cart_remove"
+    },
+    "shop-checkout-apple-pay": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 11,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_apple_pay"
+    },
+    "shop-checkout-back-to-cart": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_back_to_cart"
+    },
+    "shop-checkout-express-shipping": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 12,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_express_shipping"
+    },
+    "shop-checkout-happy-path": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 19,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_happy_path"
+    },
+    "shop-checkout-invalid-card": {
+      "assertions_checked_in_ui": 2,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_invalid_card"
+    },
+    "shop-checkout-invalid-zip": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_invalid_zip"
+    },
+    "shop-checkout-network-error-retry": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [
+        "orders.placeOrder#1=network"
+      ],
+      "group": "shop",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_network_error_retry"
+    },
+    "shop-checkout-payment-declined": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_payment_declined"
+    },
+    "shop-checkout-prefilled-address": {
+      "assertions_checked_in_ui": 10,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_prefilled_address"
+    },
+    "shop-checkout-validation": {
+      "assertions_checked_in_ui": 8,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 17,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_validation"
+    },
+    "shop-confirmation-continue-shopping": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_confirmation_continue_shopping"
+    },
+    "shop-confirmation-view-order": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_confirmation_view_order"
+    },
+    "shop-feed-loads-after-login": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 4,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_feed_loads_after_login"
+    },
+    "shop-feed-network-error-retry": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [
+        "catalog.fetchProducts#1=network"
+      ],
+      "group": "shop",
+      "steps": 7,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_feed_network_error_retry"
+    },
+    "shop-feed-refresh-error-keeps-products": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [
+        "catalog.fetchProducts#2=timeout"
+      ],
+      "group": "shop",
+      "steps": 8,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_feed_refresh_error_keeps_products"
+    },
+    "shop-filter-all-resets": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 7,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_filter_all_resets"
+    },
+    "shop-filter-category": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_filter_category"
+    },
+    "shop-new-order-appears-in-orders": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 15,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_new_order_appears_in_orders"
+    },
+    "shop-open-product": {
+      "assertions_checked_in_ui": 8,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 7,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_open_product"
+    },
+    "shop-order-cancel": {
+      "assertions_checked_in_ui": 9,
+      "assertions_headless_only": 3,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 12,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_order_cancel"
+    },
+    "shop-order-detail-errors": {
+      "assertions_checked_in_ui": 7,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [
+        "orders.fetchOrder#1=network",
+        "orders.cancelOrder#1=notCancellable"
+      ],
+      "group": "shop",
+      "steps": 14,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_order_detail_errors"
+    },
+    "shop-orders-empty": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 4,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 7,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_orders_empty"
+    },
+    "shop-orders-error-retry": {
+      "assertions_checked_in_ui": 7,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [
+        "orders.fetchOrders#1=network",
+        "orders.fetchOrders#3=network"
+      ],
+      "group": "shop",
+      "steps": 11,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_orders_error_retry"
+    },
+    "shop-orders-list": {
+      "assertions_checked_in_ui": 7,
+      "assertions_headless_only": 2,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_orders_list"
+    },
+    "shop-product-favorite": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_product_favorite"
+    },
+    "shop-product-out-of-stock": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 5,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_product_out_of_stock"
+    },
+    "shop-product-quantity-limits": {
+      "assertions_checked_in_ui": 9,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 16,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_product_quantity_limits"
+    },
+    "shop-product-requires-size": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_product_requires_size"
+    },
+    "shop-promo-clear": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 11,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_promo_clear"
+    },
+    "shop-promo-invalid": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 13,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_promo_invalid"
+    },
+    "shop-promo-network-error": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [
+        "cart.applyPromo#1=network"
+      ],
+      "group": "shop",
+      "steps": 12,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_promo_network_error"
+    },
+    "shop-promo-valid": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_promo_valid"
+    },
+    "shop-search": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 9,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_search"
+    },
+    "shop-search-no-results": {
+      "assertions_checked_in_ui": 3,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 7,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_search_no_results"
+    },
+    "shop-search-within-filter": {
+      "assertions_checked_in_ui": 4,
+      "assertions_headless_only": 1,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_search_within_filter"
+    },
+    "shop-sort-price-asc": {
+      "assertions_checked_in_ui": 5,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 7,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_sort_price_asc"
+    },
+    "shop-sort-price-desc": {
+      "assertions_checked_in_ui": 6,
+      "assertions_headless_only": 0,
+      "comparable": true,
+      "faults": [],
+      "group": "shop",
+      "steps": 10,
+      "uitest": "io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_sort_price_desc"
+    }
+  }
+}

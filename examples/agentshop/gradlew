@@ -1,0 +1,7 @@
+#!/bin/sh
+# AgentShop's root (APPCTL_ROOT) is this directory, and the CLI runs the `check` ladder's Gradle tasks (and
+# `app launch`'s install) through `<root>/gradlew`. The build itself is the repository's, two levels up: this
+# forwards every invocation to the repository's wrapper, run on the repository's root project.
+
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+exec "$REPO/gradlew" -p "$REPO" "$@"

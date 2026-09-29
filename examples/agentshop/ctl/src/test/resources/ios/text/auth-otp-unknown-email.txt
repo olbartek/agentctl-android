@@ -1,0 +1,19 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> use-otp
+  screen=auth/otp/email email="" canSend=false loading=false
+> email nobody@example.com
+  screen=auth/otp/email email=nobody@example.com canSend=true loading=false
+> send
+  screen=auth/otp/email email=nobody@example.com canSend=true loading=false calls=auth.sendOTP error=unknownEmail
+> expect screen=auth/otp/email error=unknownEmail call=auth.sendOTP
+  screen=auth/otp/email email=nobody@example.com canSend=true loading=false calls=auth.sendOTP error=unknownEmail
+> email bob@example.com
+  screen=auth/otp/email email=bob@example.com canSend=true loading=false
+> expect error=none canSend=true
+  screen=auth/otp/email email=bob@example.com canSend=true loading=false
+> send
+  screen=auth/otp/code email=bob@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1
+> expect screen=auth/otp/code call=auth.sendOTP
+  screen=auth/otp/code email=bob@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1
+exit=0

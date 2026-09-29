@@ -13,6 +13,10 @@ gradlePlugin {
             id = "agentctl.jvm.library"
             implementationClass = "JvmLibraryConventionPlugin"
         }
+        register("releaseCheck") {
+            id = "agentctl.release.check"
+            implementationClass = "ReleaseLeavesOutAgentCtlPlugin"
+        }
         register("published") {
             id = "agentctl.published"
             implementationClass = "PublishedConventionPlugin"

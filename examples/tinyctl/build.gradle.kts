@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":examples:tinyapp"))
+    implementation(project(":examples:tinyapp-config"))
     implementation(project(":agentctl-cli"))
 }
 

@@ -1,0 +1,11 @@
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+skip
+# Onboarding ends on the shop tab, with the catalog loaded.
+not-now
+expect screen=home/shop products=12 filter=all sort=featured call=catalog.fetchProducts

@@ -1,0 +1,32 @@
+#!/bin/sh
+# AgentShop's copy of Templates/appctl: the wrapper every AgentCtl host copies to the root of its repository.
+#
+# It rebuilds the host's own CLI executable incrementally (Gradle's `installDist`, a few seconds when nothing
+# changed) and then execs it, so the CLI is always current and agents call `./appctl …` instead of
+# `./gradlew run`, which mixes its build log into the step output a script is meant to be read from. Here the
+# build log goes to stderr and a build failure exits 3, the CLI's "internal or build error" code.
+#
+# --- Change these two lines for your repo ---------------------------------------------------------------------
+MODULE=":examples:agentshop:shopctl"  # AgentShop's CLI module
+NAME="shopctl"
+# ------------------------------------------------------------------------------------------------------------
+#
+# AgentShop is not at the root of its repository: its root is this directory (examples/agentshop), where
+# `scenarios/` and `agent-commands.md` live, while the Gradle build is the repository's, two levels up. So the
+# build runs from REPO, and APPCTL_ROOT names this directory. The `check` ladder's Gradle tasks run through
+# ./gradlew here, which forwards to the repository's wrapper.
+#
+# The CLI finds the Android SDK (for `app` and `check --ui`) through ANDROID_HOME or local.properties at its root;
+# the repository's local.properties is two levels up, so its sdk.dir is passed on as ANDROID_HOME when that is unset.
+#
+# JAVA_HOME must name a JDK 17 or newer, as for any Gradle build.
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$ROOT/../.." && pwd)"
+MODULE_DIR="$(echo "${MODULE#:}" | tr ':' '/')"
+if [ -z "$ANDROID_HOME" ] && [ -f "$REPO/local.properties" ]; then
+  SDK_DIR="$(sed -n 's/^sdk\.dir=//p' "$REPO/local.properties" | tail -n 1)"
+  [ -n "$SDK_DIR" ] && export ANDROID_HOME="$SDK_DIR"
+fi
+"$REPO/gradlew" -p "$REPO" -q --console=plain "$MODULE:installDist" >&2 || exit 3
+APPCTL_ROOT="$ROOT" exec "$REPO/$MODULE_DIR/build/install/$NAME/bin/$NAME" "$@"

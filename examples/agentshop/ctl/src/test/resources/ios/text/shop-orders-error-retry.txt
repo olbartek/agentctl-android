@@ -1,0 +1,25 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> email alice@example.com
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=false loading=false
+> password Passw0rd!
+  screen=auth/login email=alice@example.com keepSignedIn=true revealed=none canSubmit=true loading=false
+> submit
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
+> mock orders.fetchOrders network
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false
+> tab orders
+  screen=home/orders orders=0 loading=false statuses=none calls=orders.fetchOrders error=network
+> expect screen=home/orders orders=0 error=network call=orders.fetchOrders
+  screen=home/orders orders=0 loading=false statuses=none calls=orders.fetchOrders error=network
+> retry
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders
+> expect orders=3 error=none
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders
+> mock orders.fetchOrders network
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending
+> refresh
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders error=network
+> expect orders=3 error=network
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders error=network
+exit=0

@@ -1,0 +1,21 @@
+# Three wrong codes disable verify until a new code is sent.
+use-otp
+email alice@example.com
+send
+code 000000
+verify
+expect error=invalidCode attemptsLeft=2 call=auth.verifyOTP
+code 111111
+verify
+expect attemptsLeft=1
+code 222222
+verify
+expect attemptsLeft=0 error=invalidCode
+code 123456
+expect canVerify=false
+advance 30s
+resend
+expect attemptsLeft=3 resendIn=30 call=auth.sendOTP error=none
+code 123456
+verify
+expect screen=home/shop

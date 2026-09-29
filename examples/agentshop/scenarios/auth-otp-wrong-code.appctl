@@ -1,0 +1,11 @@
+# One wrong code is refused with an attempt used up; the right code signs in.
+use-otp
+email bob@example.com
+send
+expect screen=auth/otp/code attemptsLeft=3
+code 999999
+verify
+expect error=invalidCode attemptsLeft=2 call=auth.verifyOTP
+code 123456
+verify
+expect screen=home/shop call=auth.verifyOTP

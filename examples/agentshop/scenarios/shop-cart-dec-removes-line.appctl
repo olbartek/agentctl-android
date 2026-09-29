@@ -1,0 +1,9 @@
+email alice@example.com
+password Passw0rd!
+submit
+open 103
+add-to-cart
+view-cart
+# Minus at one removes the line.
+dec 103
+expect lines=none items=0 canCheckout=false
