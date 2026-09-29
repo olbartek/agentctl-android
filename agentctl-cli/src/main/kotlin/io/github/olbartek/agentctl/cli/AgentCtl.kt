@@ -18,6 +18,7 @@ import com.github.ajalt.clikt.parameters.types.int
 import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.CLIName
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
+import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.RunStatus
 import java.io.File
 import java.io.PrintStream
@@ -88,6 +89,15 @@ public object AgentCtl {
             CheckCommand(cli),
             AppGroup().subcommands(AppLaunchCommand(cli), AppRunCommand(cli), AppGetCommand(cli, "state", "/state"), AppGetCommand(cli, "screens", "/screens")),
         )
+
+    /** What `snapshots` runs, for its help: the modules whose tasks it looks up, and the tasks named outright. */
+    internal fun snapshotsSubject(gradle: GradleTasks): String {
+        val parts = listOfNotNull(
+            gradle.snapshotModules.takeIf { it.isNotEmpty() }?.let { "the Roborazzi or Paparazzi tasks of ${it.joinToString(", ")}" },
+            gradle.snapshotsVerify.takeIf { it.isNotEmpty() }?.joinToString(" "),
+        )
+        return parts.joinToString(", and ").ifEmpty { "nothing: the config's gradle.snapshotModules is empty" }
+    }
 
     /** Example lines. The plain-text help formatter prints an epilog as it is, line breaks included. */
     internal fun examples(vararg lines: String): String = "Examples:\n" + lines.joinToString("\n") { "  $it" }
@@ -201,7 +211,7 @@ public object AgentCtl {
     private class SnapshotsCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
         "snapshots",
         "Run the L3 screenshot tests (or re-record the reference images).",
-        "Runs ${cli.config.gradle.snapshotsVerify.joinToString(" ").ifEmpty { "nothing: the config's gradle.snapshotsVerify is empty" }}. " +
+        "Runs ${snapshotsSubject(cli.config.gradle)}. " +
             "A failure prints where the report is; look at the images before deciding.\n\n" +
             examples(
                 "${cli.config.help.invocation} snapshots             # after a view change",

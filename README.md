@@ -362,7 +362,7 @@ exit=1
 | `screens` | Every screen path with its commands, arguments, help and summary keys, as above. |
 | `docs` | Write the generated command reference (`docsPath`) from the registry. `--check` exits 1 when it is stale. |
 | `test [files…]` | Run `*.appctl` scenario files (by default all of `scenariosPath`), one PASS/FAIL line each. Finding no scenario files to run is a failure, not "0 passed". |
-| `snapshots` | The screenshot tests (the config's Gradle tasks, e.g. Roborazzi's); `--record` re-records the references. |
+| `snapshots` | The screenshot tests (Roborazzi's or Paparazzi's, found in the config's `gradle.snapshotModules`); `--record` re-records the references. |
 | `check` | The verification ladder below; `--ui` adds its last two rungs. |
 | `app launch` / `app run` / `app state` / `app screens` | The same commands, against the real app on a device or emulator, through the in-app bridge. |
 
@@ -419,8 +419,15 @@ L4 app        ok    refresh-error via the agent bridge 2.9s
 | L1 | its `gradle.test` tasks, with the number of tests from the JUnit reports |
 | L2 | every scenario file, in-process |
 | docs | `docs --check`: the generated command reference is not stale |
-| L3 (`--ui`) | the `gradle.snapshotsVerify` tasks (e.g. `verifyRoborazziDebug`); none configured passes, as TinyApp has none |
+| L3 (`--ui`) | the screenshot tests of each module in `gradle.snapshotModules` (see below), plus any `gradle.snapshotsVerify` tasks; none configured passes, as TinyApp has none |
 | L4 (`--ui`) | the real app, in four steps: installed (`gradle.install`), launched on a device (seeded with `appCheck.seed`, zero mock latency), `appCheck.scenario` sent through the bridge, one screenshot |
+
+L3 assumes no task names. For each module in `gradle.snapshotModules` (a Gradle path such as `:feature:items`) it
+runs `gradlew <module>:tasks --all` and takes Roborazzi's `verifyRoborazzi<Variant>` tasks, or else Paparazzi's
+`verifyPaparazzi<Variant>`: the `Debug` variant's, every `…Debug` variant's in a module with product flavors, or the
+only variant there is. `snapshots --record` takes the matching `record…` tasks, and the review hint it prints
+names the modules' directories unless `gradle.snapshotReferences` says where the references live. A task of any
+other tool goes in `gradle.snapshotsVerify` and `gradle.snapshotsRecord`, which run as named.
 
 `--device` (or the config's `device`) names an `adb` serial or an AVD. An AVD that is not running is booted. With
 neither, the only connected device is used.
@@ -549,6 +556,12 @@ On the contract's open questions, this port follows the reference in every case,
 - the "Valid here" list ends in the same tail.
 
 It also counts script columns in grapheme clusters, as Swift does.
+
+Where Android differs from iOS, the port adapts the reference rather than copying it:
+
+- L3 finds each snapshot module's Roborazzi or Paparazzi tasks (`gradle.snapshotModules`) where the reference finds
+  a package's Xcode scheme and its `*SnapshotTests` targets (`snapshotPackages`), and runs them on the JVM, with no
+  device.
 
 ## Building this repository
 
