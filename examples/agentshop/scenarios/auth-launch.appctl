@@ -1,2 +1,3 @@
 # A fresh launch restores no session and lands on login.
+# app-test: skip its first expect checks the launch's own call, which the app makes before the script starts
 expect screen=auth/login call=session.current pending=0 email=""

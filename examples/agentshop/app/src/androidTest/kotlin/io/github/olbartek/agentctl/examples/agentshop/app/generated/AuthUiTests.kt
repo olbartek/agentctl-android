@@ -133,8 +133,8 @@ class AuthUiTests : ShopUiTestCase() {
     @Test
     fun test_launch() {
         launch()
-        expectScreen("auth/login", line = "auth-launch.appctl:2  expect screen=auth/login call=session.current pending=0 email=\"\"")
-        expectValue("Login.email", "", line = "auth-launch.appctl:2  expect screen=auth/login call=session.current pending=0 email=\"\"")
+        expectScreen("auth/login", line = "auth-launch.appctl:3  expect screen=auth/login call=session.current pending=0 email=\"\"")
+        expectValue("Login.email", "", line = "auth-launch.appctl:3  expect screen=auth/login call=session.current pending=0 email=\"\"")
     }
 
     @Test
