@@ -1,13 +1,12 @@
 package io.github.olbartek.agentctl.cli
 
-import io.github.olbartek.agentctl.AgentRegistry
-import io.github.olbartek.agentctl.DocsRenderer
 import io.github.olbartek.agentctl.ScreensRenderer
 import io.github.olbartek.agentctl.ScriptLine
 import io.github.olbartek.agentctl.StepFormatter
 import io.github.olbartek.agentctl.StepRecord
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
 import io.github.olbartek.agentctl.runtime.HttpParser
+import io.github.olbartek.agentctl.runtime.RepoRoot
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import java.io.File
@@ -91,13 +90,7 @@ internal class Cli<S, A>(
     }
 
     /** The generated command reference as it should be, rendered from the config. */
-    val docsMarkdown: String
-        get() = DocsRenderer.render(
-            screens = config.screens,
-            runtimeCommands = AgentRegistry.runtimeCommands(config.docsText.mockExample),
-            mockMethods = config.mockMethods,
-            text = config.docsText,
-        )
+    val docsMarkdown: String get() = config.docsMarkdown
 
     fun docs(check: Boolean): Int {
         val root = root() ?: return RunStatus.INTERNAL_ERROR.code
@@ -305,12 +298,7 @@ internal class Cli<S, A>(
     /** [root], without the error when there is none: the `app` commands that only read the launch state can do without. */
     private fun quietRoot(): File? {
         environment["APPCTL_ROOT"]?.takeIf { it.isNotEmpty() }?.let { return File(it) }
-        var directory: File? = workingDirectory.absoluteFile
-        while (directory != null) {
-            if (File(directory, config.rootMarker).exists()) return directory
-            directory = directory.parentFile
-        }
-        return null
+        return RepoRoot.find(config.rootMarker, workingDirectory)
     }
 }
 

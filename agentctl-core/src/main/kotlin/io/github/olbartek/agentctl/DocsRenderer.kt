@@ -26,6 +26,15 @@ public data class DocsText(
 
 /** Renders `docs/agent-commands.md` from data. The output depends only on its inputs, so `docs --check` can compare it. */
 public object DocsRenderer {
+    /**
+     * The whole command reference as `docs` writes it and `docs --check` compares it: the app's screens and mock
+     * methods plus the runtime commands (`expect`, `advance`, `mock`) every app has. The CLI and
+     * `AgentScenarioChecks.docsCurrent` both call this, so a host's test and its `docs --check` cannot disagree.
+     */
+    public fun render(screens: List<ScreenDoc>, mockMethods: List<MockMethod>, text: DocsText): String =
+        render(screens, AgentRegistry.runtimeCommands(text.mockExample), mockMethods, text)
+
+    /** The command reference from its parts; [render] with the standard runtime commands is what `docs` writes. */
     public fun render(
         screens: List<ScreenDoc>,
         runtimeCommands: List<CommandDoc>,
