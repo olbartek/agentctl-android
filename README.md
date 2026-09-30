@@ -691,6 +691,9 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   takes `--sim`. `app record` runs `adb shell screenrecord` in back-to-back chunks under its three-minute limit,
   joined with `ffmpeg`, with the last frame held until the stop, since `screenrecord` writes frames only when the
   screen changes. The clean status bar is SystemUI's demo mode, whose mobile icon Android 16 does not draw.
+  `app record stop` on a recorder that has died still saves what it recorded (its chunks stay on the device, where
+  the reference's simctl has already written the file), and says so after the shared text: `the recording of
+  <file> is no longer running; saved what it recorded to <file>` (exit 3).
 - Live settling's UI signal (§8.5) is Compose's idleness (no recomposition pending, no frame awaited), where the
   reference asks UIKit whether a view controller has a transition, presentation or dismissal under way. Compose's
   signal also sees endless animations; the shared rule that a UI busy for more than a second stops holding a step
