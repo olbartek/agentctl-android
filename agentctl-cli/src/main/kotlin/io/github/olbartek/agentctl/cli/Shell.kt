@@ -30,41 +30,76 @@ internal object Shell {
             .redirectOutput(if (append) ProcessBuilder.Redirect.appendTo(log) else ProcessBuilder.Redirect.to(log))
         builder.environment().putAll(environment)
         return try {
-            val process = builder.start()
-            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
-                process.destroyForcibly()
+            finish(builder.start(), timeoutSeconds) ?: run {
+                // Said where the command's own output ends, so a log that stops short explains itself.
+                log.appendText("\nagentctl: ${command.joinToString(" ")} did not finish within $timeoutSeconds s; stopped it\n")
                 -1
-            } else {
-                process.exitValue()
             }
         } catch (_: IOException) {
             -1
         }
     }
 
-    /** Runs a command and returns its standard output (standard error is discarded), or `null` if it failed to run. */
-    fun capture(command: List<String>, directory: File? = null, timeoutSeconds: Long = 60): String? = try {
-        val process = ProcessBuilder(command)
-            .apply { if (directory != null) directory(directory) }
-            .redirectError(ProcessBuilder.Redirect.DISCARD)
-            .start()
-        val output = process.inputStream.bufferedReader().readText()
-        if (process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) output else null
-    } catch (_: IOException) {
-        null
+    /**
+     * Runs a command and returns its standard output (standard error is discarded), or `null` if it failed to run or
+     * did not finish within [timeoutSeconds]. The output goes to a file rather than a pipe read to its end first, so
+     * the timeout holds even for a command that never closes its output (`adb shell` on a frozen emulator).
+     */
+    fun capture(command: List<String>, directory: File? = null, timeoutSeconds: Long = 60): String? {
+        val output = try {
+            File.createTempFile("appctl-capture", ".out")
+        } catch (_: IOException) {
+            return null
+        }
+        return try {
+            val process = ProcessBuilder(command)
+                .apply { if (directory != null) directory(directory) }
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .redirectOutput(output)
+                .start()
+            if (finish(process, timeoutSeconds) == null) null else output.readText()
+        } catch (_: IOException) {
+            null
+        } finally {
+            output.delete()
+        }
     }
 
-    /** Runs a command and writes its standard output, byte for byte, to `file`. */
+    /** Runs a command and writes its standard output, byte for byte, to `file`; -1 if it did not finish in time. */
     fun captureTo(command: List<String>, file: File, timeoutSeconds: Long = 60): Int = try {
         file.parentFile?.mkdirs()
         val process = ProcessBuilder(command)
             .redirectError(ProcessBuilder.Redirect.DISCARD)
             .redirectOutput(file)
             .start()
-        if (process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) process.exitValue() else -1
+        finish(process, timeoutSeconds) ?: -1
     } catch (_: IOException) {
         -1
     }
+
+    /**
+     * The exit status, or `null` after stopping the process and what it started when it runs out of time: SIGTERM,
+     * then SIGKILL [KILL_AFTER_SECONDS] later for whatever ignored it.
+     */
+    private fun finish(process: Process, timeoutSeconds: Long): Int? {
+        if (process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) return process.exitValue()
+        stoppable(process).forEach { it.destroy() }
+        if (!process.waitFor(KILL_AFTER_SECONDS, TimeUnit.SECONDS)) process.destroyForcibly()
+        // Taken again: a parent that outlived SIGTERM may have started more.
+        stoppable(process).filter { it.isAlive }.forEach { it.destroyForcibly() }
+        process.waitFor(5, TimeUnit.SECONDS)
+        return null
+    }
+
+    /**
+     * A process that ran out of time and what it started, but never an adb server: an adb client that finds none
+     * starts one, which stays its child until the client exits, and every later adb command needs it.
+     */
+    private fun stoppable(process: Process): List<ProcessHandle> =
+        process.descendants().toList().filter { "fork-server" !in it.info().commandLine().orElse("") } + process.toHandle()
+
+    /** How long a command that ran out of time gets to end on SIGTERM before it is killed. */
+    private const val KILL_AFTER_SECONDS: Long = 2
 }
 
 /** Gradle, through the repository's own wrapper. */
