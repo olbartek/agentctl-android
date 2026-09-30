@@ -45,9 +45,12 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
     }
 
     fun recordStop(): String {
-        val state = RecordState.load(cli, layout) ?: throw AppCtlException(Message.noRecording(cli))
-        // Claimed first: of two stops at once, only one goes on; the other finds nothing to stop.
+        // Claimed first: of two stops at once, only one goes on; the other finds nothing to stop. The state is the
+        // claimed file's, not one read before the claim.
+        RecordState.adoptAbandonedClaims(layout)
+        if (!RecordState.file(layout).exists()) throw AppCtlException(Message.noRecording(cli))
         val claim = RecordState.claim(layout) ?: throw AppCtlException(Message.noRecording(cli))
+        val state = RecordState.read(cli, claim) ?: throw AppCtlException(Message.noRecording(cli))
         val recorder = ScreenRecorder.of(adb, state.device, state.pid, workRoot)
         val log = File(layout.logs, "app-record.log")
         if (!recorder.isRecording(state.file)) {
@@ -165,20 +168,44 @@ internal data class RecordState(
 
         fun file(layout: Layout): File = File(layout.output, FILE_NAME)
 
-        /** Takes record.json for one `stop` (renamed aside), or `null` when another took it first. */
+        private const val CLAIM = "$FILE_NAME.stopping."
+
+        /** Takes record.json for one `stop` (renamed aside, with its pid), or `null` when another took it first. */
         fun claim(layout: Layout): File? {
-            val claimed = File(layout.output, "$FILE_NAME.stopping.${ProcessHandle.current().pid()}")
+            val claimed = File(layout.output, "$CLAIM${ProcessHandle.current().pid()}")
             return claimed.takeIf { file(layout).renameTo(it) }
         }
 
-        /** Gives a claimed record.json back, for a stop that could not finish. */
+        /**
+         * Gives a claimed record.json back, for a stop that could not finish, unless a newer recording has one by now:
+         * then the claim stays, for [adoptAbandonedClaims] once this process has gone.
+         */
         fun unclaim(layout: Layout, claimed: File) {
-            claimed.renameTo(file(layout))
+            try {
+                java.nio.file.Files.move(claimed.toPath(), file(layout).toPath())
+            } catch (_: IOException) {
+                // A newer record.json is there: never replaced.
+            }
+        }
+
+        /** Puts back a claim whose `stop` died before it finished (killed, or Ctrl+C), so a later `stop` can. */
+        fun adoptAbandonedClaims(layout: Layout) {
+            if (file(layout).exists()) return
+            val abandoned = layout.output.listFiles().orEmpty().filter { it.name.startsWith(CLAIM) }.firstOrNull { claim ->
+                val owner = claim.name.removePrefix(CLAIM).toLongOrNull()
+                owner == null || ProcessHandle.of(owner).map { !it.isAlive }.orElse(true)
+            } ?: return
+            unclaim(layout, abandoned)
         }
 
         /** The saved state, `null` when there is none; a file that is not one is an error (exit 3). */
         fun load(cli: Cli<*, *>, layout: Layout): RecordState? {
-            val file = file(layout)
+            adoptAbandonedClaims(layout)
+            return read(cli, file(layout))
+        }
+
+        /** [file]'s state, `null` when it does not exist; a file that is not one is an error (exit 3). */
+        fun read(cli: Cli<*, *>, file: File): RecordState? {
             if (!file.exists()) return null
             val name = "${cli.config.outputPath}/$FILE_NAME"
             val text = try {

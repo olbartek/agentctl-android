@@ -179,15 +179,30 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             chapters.add("${timestamp(started.elapsedNow())} $name")
         }
 
-        /** Stops the recording (the chunk being written is finished), pulls it and writes the chapters. */
-        fun stop(): String {
-            Runtime.getRuntime().removeShutdownHook(hook)
+        private var report: String? = null
+
+        /**
+         * Stops the recording (the chunk being written is finished), pulls it and writes the chapters. Once: a second
+         * call (from a failure after the first) returns the first's report.
+         */
+        fun stop(): String = report ?: finish().also { report = it }
+
+        private fun finish(): String {
+            try {
+                Runtime.getRuntime().removeShutdownHook(hook)
+            } catch (_: IllegalStateException) {
+                // Shutting down already: the hook is stopping the recorder.
+            }
             // Timed here: the last frame is held until the run ended, not until the recorder wound down.
             val stoppedAt = System.currentTimeMillis()
             // A recorder that is no longer running when the run ends stopped on its own: it failed part-way.
             val endedEarly = !recorder.isAlive
             if (!recorder.stop(30.seconds)) return "warning: the recorder did not finish; its chunks stay on the device; see ${log.path}"
-            chaptersFile.writeText(chapters.joinToString("\n") + "\n")
+            try {
+                chaptersFile.writeText(chapters.joinToString("\n") + "\n")
+            } catch (error: IOException) {
+                return "warning: cannot write ${chaptersFile.path}: $error"
+            }
             val files = try {
                 recorder.finish(video, log, stoppedAt)
             } catch (error: AppCtlException) {

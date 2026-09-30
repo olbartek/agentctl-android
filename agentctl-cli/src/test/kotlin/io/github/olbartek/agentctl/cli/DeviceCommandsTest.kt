@@ -129,4 +129,39 @@ class DeviceCommandsTest {
         val duration = Video.duration(video) ?: error("no duration")
         assertTrue(duration >= 2.8.seconds && duration <= 3.3.seconds, "duration $duration")
     }
+
+    private fun layout(): Layout = Layout(Files.createTempDirectory("record").toFile(), ".appctl").also { it.output.mkdirs() }
+
+    /** A `stop` that died holding the recording (killed, Ctrl+C) gives it back, so a later `stop` finds it. */
+    @Test
+    fun aClaimWhoseStopDiedIsAdopted() {
+        val layout = layout()
+        val dead = ProcessBuilder("true").start().apply { waitFor() }.pid()
+        File(layout.output, "record.json.stopping.$dead").writeText(state.render())
+        RecordState.adoptAbandonedClaims(layout)
+        assertEquals(state.render(), RecordState.file(layout).readText())
+    }
+
+    @Test
+    fun aClaimStillBeingStoppedIsLeftAlone() {
+        val layout = layout()
+        val claim = File(layout.output, "record.json").apply { writeText(state.render()) }.let { RecordState.claim(layout) } ?: error("not claimed")
+        RecordState.adoptAbandonedClaims(layout)
+        assertTrue(!RecordState.file(layout).exists() && claim.isFile)
+        // Of two stops, the second finds nothing to claim.
+        assertNull(RecordState.claim(layout))
+    }
+
+    /** A stop that could not finish gives record.json back, but never over a newer recording's. */
+    @Test
+    fun unclaimingNeverReplacesANewerRecording() {
+        val layout = layout()
+        RecordState.file(layout).writeText(state.render())
+        val claim = RecordState.claim(layout) ?: error("not claimed")
+        val newer = state.copy(pid = 5151).render()
+        RecordState.file(layout).writeText(newer)
+        RecordState.unclaim(layout, claim)
+        assertEquals(newer, RecordState.file(layout).readText())
+        assertTrue(claim.isFile)
+    }
 }

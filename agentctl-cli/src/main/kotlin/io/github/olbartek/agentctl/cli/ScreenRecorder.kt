@@ -57,8 +57,11 @@ internal class ScreenRecorder private constructor(
      */
     fun isRecording(file: String): Boolean {
         val handle = handle?.takeIf { it.isAlive } ?: return false
-        val command = handle.info().commandLine().orElse(null) ?: return work.isDirectory
-        return file in command
+        val info = handle.info()
+        info.commandLine().orElse(null)?.let { return file in it }
+        // Hidden: our own processes' command lines are not, so another user's process is not ours.
+        val user = info.user().orElse(null)
+        return (user == null || user == System.getProperty("user.name")) && work.isDirectory
     }
 
     /** When the first chunk started recording (epoch ms), once [awaitStart] saw it. */
@@ -189,7 +192,7 @@ internal class ScreenRecorder private constructor(
               began=${'$'}(date +%s)
               "${'$'}adb" -s "${'$'}serial" shell "echo \${'$'}\${'$'} && exec screenrecord --time-limit ${'$'}limit ${'$'}remote" > "${'$'}work/$CHUNK_PID" &
               chunk=${'$'}!
-              status=0; interrupted=0; tries=0; seen=
+              status=0; interrupted=0; tries=0
               while :; do
                 if [ ${'$'}stop = 0 ]; then
                   # Returns when the chunk ends, or early when a signal arrives (then stop is 1).
@@ -199,10 +202,9 @@ internal class ScreenRecorder private constructor(
                 fi
                 device=${'$'}(head -n 1 "${'$'}work/$CHUNK_PID" 2>/dev/null | tr -d '\r')
                 if [ -n "${'$'}device" ]; then
-                  [ -z "${'$'}seen" ] && seen=${'$'}(date +%s)
-                  # A chunk gets a second after its pid is out: screenrecord only finishes its file on SIGINT once it
-                  # is set up. Signalled once, and only while it runs (its pid may belong to another process after).
-                  while [ ${'$'}interrupted = 0 ] && [ ${'$'}((${'$'}(date +%s) - seen)) -lt 2 ]; do sleep 0.2; done
+                  # A new chunk gets a second or two first: screenrecord only finishes its file on SIGINT once it is set
+                  # up. Signalled once, and only while it runs (its pid may belong to another process after).
+                  while [ ${'$'}interrupted = 0 ] && [ ${'$'}((${'$'}(date +%s) - began)) -lt 2 ]; do sleep 0.2; done
                   if [ ${'$'}interrupted = 0 ] && kill -0 ${'$'}chunk 2>/dev/null; then
                     # Marked only once it landed, so a later stop tries again.
                     "${'$'}adb" -s "${'$'}serial" shell kill -2 "${'$'}device" && interrupted=1
