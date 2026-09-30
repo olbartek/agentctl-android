@@ -8,9 +8,8 @@ import io.github.olbartek.agentctl.Effect
 import io.github.olbartek.agentctl.EffectScope
 import io.github.olbartek.agentctl.Next
 import io.github.olbartek.agentctl.Reducer
-import io.github.olbartek.agentctl.ResolvedCommand
 import io.github.olbartek.agentctl.ScreenDoc
-import io.github.olbartek.agentctl.appending
+import io.github.olbartek.agentctl.appendingBackFallback
 import io.github.olbartek.agentctl.examples.agentshop.auth.AuthFlow
 import io.github.olbartek.agentctl.examples.agentshop.auth.AuthFlowAgent
 import io.github.olbartek.agentctl.examples.agentshop.clients.MockAccounts
@@ -21,9 +20,7 @@ import io.github.olbartek.agentctl.examples.agentshop.models.Session
 import io.github.olbartek.agentctl.examples.agentshop.models.attempt
 import io.github.olbartek.agentctl.examples.agentshop.onboarding.OnboardingFlow
 import io.github.olbartek.agentctl.examples.agentshop.onboarding.OnboardingFlowAgent
-import io.github.olbartek.agentctl.invalidArgument
 import io.github.olbartek.agentctl.next
-import io.github.olbartek.agentctl.notApplicable
 
 /**
  * The root: launching, then auth, onboarding (once, for a new account) or home.
@@ -151,19 +148,16 @@ object AppFeature {
 object AppFeatureAgent : AgentContainer<AppFeature.State, AppFeature.Action> {
     private const val LOGIN_AS_HELP = "Save a seeded account's session and go straight home."
     private const val RESET_HELP = "Restart from a fresh launch (keeps the saved session and the mock data)."
-    private const val BACK_HELP = "Go back to the previous screen."
 
-    /** Root commands, available on every screen. */
-    private val rootCommands: List<AgentCommand<AppFeature.State, AppFeature.Action>> = listOf(
-        AgentCommand.parsing("login-as", argument = "<alice|bob>", help = LOGIN_AS_HELP) { name ->
-            AppFeature.Action.LoginAs(MockAccounts.session(named = name) ?: invalidArgument("expected alice|bob"))
-        },
+    /** Root commands, available on every screen: `inheritingCommands` adds them to the active screen and the registry. */
+    override val inheritedCommands: List<AgentCommand<AppFeature.State, AppFeature.Action>> = listOf(
+        AgentCommand.choice(
+            "login-as",
+            listOf("alice" to MockAccounts.alice.user, "bob" to MockAccounts.bob.user),
+            help = LOGIN_AS_HELP,
+        ) { AppFeature.Action.LoginAs(MockAccounts.session(it)) },
         AgentCommand.action("reset", help = RESET_HELP, action = AppFeature.Action.Reset),
     )
-
-    /** `back` when no container has anything to pop: a clear error instead of "unknown command". */
-    private fun backFallback(path: String): ResolvedCommand<AppFeature.Action> =
-        ResolvedCommand("back", null, BACK_HELP, "AppFeature", null) { notApplicable("nothing to go back to on $path") }
 
     override fun activeScreen(state: AppFeature.State): ActiveScreen<AppFeature.Action> {
         val screen: ActiveScreen<AppFeature.Action> = when (state) {
@@ -180,17 +174,14 @@ object AppFeatureAgent : AgentContainer<AppFeature.State, AppFeature.Action> {
                 OnboardingFlowAgent.activeScreen(state.state).map { AppFeature.Action.Onboarding(it) }.identified("onboarding")
             is AppFeature.State.Home -> HomeTabsAgent.activeScreen(state.state).map { AppFeature.Action.Home(it) }
         }
-        return screen
-            .appending(rootCommands.map { it.resolve(state, source = "AppFeature") })
-            .appending(listOf(backFallback(screen.path)))
+        // `back` when no container has anything to pop: a clear error instead of "unknown command".
+        return inheritingCommands(screen, state).appendingBackFallback(containerName)
     }
 
     override val registry: List<ScreenDoc>
         get() {
-            val back = CommandDoc("back", null, "Fails with 'nothing to go back to' when no screen is pushed.", "AppFeature")
-            val root = rootCommands.map { it.doc("AppFeature") } + back
             val screens = listOf(ScreenDoc("launching", "AppFeature", emptyList(), emptyList())) +
                 AuthFlowAgent.registry + OnboardingFlowAgent.registry + HomeTabsAgent.registry
-            return screens.map { it.inheriting(root) }
+            return inheritingCommands(screens).map { it.inheriting(listOf(CommandDoc.backFallback(containerName))) }
         }
 }

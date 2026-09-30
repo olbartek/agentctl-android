@@ -12,9 +12,6 @@ interface Coded {
 inline fun <reified E> codeOf(code: String): E? where E : Enum<E>, E : Coded =
     enumValues<E>().firstOrNull { it.code == code }
 
-/** Every code of a [Coded] enum, in declaration order, joined by `|`: how a command documents its argument. */
-inline fun <reified E> codeChoices(): String where E : Enum<E>, E : Coded = enumValues<E>().joinToString("|") { it.code }
-
 /** Errors from the auth backend. */
 enum class AuthError(override val code: String) : Coded {
     INVALID_CREDENTIALS("invalidCredentials"),

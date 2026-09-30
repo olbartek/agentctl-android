@@ -15,11 +15,15 @@ import io.github.olbartek.agentctl.examples.agentshop.clients.MockAccounts
 import io.github.olbartek.agentctl.examples.agentshop.clients.SessionClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.StoredSession
 import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabs
+import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabsAgent
 import io.github.olbartek.agentctl.examples.agentshop.models.AccountError
 import io.github.olbartek.agentctl.examples.agentshop.models.AccountException
 import io.github.olbartek.agentctl.examples.agentshop.models.AccountProfile
 import io.github.olbartek.agentctl.examples.agentshop.navigation.Stack
+import io.github.olbartek.agentctl.examples.agentshop.onboarding.InterestsAgent
 import io.github.olbartek.agentctl.examples.agentshop.onboarding.OnboardingFlow
+import io.github.olbartek.agentctl.examples.agentshop.shop.CheckoutAgent
+import io.github.olbartek.agentctl.examples.agentshop.shop.ShopFeedAgent
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -156,6 +160,45 @@ class AppFeatureTest {
         store.send(AppFeature.Action.LoginAs(alice))
         assertTrue(store.state is AppFeature.State.Home)
         assertEquals(0, store.pending)
+    }
+
+    /**
+     * Each choice's usage and refusal, as a failed step prints them (`<usage>: <message>`, CONTRACT.md §1.3): none of
+     * the transcripts sends a wrong word, so these pin what the reference prints.
+     */
+    @Test
+    fun choiceCommandsDocumentAndRefuseTheirWords() {
+        val commands = HomeTabsAgent.inheritedCommands +
+            ShopFeedAgent.commands +
+            InterestsAgent.commands +
+            CheckoutAgent.commands +
+            AppFeatureAgent.inheritedCommands
+        fun refusal(name: String): String {
+            val command = commands.first { it.name == name }
+            val error = assertFailsWith<AgentCommandException> { command.makeAction("nope") }.error
+            return "${command.name} ${command.argument}: ${error.message}"
+        }
+        assertEquals("tab <shop|cart|orders|profile>: invalid argument: expected shop|cart|orders|profile", refusal("tab"))
+        assertEquals(
+            "filter <all|shoes|bags|watches|jackets|accessories|home>: invalid argument: expected all|shoes|bags|watches|jackets|accessories|home",
+            refusal("filter"),
+        )
+        assertEquals(
+            "toggle <shoes|bags|watches|jackets|accessories|home>: invalid argument: expected shoes|bags|watches|jackets|accessories|home",
+            refusal("toggle"),
+        )
+        assertEquals("login-as <alice|bob>: invalid argument: expected alice|bob", refusal("login-as"))
+        for (name in listOf("sort", "shipping", "payment")) {
+            val refused = refusal(name)
+            val words = refused.substringAfter("<").substringBefore(">")
+            assertEquals("$name <$words>: invalid argument: expected $words", refused)
+        }
+        assertEquals(
+            "back: nothing to go back to on home/orders",
+            "back: " + assertFailsWith<AgentCommandException> {
+                AppFeatureAgent.activeScreen(AppFeature.State.Home(HomeTabs.State(UUID(0, 1), MockAccounts.session(MockAccounts.alice.user)).copy(selectedTab = HomeTabs.Tab.ORDERS))).command("back")!!.makeAction(null)
+            }.error.message,
+        )
     }
 
     @Test

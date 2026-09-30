@@ -101,7 +101,7 @@ class OrderTest {
     fun errorCodesAreTheReferencesRawValues() {
         assertEquals(AuthError.ACCOUNT_LOCKED, codeOf<AuthError>("accountLocked"))
         assertEquals("notCancellable", OrdersError.NOT_CANCELLABLE.code)
-        assertEquals("shoes|bags|watches|jackets|accessories|home", codeChoices<ProductCategory>())
+        assertEquals(listOf("shoes", "bags", "watches", "jackets", "accessories", "home"), ProductCategory.entries.map { it.code })
     }
 
     @Test

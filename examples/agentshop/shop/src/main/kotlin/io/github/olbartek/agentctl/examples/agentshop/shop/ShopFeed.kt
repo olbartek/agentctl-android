@@ -14,8 +14,6 @@ import io.github.olbartek.agentctl.examples.agentshop.models.Outcome
 import io.github.olbartek.agentctl.examples.agentshop.models.Product
 import io.github.olbartek.agentctl.examples.agentshop.models.ProductCategory
 import io.github.olbartek.agentctl.examples.agentshop.models.attempt
-import io.github.olbartek.agentctl.examples.agentshop.models.codeChoices
-import io.github.olbartek.agentctl.examples.agentshop.models.codeOf
 import io.github.olbartek.agentctl.examples.agentshop.models.trimmingWhitespaces
 import io.github.olbartek.agentctl.invalidArgument
 import io.github.olbartek.agentctl.next
@@ -106,8 +104,8 @@ object ShopFeed {
 }
 
 object ShopFeedAgent : AgentScreen<ShopFeed.State, ShopFeed.Action> {
-    private val filters = "all|" + codeChoices<ProductCategory>()
-    private val sorts = codeChoices<ShopFeed.Sort>()
+    /** `all` for no filter, then every category. */
+    private val filters: List<Pair<String, ProductCategory?>> = listOf("all" to null) + ProductCategory.entries.map { it.code to it }
 
     override val screenPaths: List<String> = listOf("home/shop")
 
@@ -129,16 +127,13 @@ object ShopFeedAgent : AgentScreen<ShopFeed.State, ShopFeed.Action> {
     override val onAppear: ShopFeed.Action = ShopFeed.Action.OnAppear
 
     override val commands: List<AgentCommand<ShopFeed.State, ShopFeed.Action>> = listOf(
-        AgentCommand.parsing("filter", argument = "<$filters>", help = "Show one category, or all.") { text ->
-            if (text == "all") return@parsing ShopFeed.Action.FilterTapped(null)
-            ShopFeed.Action.FilterTapped(ProductCategory.ofCode(text) ?: invalidArgument("expected $filters"))
-        },
+        AgentCommand.choice("filter", filters, help = "Show one category, or all.") { ShopFeed.Action.FilterTapped(it) },
         AgentCommand.text("search", help = "Type in the search field; matches product names as you type.") {
             ShopFeed.Action.QueryChanged(it)
         },
         AgentCommand.action("clear-search", help = "Clear the search field.", action = ShopFeed.Action.ClearSearchTapped),
-        AgentCommand.parsing("sort", argument = "<$sorts>", help = "Sort the products.") { text ->
-            ShopFeed.Action.SortTapped(codeOf<ShopFeed.Sort>(text) ?: invalidArgument("expected $sorts"))
+        AgentCommand.choice("sort", of = ShopFeed.Sort.entries, word = { it.code }, help = "Sort the products.") {
+            ShopFeed.Action.SortTapped(it)
         },
         AgentCommand.parsing(
             "open",

@@ -90,6 +90,17 @@ public class AgentLaunch<S, A>(config: AppCtlConfig<S, A>, intent: Intent?) {
     public companion object {
         private const val TAG = "AgentCtlBridge"
 
+        /**
+         * Whether this launch asks for the bridge: the CLI's `app` subcommands always send the `agent-port` extra, and
+         * any other launch (the launcher's icon, Android Studio's Run) does not. An app that should run as the plain
+         * app over its live dependencies unless an agent launched it checks this before creating an [AgentLaunch]:
+         *
+         * ```kotlin
+         * if (AgentLaunch.isRequested(activity.intent)) { … AgentLaunch(MyAppConfig.appCtl, activity.intent) … } else { … }
+         * ```
+         */
+        public fun isRequested(intent: Intent?): Boolean = intent?.extras?.containsKey(AgentLaunchOptions.PORT) == true
+
         /** Reads the launch extras; a value of the wrong type or out of range is ignored (CONTRACT.md §8.2). */
         public fun options(extras: Bundle?): AgentLaunchOptions {
             if (extras == null) return AgentLaunchOptions()

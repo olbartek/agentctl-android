@@ -77,7 +77,23 @@ public data class MockLatency(val range: ClosedRange<Duration>?) {
 }
 
 /** A mock method that can be made to fail with `mock <name> <code>`: its name and the error codes it accepts. */
-public data class MockMethod(val name: String, val errorCodes: List<String>)
+public data class MockMethod(val name: String, val errorCodes: List<String>) {
+    /** This method also accepting [codes], after its own and skipping any it already lists. */
+    public fun accepting(codes: List<String>): MockMethod = copy(errorCodes = errorCodes + codes.filter { it !in errorCodes })
+}
+
+/**
+ * Every method also accepting [codes], the failures any call can have whatever its client's own errors, e.g. `network`
+ * for everything that goes over the wire:
+ *
+ * ```kotlin
+ * (AuthClient.mockMethods + OrdersClient.mockMethods).accepting(listOf("network"))
+ * ```
+ *
+ * Each method keeps its own codes first, in their order, and gains the common ones after them, skipping any it already
+ * lists, so `mock`'s `valid:` list and the docs' table read the same as when every client appended them by hand.
+ */
+public fun List<MockMethod>.accepting(codes: List<String>): List<MockMethod> = map { it.accepting(codes) }
 
 /**
  * The single shim every mock backend method goes through: the Kotlin counterpart of the reference's `mockCall`.

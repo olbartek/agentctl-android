@@ -16,8 +16,6 @@ import io.github.olbartek.agentctl.examples.agentshop.clients.CatalogClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.OrdersClient
 import io.github.olbartek.agentctl.examples.agentshop.models.Coded
 import io.github.olbartek.agentctl.examples.agentshop.models.Session
-import io.github.olbartek.agentctl.examples.agentshop.models.codeChoices
-import io.github.olbartek.agentctl.examples.agentshop.models.codeOf
 import io.github.olbartek.agentctl.examples.agentshop.navigation.Stack
 import io.github.olbartek.agentctl.examples.agentshop.shop.Cart
 import io.github.olbartek.agentctl.examples.agentshop.shop.CartAgent
@@ -29,7 +27,6 @@ import io.github.olbartek.agentctl.examples.agentshop.shop.ProductDetail
 import io.github.olbartek.agentctl.examples.agentshop.shop.ProductDetailAgent
 import io.github.olbartek.agentctl.examples.agentshop.shop.ShopFeed
 import io.github.olbartek.agentctl.examples.agentshop.shop.ShopFeedAgent
-import io.github.olbartek.agentctl.invalidArgument
 import io.github.olbartek.agentctl.next
 import java.util.UUID
 
@@ -251,16 +248,16 @@ object HomeTabs {
 object HomeTabsAgent : AgentContainer<HomeTabs.State, HomeTabs.Action> {
     private const val BACK_HELP = "Go back to the previous screen."
     private const val TAB_HELP = "Switch tab."
-    private val tabs = codeChoices<HomeTabs.Tab>()
 
-    private val tabCommand = AgentCommand.parsing<HomeTabs.State, HomeTabs.Action>("tab", argument = "<$tabs>", help = TAB_HELP) { text ->
-        HomeTabs.Action.TabSelected(codeOf<HomeTabs.Tab>(text) ?: invalidArgument("expected $tabs"))
-    }
+    /** `tab` on every screen of every tab, pushed or not. */
+    override val inheritedCommands: List<AgentCommand<HomeTabs.State, HomeTabs.Action>> = listOf(
+        AgentCommand.choice("tab", of = HomeTabs.Tab.entries, word = { it.code }, help = TAB_HELP) { HomeTabs.Action.TabSelected(it) },
+    )
 
     override fun activeScreen(state: HomeTabs.State): ActiveScreen<HomeTabs.Action> {
-        val commands = mutableListOf<ResolvedCommand<HomeTabs.Action>>(tabCommand.resolve(state, source = "HomeTabs"))
+        val commands = mutableListOf<ResolvedCommand<HomeTabs.Action>>()
         fun back(action: HomeTabs.Action) {
-            commands.add(AgentCommand.action<HomeTabs.State, HomeTabs.Action>("back", help = BACK_HELP, action = action).resolve(state, "HomeTabs"))
+            commands.add(AgentCommand.action<HomeTabs.State, HomeTabs.Action>("back", help = BACK_HELP, action = action).resolve(state, containerName))
         }
 
         val screen: ActiveScreen<HomeTabs.Action> = when (state.selectedTab) {
@@ -303,20 +300,22 @@ object HomeTabsAgent : AgentContainer<HomeTabs.State, HomeTabs.Action> {
             }
             HomeTabs.Tab.PROFILE -> ProfileAgent.activeScreen(state.profile).map { HomeTabs.Action.Profile(it) }
         }
-        return screen.identified("home#${state.id}").appending(commands)
+        return inheritingCommands(screen.identified("home#${state.id}"), state).appending(commands)
     }
 
     override val registry: List<ScreenDoc>
         get() {
-            val tab = CommandDoc("tab", "<$tabs>", TAB_HELP, "HomeTabs")
-            val back = CommandDoc("back", null, BACK_HELP, "HomeTabs")
-            return ShopFeedAgent.screenDocs.map { it.inheriting(listOf(tab)) } +
-                ProductDetailAgent.screenDocs.map { it.inheriting(listOf(tab, back)) } +
-                CartAgent.screenDocs.map { it.inheriting(listOf(tab)) } +
-                CheckoutAgent.screenDocs.map { it.inheriting(listOf(tab, back)) } +
-                OrderConfirmationAgent.screenDocs.map { it.inheriting(listOf(tab)) } +
-                OrdersListAgent.screenDocs.map { it.inheriting(listOf(tab)) } +
-                OrderDetailAgent.screenDocs.map { it.inheriting(listOf(tab, back)) } +
-                ProfileAgent.screenDocs.map { it.inheriting(listOf(tab)) }
+            val back = CommandDoc("back", null, BACK_HELP, containerName)
+            // `back` is ours too, so `inheritingCommands` puts `tab` before it, as on the active screen.
+            return inheritingCommands(
+                ShopFeedAgent.screenDocs +
+                    ProductDetailAgent.screenDocs.map { it.inheriting(listOf(back)) } +
+                    CartAgent.screenDocs +
+                    CheckoutAgent.screenDocs.map { it.inheriting(listOf(back)) } +
+                    OrderConfirmationAgent.screenDocs +
+                    OrdersListAgent.screenDocs +
+                    OrderDetailAgent.screenDocs.map { it.inheriting(listOf(back)) } +
+                    ProfileAgent.screenDocs,
+            )
         }
 }
