@@ -79,6 +79,12 @@ class WrapperTest {
         assertEquals(0 to "JAVA_HOME=${prefix.path}/libexec/openjdk.jdk/Contents/Home\n", run())
     }
 
+    /** An unset JAVA_HOME is not `/bin/java`, which exists on a Linux machine with a JDK installed. */
+    @Test
+    fun withoutJavaHomeOrAnyJavaItSaysSo() {
+        assertEquals(3 to "fixturectl: no JDK 17 or newer (JAVA_HOME: unset); set JAVA_HOME to one, or: brew install openjdk@21\n", run())
+    }
+
     @Test
     fun withNoJdkAtAllItSaysSo() {
         val old = jdk("jdk11", "openjdk version \"11.0.22\" 2024-01-16")
