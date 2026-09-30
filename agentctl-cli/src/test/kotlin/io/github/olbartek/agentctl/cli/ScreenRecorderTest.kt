@@ -21,13 +21,14 @@ class ScreenRecorderTest {
     private val log = File(sandbox, "record.log")
 
     /** A fake adb: `shell` runs the command here, with /sdcard mapped into [device] and signals as a device has them. */
-    private fun adb(startDelay: String = "0", failsAtOnce: Boolean = false): String {
+    private fun adb(startDelay: String = "0", failsAtOnce: Boolean = false, writesNothing: Boolean = false): String {
         File(bin, "screenrecord").apply {
             writeText(
                 """
                 #!/bin/sh
                 # screenrecord --time-limit N FILE: "partial" until it ends, "complete" once it does, on SIGINT too.
                 ${if (failsAtOnce) "echo 'cannot record' >&2; exit 0" else ""}
+                ${if (writesNothing) "file=${'$'}3; mkdir -p \"${'$'}(dirname \"${'$'}file\")\"; : > \"${'$'}file\"; trap 'exit 0' INT; while :; do sleep 0.1; done" else ""}
                 limit=${'$'}2; file=${'$'}3
                 mkdir -p "${'$'}(dirname "${'$'}file")"; echo partial > "${'$'}file"
                 trap 'echo complete > "${'$'}file"; exit 0' INT
@@ -65,6 +66,17 @@ class ScreenRecorderTest {
     }
 
     private fun chunkFiles(): Map<String, String> = device.listFiles().orEmpty().filter { it.name.endsWith(".mp4") }.associate { it.name to it.readText().trim() }
+
+    /** A recording whose file is empty is not a recording: `app test --record` then says nothing was recorded. */
+    @Test
+    fun anEmptyRecordingIsNotReportedAsOne() {
+        val recorder = ScreenRecorder.start(adb(writesNothing = true), "emulator-5556", File(sandbox, "demo.mp4"), File(sandbox, "work"), log, detached = false, chunkSeconds = 30)
+        assertTrue(recorder.awaitStart(10.seconds), log.readText())
+        assertTrue(recorder.stop(10.seconds))
+        assertEquals(listOf(""), chunkFiles().values.toList())
+        assertEquals(null, recorder.finish(File(sandbox, "out/demo.mp4"), log))
+        assertTrue(!File(sandbox, "out/demo.mp4").exists())
+    }
 
     @Test
     fun aStopFinishesTheChunkBeingWritten() {

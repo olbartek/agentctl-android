@@ -18,9 +18,26 @@ NAME="appctl"        # its applicationName; the executable is <module dir>/build
 # resolved from. Without it the CLI walks up from the working directory looking for the config's `rootMarker`
 # (`settings.gradle.kts` by default).
 #
-# JAVA_HOME must name a JDK 17 or newer, as for any Gradle build.
+# The build needs a JDK 17 or newer: JAVA_HOME's when it has one, else the `java` on PATH, else Homebrew's
+# openjdk@21. With none of them it says so and exits 3.
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+# A JDK 17 or newer: JAVA_HOME's, else the `java` on PATH, else Homebrew's openjdk@21 (a Mac without a system JDK).
+java_major() { "$1" -version 2>&1 | sed -n 's/.* version "\([0-9]*\).*/\1/p' | head -n 1; }
+jdk_ok() { [ -x "$1" ] && major="$(java_major "$1")" && [ -n "$major" ] && [ "$major" -ge 17 ]; }
+if ! jdk_ok "$JAVA_HOME/bin/java"; then
+  if jdk_ok "$(command -v java 2>/dev/null)"; then
+    unset JAVA_HOME   # Gradle then uses the java on PATH
+  else
+    BREW_JDK="$(brew --prefix openjdk@21 2>/dev/null)/libexec/openjdk.jdk/Contents/Home"
+    if jdk_ok "$BREW_JDK/bin/java"; then
+      JAVA_HOME="$BREW_JDK"; export JAVA_HOME
+    else
+      echo "$(basename "$0"): no JDK 17 or newer (JAVA_HOME: ${JAVA_HOME:-unset}); set JAVA_HOME to one, or: brew install openjdk@21" >&2
+      exit 3
+    fi
+  fi
+fi
 MODULE_DIR="$(echo "${MODULE#:}" | tr ':' '/')"
 "$ROOT/gradlew" -p "$ROOT" -q --console=plain "$MODULE:installDist" >&2 || exit 3
 APPCTL_ROOT="$ROOT" exec "$ROOT/$MODULE_DIR/build/install/$NAME/bin/$NAME" "$@"
