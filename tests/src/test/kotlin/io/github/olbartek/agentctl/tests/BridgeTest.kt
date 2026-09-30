@@ -243,20 +243,28 @@ class BridgeServerTest {
         assertTrue(request("GET", "/snapshot", port).body.contains("screen=items "), "the script was posted")
     }
 
-    /** From bridge.json, a header the answer lacks is not compared: an app built before X-Appctl-Platform (CONTRACT.md §8.6). */
+    /**
+     * From bridge.json, an answer that lacks a header is not the recorded app either: the launch that recorded it was
+     * answered with both (CONTRACT.md §8.6). Nothing is posted to it.
+     */
     @Test
-    fun aBridgeThatDoesNotSayItsPlatformIsAcceptedForTheRecordedApp() {
-        val port = startBridge(platform = null)
-        val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to rootWithLaunchState(port).path))
-        assertEquals(0, result.status, result.err)
-    }
-
-    @Test
-    fun aBridgeThatDoesNotSayWhichAppItIsIsAccepted() {
-        val port = startBridge(appId = null)
-        val root = rootWithLaunchState(port, appId = "dev.other")
-        val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path))
-        assertEquals(0, result.status, result.err)
+    fun aBridgeThatDoesNotSayWhoItIsIsNotTheRecordedApp() {
+        val app = TinyAppConfig.appCtl.applicationId
+        for ((appId, platform, shown) in listOf(
+            Triple(app, null, "$app (no X-Appctl-Platform)"),
+            Triple(null, null, "an app without X-Appctl-App"),
+        )) {
+            val port = startBridge(appId = appId, platform = platform)
+            val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to rootWithLaunchState(port).path))
+            assertEquals(3, result.status, result.combined)
+            assertEquals(
+                "error: the app's agent bridge on 127.0.0.1:$port answers as $shown, not $app (android) from .appctl/bridge.json, " +
+                    "which is stale: relaunch with ./tinyctl app launch\n",
+                result.err,
+            )
+            assertTrue(request("GET", "/snapshot", port).body.contains("screen=items "), "the script was posted")
+            server?.stop()
+        }
     }
 
     @Test

@@ -704,8 +704,8 @@ often has the same ID. `app launch` checks that its own app on Android answered,
 of every scenario the same way (a mismatch fails the scenario as not run, exit 3). A different app or platform, or an
 answer without either header, means the port was taken. A scanned port then gets one more try on the next free port, and a port you named
 fails with exit 3. When the port came from `bridge.json`, `app run` first asks `GET /snapshot` who answers, and posts
-the script only to the recorded app and platform; `app state` and `app screens` check their own answer. A header the
-answer lacks (a bridge from before it) is not compared there. An error names both sides:
+the script only to the recorded app and platform; `app state` and `app screens` check their own answer. An answer
+without either header is not the recorded app either. An error names both sides:
 `answers as <app> (<platform>), not <app> (<platform>)`.
 
 A seed is a script and fails like one: at its first failing step, or at a `(launch)` that did not settle. The app
