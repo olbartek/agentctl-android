@@ -1,7 +1,14 @@
 package io.github.olbartek.agentctl.cli
 
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
+import io.github.olbartek.agentctl.runtime.HttpParser
 import java.io.File
+import java.io.IOException
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.time.Instant
 import java.util.Locale
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -20,9 +27,13 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
     private val layout = Layout(root, config.outputPath)
     private val adb = AndroidSdk.adb(root, cli.environment)
 
-    data class Launched(val device: Device, val report: String)
+    data class Launched(val device: Device, val port: Int, val report: String)
 
-    fun launch(seed: String?, device: String?, latency: Int?, clearSession: Boolean, build: Boolean, port: Int): Launched {
+    /**
+     * Launches the app with its bridge on [port], or — when it is `null` — on the first port from 8765 up that is
+     * free on the Mac and on the device, then records the launch in `<outputPath>/bridge.json`.
+     */
+    fun launch(seed: String?, device: String?, latency: Int?, clearSession: Boolean, build: Boolean, port: Int?): Launched {
         val start = TimeSource.Monotonic.markNow()
         val target = resolve(device)
         val log = File(layout.logs, "app-launch.log")
@@ -35,18 +46,88 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             )
             if (status != 0) throw AppCtlException("${config.gradle.install} failed; log: ${log.path}")
         }
-        adbOrThrow(listOf("forward", "tcp:$port", "tcp:$port"), target, log)
-        Shell.run(listOf(adb, "-s", target.serial, "shell", "am", "force-stop", config.applicationId), root, log, append = true)
+        // Stopped first, so a bridge it left listening does not count against the port it can have again. The port is
+        // chosen now, after the build and install, right before the launch.
+        stop(target, log)
+        var chosen = port ?: freePort(target, log)
         val component = config.applicationId + "/" + config.launchActivity
-        val extras = mutableListOf("--ei", AgentLaunchOptions.PORT, port.toString())
-        seed?.let { extras += listOf("--es", AgentLaunchOptions.SEED, shellQuoted(it)) }
-        latency?.let { extras += listOf("--ei", AgentLaunchOptions.MOCK_LATENCY, it.toString()) }
-        if (clearSession) extras += listOf("--ez", AgentLaunchOptions.CLEAR_SESSION, "true")
-        adbOrThrow(listOf("shell", "am", "start", "-W", "-n", component) + extras, target, log)
-        val snapshot = BridgeClient(port).waitUntilReady()
+        var answer: BridgeClient.Response
+        var retried = false
+        while (true) {
+            val forwarded = Shell.run(listOf(adb, "-s", target.serial, "forward", "tcp:$chosen", "tcp:$chosen"), root, log, append = true) == 0
+            if (!forwarded) {
+                // Taken on the Mac between the check and the forward: a scanned port moves on, a named one fails.
+                if (port != null || retried) throw AppCtlException("adb forward tcp:$chosen tcp:$chosen failed; log: ${log.path}")
+                retried = true
+                chosen = freePort(target, log, after = chosen)
+                continue
+            }
+            val extras = mutableListOf("--ei", AgentLaunchOptions.PORT, chosen.toString())
+            seed?.let { extras += listOf("--es", AgentLaunchOptions.SEED, shellQuoted(it)) }
+            latency?.let { extras += listOf("--ei", AgentLaunchOptions.MOCK_LATENCY, it.toString()) }
+            if (clearSession) extras += listOf("--ez", AgentLaunchOptions.CLEAR_SESSION, "true")
+            adbOrThrow(listOf("shell", "am", "start", "-W", "-n", component) + extras, target, log)
+            answer = BridgeClient(chosen).waitUntilReady()
+            // Another app's bridge answered on this port. The app just launched is built from the same checkout as
+            // this CLI and always says which app it is, so an answer without X-Appctl-App is foreign too (an older app
+            // holding the port). A port found by the scan gets one more try, on the next free port above it.
+            if (answer.app == config.applicationId) break
+            if (port != null || retried) {
+                // Leave nothing half-launched: our app without a bridge, a forward to the other app.
+                stop(target, log)
+                Shell.run(listOf(adb, "-s", target.serial, "forward", "--remove", "tcp:$chosen"), root, log, append = true)
+                throw AppCtlException(Message.anotherApp(chosen, answer.app, config.applicationId))
+            }
+            retried = true
+            stop(target, log)
+            Shell.run(listOf(adb, "-s", target.serial, "forward", "--remove", "tcp:$chosen"), root, log, append = true)
+            chosen = freePort(target, log, after = chosen)
+        }
+        val port = chosen
+        val snapshot = answer.body
+        BridgeState(BridgeState.PLATFORM, target.serial, port, config.applicationId, Instant.now()).save(layout)
         val seconds = String.format(Locale.ROOT, "%.1f", start.elapsedNow().inWholeMilliseconds / 1000.0)
         val line = snapshot.split("\n").drop(1).firstOrNull()?.trim() ?: ""
-        return Launched(target, "launched on ${target.label} [${target.serial}] in ${seconds}s: $line")
+        return Launched(target, port, "launched on ${target.label} [${target.serial}] at 127.0.0.1:$port in ${seconds}s: $line")
+    }
+
+    /**
+     * Stops the app and waits (up to 5 s) until its process has gone, so the port its bridge held is free again and
+     * a relaunch can have it back.
+     */
+    private fun stop(device: Device, log: File) {
+        Shell.run(listOf(adb, "-s", device.serial, "shell", "am", "force-stop", config.applicationId), root, log, append = true)
+        val start = TimeSource.Monotonic.markNow()
+        while (start.elapsedNow() < 5.seconds) {
+            val pid = Shell.capture(listOf(adb, "-s", device.serial, "shell", "pidof", config.applicationId))?.trim()
+            if (pid.isNullOrEmpty()) return
+            Thread.sleep(100)
+        }
+    }
+
+    /**
+     * The first port of [Ports.SCAN] above [after] (if given) that is free on the Mac (nothing answers or is bound
+     * there: another device's forward, an iOS simulator's bridge) and on the device (nothing listens on it). The
+     * forward this app's own last launch on this device left (recorded in `bridge.json`) is removed first when
+     * nothing on the device listens on it any more, so a relaunch gets its port back; no other forward is touched.
+     */
+    private fun freePort(device: Device, log: File, after: Int? = null): Int {
+        val listening = Ports.listening(
+            Shell.capture(listOf(adb, "-s", device.serial, "shell", "cat", "/proc/net/tcp", "/proc/net/tcp6")) ?: "",
+        )
+        val recorded = try {
+            BridgeState.load(layout)
+        } catch (_: Unreadable) {
+            null
+        }
+        val forwards = Shell.capture(listOf(adb, "forward", "--list")) ?: ""
+        Ports.ownStaleForward(recorded, device.serial, config.applicationId, forwards, listening)?.let { stale ->
+            Shell.run(listOf(adb, "-s", device.serial, "forward", "--remove", "tcp:$stale"), root, log, append = true)
+        }
+        return Ports.firstFree(after) { it !in listening && freeOnHost(it) }
+            ?: throw AppCtlException(
+                "no free port for the app's agent bridge in ${Ports.SCAN.first}-${Ports.SCAN.last}: pass --port or set ${Ports.ENVIRONMENT_VARIABLE}",
+            )
     }
 
     fun screenshot(device: Device, file: File) {
@@ -115,6 +196,31 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
     }
 
     companion object {
+        /**
+         * Whether nothing on the Mac holds 127.0.0.1:[port], as the reference checks it. A connection there must find
+         * nothing: that catches a live listener on 127.0.0.1 or on the wildcard address (an iOS simulator's bridge,
+         * another device's forward), which a bind with reuse on macOS would not. Then a bind must succeed, with reuse,
+         * so the TIME_WAIT connections of the last run on that port do not count as taken.
+         */
+        fun freeOnHost(port: Int): Boolean {
+            val loopback = InetAddress.getByName("127.0.0.1")
+            try {
+                Socket().use { it.connect(InetSocketAddress(loopback, port), 200) }
+                return false
+            } catch (_: IOException) {
+                // Nothing answers: see whether it can be bound.
+            }
+            return try {
+                ServerSocket().use {
+                    it.reuseAddress = true
+                    it.bind(InetSocketAddress(loopback, port), 1)
+                }
+                true
+            } catch (_: IOException) {
+                false
+            }
+        }
+
         /** `adb shell` joins its arguments into one device shell command line: quote a value for that shell. */
         fun shellQuoted(value: String): String = "'" + value.replace("'", "'\\''") + "'"
     }

@@ -72,7 +72,7 @@ public class AgentLaunchSession<S, A>(
         host = config.makeLive(options.latency ?: MockLatency.LIVE, dispatcher)
         screensText = { ScreensRenderer.render(config.screens, config.docsText.mockExample) }
         val router = BridgeRouter(host.makeRunner(synthesizesAppearance = false), screensText)
-        server = BridgeServer(dispatcher) { router.handle(it) }
+        server = BridgeServer(dispatcher, config.applicationId) { router.handle(it) }
     }
 
     /**

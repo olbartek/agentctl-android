@@ -81,7 +81,8 @@ class ContractExamplesTest {
             val head = block.substring(0, separator + 2).replace("\n", "\r\n")
             val body = block.substring(separator + 2).let { if (request.query.isEmpty()) it else it.removeSuffix("\n") }
             val expected = head + body
-            assertEquals(expected, String(HttpParser.serialize(response), Charsets.UTF_8))
+            // §8.4's examples come from an app whose id is com.example.tinyapp.
+            assertEquals(expected, String(HttpParser.serialize(response, "com.example.tinyapp"), Charsets.UTF_8))
         }
     }
 }

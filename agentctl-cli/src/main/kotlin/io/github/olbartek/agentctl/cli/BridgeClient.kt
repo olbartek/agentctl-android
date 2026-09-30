@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.runtime.HttpParser
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
@@ -9,7 +10,8 @@ import kotlin.time.TimeSource
 
 /** Talks to the agent bridge in the running app over loopback HTTP (through `adb forward` on a device). */
 internal class BridgeClient(private val port: Int) {
-    data class Response(val status: Int, val body: String, val exitCode: Int)
+    /** [app] is the bridge's `X-Appctl-App`: the app it belongs to, or `null` from a bridge that does not say. */
+    data class Response(val status: Int, val body: String, val exitCode: Int, val app: String? = null)
 
     @Throws(IOException::class)
     fun send(method: String, path: String, body: String? = null, timeout: Duration = 60.seconds): Response {
@@ -30,19 +32,19 @@ internal class BridgeClient(private val port: Int) {
             val text = stream?.use { String(it.readBytes(), Charsets.UTF_8) } ?: ""
             // A missing header means whatever answered is not an AgentCtl bridge: an internal error (CONTRACT.md §8.4).
             val exit = connection.getHeaderField("X-Appctl-Exit")?.toIntOrNull() ?: 3
-            return Response(status, text, exit)
+            return Response(status, text, exit, connection.getHeaderField(HttpParser.APP_HEADER))
         } finally {
             connection.disconnect()
         }
     }
 
-    /** Polls `GET /snapshot` until the bridge answers, and returns the snapshot. */
-    fun waitUntilReady(timeout: Duration = 60.seconds): String {
+    /** Polls `GET /snapshot` until the bridge answers, and returns its answer. */
+    fun waitUntilReady(timeout: Duration = 60.seconds): Response {
         val start = TimeSource.Monotonic.markNow()
         while (start.elapsedNow() < timeout) {
             try {
                 val response = send("GET", "/snapshot", timeout = 2.seconds)
-                if (response.status == 200) return response.body
+                if (response.status == 200) return response
             } catch (_: IOException) {
                 // Not listening yet.
             }

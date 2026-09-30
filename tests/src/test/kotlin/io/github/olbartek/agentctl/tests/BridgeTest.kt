@@ -16,9 +16,12 @@ import io.github.olbartek.agentctl.runtime.HttpParser
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.RunnerEnvironment
 import io.github.olbartek.agentctl.runtime.ScriptRunner
+import java.io.File
 import java.net.HttpURLConnection
+import java.net.ServerSocket
 import java.net.Socket
 import java.net.URI
+import java.nio.file.Files
 import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -102,7 +105,11 @@ class BridgeRouterTest {
         val response = String(HttpParser.serialize(BridgeResponse(200, "ok", exitCode = 1)), Charsets.UTF_8)
         assertTrue(response.startsWith("HTTP/1.1 200 OK\r\n"))
         assertTrue(response.contains("X-Appctl-Exit: 1\r\n"))
+        assertFalse(response.contains("X-Appctl-App"))
         assertTrue(response.endsWith("\r\n\r\nok"))
+        // The app's identity, right after the exit code (CONTRACT.md §8.4).
+        val identified = String(HttpParser.serialize(BridgeResponse(400, "bad request\n", exitCode = 2), "dev.app"), Charsets.UTF_8)
+        assertTrue(identified.contains("X-Appctl-Exit: 2\r\nX-Appctl-App: dev.app\r\nConnection: close\r\n"), identified)
     }
 }
 
@@ -122,14 +129,17 @@ class BridgeServerTest {
         executor.shutdownNow()
     }
 
-    /** A live app with zero latency whose runner synthesizes appearance (there are no views in a test). */
-    private fun startBridge(): Int = runBlocking {
+    /**
+     * A live app with zero latency whose runner synthesizes appearance (there are no views in a test), answering as
+     * [appId] (`null`: a bridge from before X-Appctl-App).
+     */
+    private fun startBridge(appId: String? = TinyAppConfig.appCtl.applicationId): Int = runBlocking {
         withContext(dispatcher) {
             val app = TinyAppConfig.live(MockLatency.ZERO, dispatcher)
             val runner = app.makeRunner(synthesizesAppearance = true)
             runner.launch()
             val router = BridgeRouter(runner) { ScreensRenderer.render(TinyAppConfig.screens, TinyAppConfig.docsText.mockExample) }
-            val server = BridgeServer(dispatcher) { router.handle(it) }
+            val server = BridgeServer(dispatcher, appId) { router.handle(it) }
             this@BridgeServerTest.server = server
             server.start(0)
         }
@@ -178,6 +188,107 @@ class BridgeServerTest {
         assertEquals("0", popped.exit)
         assertTrue("screen=items" in popped.body)
         assertFalse("pending=" in popped.body, "the countdown outlived the screen: ${popped.body}")
+    }
+
+    /** A root whose `.appctl/bridge.json` records [port] and [appId], written as agentctl-ios writes it. */
+    private fun rootWithLaunchState(port: Int, appId: String = "io.github.olbartek.agentctl.examples.tinyapp"): File {
+        val root = Files.createTempDirectory("launch-state").toFile()
+        File(root, ".appctl").mkdirs()
+        File(root, ".appctl/bridge.json").writeText(
+            "{\n  \"appId\" : \"$appId\",\n  \"device\" : \"emulator-5556\",\n" +
+                "  \"launchedAt\" : \"2026-09-30T10:00:00Z\",\n  \"platform\" : \"android\",\n  \"port\" : $port\n}\n",
+        )
+        return root
+    }
+
+    /** A port nothing listens on. */
+    private fun deadPort(): Int = ServerSocket(0).use { it.localPort }
+
+    @Test
+    fun appRunTalksToThePortAppLaunchRecorded() {
+        val port = startBridge()
+        val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to rootWithLaunchState(port).path))
+        assertEquals(0, result.status, result.err)
+        assertTrue(result.out.contains("screen=items/2"), result.out)
+    }
+
+    @Test
+    fun anotherAppOnTheRecordedPortIsRefused() {
+        val port = startBridge()
+        val root = rootWithLaunchState(port, appId = "dev.other")
+        val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path))
+        assertEquals(3, result.status)
+        assertEquals("", result.out)
+        // The other app never ran the script: it is still on its list.
+        assertTrue(request("GET", "/snapshot", port).body.contains("screen=items "), "the script was posted")
+        assertEquals(
+            "error: the app's agent bridge on 127.0.0.1:$port answers as io.github.olbartek.agentctl.examples.tinyapp, not " +
+                "dev.other from .appctl/bridge.json, which is stale: relaunch with ./tinyctl app launch\n",
+            result.err,
+        )
+    }
+
+    @Test
+    fun aBridgeThatDoesNotSayWhichAppItIsIsAccepted() {
+        val port = startBridge(appId = null)
+        val root = rootWithLaunchState(port, appId = "dev.other")
+        val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path))
+        assertEquals(0, result.status, result.err)
+    }
+
+    @Test
+    fun anExplicitPortIsNotChecked() {
+        val port = startBridge()
+        val root = rootWithLaunchState(deadPort(), appId = "dev.other")
+        val result = cli("app", "state", "--port", "$port", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path))
+        assertEquals(0, result.status, result.err)
+    }
+
+    @Test
+    fun theFlagAndTheEnvironmentOverrideTheLaunchState() {
+        val port = startBridge()
+        val root = rootWithLaunchState(deadPort()).path
+        val byEnvironment = cli("app", "state", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root, "APPCTL_PORT" to "$port"))
+        assertEquals(0, byEnvironment.status, byEnvironment.err)
+        val byFlag = cli("app", "screens", "--port", "$port", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root, "APPCTL_PORT" to "${deadPort()}"))
+        assertEquals(0, byFlag.status, byFlag.err)
+    }
+
+    @Test
+    fun aStaleLaunchStateSaysSo() {
+        val dead = deadPort()
+        val root = rootWithLaunchState(dead)
+        val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path))
+        assertEquals(3, result.status)
+        assertTrue(result.err.startsWith("error: cannot reach the app's agent bridge on 127.0.0.1:$dead (is the app running? ./tinyctl app launch): "), result.err)
+        assertTrue(
+            result.err.endsWith(
+                "; the port is from .appctl/bridge.json (launched 2026-09-30T10:00:00Z on emulator-5556), which is stale once that " +
+                    "app has quit: relaunch with ./tinyctl app launch\n",
+            ),
+            result.err,
+        )
+    }
+
+    @Test
+    fun anUnreadableLaunchStateSaysHowToRecover() {
+        val root = rootWithLaunchState(0).also { File(it, ".appctl/bridge.json").writeText("not json") }
+        val result = cli("app", "state", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path))
+        assertEquals(3, result.status)
+        assertEquals(
+            "error: cannot read .appctl/bridge.json: not a launch state (expected appId, device, launchedAt, platform and port); " +
+                "relaunch with ./tinyctl app launch, or pass --port\n",
+            result.err,
+        )
+    }
+
+    @Test
+    fun aMalformedAppctlPortIsAUsageError() {
+        for (command in listOf(listOf("app", "run", "open 2"), listOf("app", "launch", "--no-build"), listOf("app", "test", "--no-build"))) {
+            val result = cli(*command.toTypedArray(), config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_PORT" to "abc"))
+            assertEquals(2, result.status, "${command.joinToString(" ")}: ${result.err}")
+            assertEquals("error: APPCTL_PORT is not a port: 'abc' (expected 1-65535)\n", result.err)
+        }
     }
 
     @Test
@@ -243,6 +354,8 @@ class BridgeServerTest {
         }
         val bad = raw("GARBAGE\r\n\r\n", close = false)
         assertTrue(bad.startsWith("HTTP/1.1 400 Bad Request\r\n") && bad.endsWith("\r\n\r\nbad request\n"), bad)
+        // Even a request it cannot read is answered with the app's identity.
+        assertTrue(bad.contains("X-Appctl-App: io.github.olbartek.agentctl.examples.tinyapp\r\n"), bad)
         val incomplete = raw("POST /run HTTP/1.1\r\nContent-Length: 10\r\n\r\nabc", close = true)
         assertTrue(incomplete.contains("X-Appctl-Exit: 2\r\n") && incomplete.endsWith("incomplete request\n"), incomplete)
     }

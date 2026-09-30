@@ -19,14 +19,24 @@ import kotlinx.coroutines.withContext
 public class BridgeServer(
     /** Where [handler] runs: the store's own thread. */
     private val dispatcher: CoroutineDispatcher,
+    /** The app's application id, sent as `X-Appctl-App` on every response; `null` sends no such header. */
+    private val appId: String? = null,
     private val handler: suspend (BridgeRequest) -> BridgeResponse,
 ) {
+    /** A server that sends no `X-Appctl-App`, as before 0.5 (kept so code built against 0.4 still links). */
+    public constructor(dispatcher: CoroutineDispatcher, handler: suspend (BridgeRequest) -> BridgeResponse) :
+        this(dispatcher, null, handler)
+
     @Volatile private var socket: ServerSocket? = null
 
     /** Starts listening and returns the bound port (pass 0 for an ephemeral port). */
     @Throws(IOException::class)
     public fun start(port: Int): Int {
         val server = ServerSocket()
+        // CONTRACT.md §8.1 asks for a bind that fails on a port another socket listens on. On Linux (Android) that
+        // is so with SO_REUSEADDR too: it never lets two sockets listen on one port. What it does allow is a rebind
+        // over the TIME_WAIT connections a force-stopped bridge leaves for a minute, which a relaunch on the same
+        // port needs. (macOS lets a reusing socket listen beside another, which is why the reference turns it off.)
         server.reuseAddress = true
         server.bind(InetSocketAddress(InetAddress.getLoopbackAddress(), port))
         socket = server
@@ -34,6 +44,7 @@ public class BridgeServer(
         return server.localPort
     }
 
+    /** Stops listening. A request being answered finishes; no new one is accepted. */
     public fun stop() {
         socket?.close()
         socket = null
@@ -66,7 +77,7 @@ public class BridgeServer(
         }
         try {
             connection.getOutputStream().apply {
-                write(HttpParser.serialize(response))
+                write(HttpParser.serialize(response, appId))
                 flush()
             }
         } catch (_: IOException) {

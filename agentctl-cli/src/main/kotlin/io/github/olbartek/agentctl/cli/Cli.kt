@@ -7,11 +7,13 @@ import io.github.olbartek.agentctl.ScriptLine
 import io.github.olbartek.agentctl.StepFormatter
 import io.github.olbartek.agentctl.StepRecord
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
+import io.github.olbartek.agentctl.runtime.HttpParser
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import java.io.File
 import java.io.IOException
 import java.io.PrintStream
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.runBlocking
 
 /** Where the CLI prints: stdout for results, stderr for errors (always prefixed `error: `). */
@@ -161,10 +163,11 @@ internal class Cli<S, A>(
         return Ladder(this, root, ui, device).run()
     }
 
-    fun appLaunch(seed: String?, device: String?, latency: Int?, clearSession: Boolean, build: Boolean, port: Int): Int {
+    fun appLaunch(seed: String?, device: String?, latency: Int?, clearSession: Boolean, build: Boolean, port: Int?): Int {
         val root = root() ?: return RunStatus.INTERNAL_ERROR.code
+        val explicit = launchPort(port) ?: return RunStatus.USAGE.code
         return try {
-            val launched = AppLauncher(this, root).launch(seed, device, latency, clearSession, build, port)
+            val launched = AppLauncher(this, root).launch(seed, device, latency, clearSession, build, explicit.port)
             io.print(launched.report)
             0
         } catch (error: AppCtlException) {
@@ -173,24 +176,65 @@ internal class Cli<S, A>(
         }
     }
 
-    fun appRun(script: String, json: Boolean, port: Int): Int = bridgeCall(port) {
-        BridgeClient(port).send("POST", if (json) "/run?format=json" else "/run", script)
-    }
+    fun appRun(script: String, json: Boolean, port: Int?): Int = bridgeCall(port, "POST", if (json) "/run?format=json" else "/run", script)
 
     fun appTest(paths: List<String>, options: AppTest.Options): Int {
         val root = root() ?: return RunStatus.INTERNAL_ERROR.code
-        return AppTest(this, root).run(paths, options)
+        val explicit = launchPort(options.port) ?: return RunStatus.USAGE.code
+        return AppTest(this, root).run(paths, options.copy(port = explicit.port))
     }
 
-    fun appGet(path: String, port: Int): Int = bridgeCall(port) { BridgeClient(port).send("GET", path) }
+    fun appGet(path: String, port: Int?): Int = bridgeCall(port, "GET", path, null)
 
-    private fun bridgeCall(port: Int, call: () -> BridgeClient.Response): Int = try {
-        val response = call()
-        if (response.body.endsWith("\n")) io.out.print(response.body) else io.out.println(response.body)
-        response.exitCode
-    } catch (error: IOException) {
-        io.error(Message.bridgeUnreachable(this, port, error))
-        RunStatus.INTERNAL_ERROR.code
+    /** A launch's port: `--port` or `APPCTL_PORT` exactly, or `null` inside to find a free one; `null` on a usage error. */
+    private fun launchPort(flag: Int?): LaunchPort? = try {
+        LaunchPort(Ports.explicit(flag, environment))
+    } catch (error: Ports.BadEnvironmentPort) {
+        io.error(error.message ?: "bad ${Ports.ENVIRONMENT_VARIABLE}")
+        null
+    }
+
+    private class LaunchPort(val port: Int?)
+
+    /**
+     * A request to the bridge on `--port`, `APPCTL_PORT`, the port `app launch` recorded, or 8765. When the recorded
+     * port does not answer, the message says the launch state is stale.
+     */
+    private fun bridgeCall(flag: Int?, method: String, path: String, body: String?): Int {
+        val layout = quietRoot()?.let { Layout(it, config.outputPath) }
+        val resolved = try {
+            Ports.client(flag, environment) { layout?.let(BridgeState::load) }
+        } catch (error: Ports.BadEnvironmentPort) {
+            io.error(error.message ?: "bad ${Ports.ENVIRONMENT_VARIABLE}")
+            return RunStatus.USAGE.code
+        } catch (error: Unreadable) {
+            io.error(Message.unreadableBridgeState(this, error.reason))
+            return RunStatus.INTERNAL_ERROR.code
+        }
+        return try {
+            val client = BridgeClient(resolved.port)
+            val recorded = resolved.state
+            if (recorded != null && method != "GET") {
+                // A script changes the app it runs in, so it is only posted once the recorded app is known to answer;
+                // a GET changes nothing, and its own answer is checked instead.
+                val app = client.send("GET", "/snapshot").app
+                if (app != null && app != recorded.appId) {
+                    io.error(Message.anotherAppThanRecorded(this, resolved.port, app, recorded.appId))
+                    return RunStatus.INTERNAL_ERROR.code
+                }
+            }
+            val response = client.send(method, path, body)
+            if (recorded != null && response.app != null && response.app != recorded.appId) {
+                io.error(Message.anotherAppThanRecorded(this, resolved.port, response.app, recorded.appId))
+                return RunStatus.INTERNAL_ERROR.code
+            }
+            if (response.body.endsWith("\n")) io.out.print(response.body) else io.out.println(response.body)
+            response.exitCode
+        } catch (error: IOException) {
+            val unreachable = Message.bridgeUnreachable(this, resolved.port, error)
+            io.error(resolved.state?.let { unreachable + Message.staleBridgeState(this, it) } ?: unreachable)
+            RunStatus.INTERNAL_ERROR.code
+        }
     }
 
     // Shared helpers
@@ -220,13 +264,19 @@ internal class Cli<S, A>(
      * root marker.
      */
     fun root(): File? {
+        quietRoot()?.let { return it }
+        io.error("cannot find the repo root (no ${config.rootMarker} above ${workingDirectory.absolutePath})")
+        return null
+    }
+
+    /** [root], without the error when there is none: the `app` commands that only read the launch state can do without. */
+    private fun quietRoot(): File? {
         environment["APPCTL_ROOT"]?.takeIf { it.isNotEmpty() }?.let { return File(it) }
         var directory: File? = workingDirectory.absoluteFile
         while (directory != null) {
             if (File(directory, config.rootMarker).exists()) return directory
             directory = directory.parentFile
         }
-        io.error("cannot find the repo root (no ${config.rootMarker} above ${workingDirectory.absolutePath})")
         return null
     }
 }
@@ -252,6 +302,27 @@ internal class AppCtlException(message: String) : Exception(message)
 internal object Message {
     fun bridgeUnreachable(cli: Cli<*, *>, port: Int, error: Exception): String =
         "cannot reach the app's agent bridge on 127.0.0.1:$port (is the app running? ${cli.invocation} app launch): $error"
+
+    /** Appended to [bridgeUnreachable] when the port came from `bridge.json`: the app it recorded has gone. */
+    fun staleBridgeState(cli: Cli<*, *>, state: BridgeState): String =
+        "; the port is from ${cli.config.outputPath}/bridge.json (launched ${state.launchedAt.truncatedTo(ChronoUnit.SECONDS)} on " +
+            "${state.device}), which is stale once that app has quit: relaunch with ${cli.invocation} app launch"
+
+    /** `app launch`: the bridge on [port] belongs to [other], not to this config's [appId]. */
+    fun anotherApp(port: Int, other: String?, appId: String): String =
+        "the app's agent bridge on 127.0.0.1:$port answers as ${other ?: "an app without ${HttpParser.APP_HEADER}"}, not $appId: " +
+            "another app holds that port; pass --port or set ${Ports.ENVIRONMENT_VARIABLE}" +
+            // Without the header, the app may also be an installed one from before it (`--no-build`).
+            (if (other == null) " (or the installed app predates ${HttpParser.APP_HEADER}: launch without --no-build)" else "")
+
+    /** `app run`/`state`/`screens` on the recorded port: another app answers there now. */
+    fun anotherAppThanRecorded(cli: Cli<*, *>, port: Int, other: String, appId: String): String =
+        "the app's agent bridge on 127.0.0.1:$port answers as $other, not $appId from ${cli.config.outputPath}/bridge.json, " +
+            "which is stale: relaunch with ${cli.invocation} app launch"
+
+    /** `bridge.json` is there but is not a launch state. */
+    fun unreadableBridgeState(cli: Cli<*, *>, reason: String): String =
+        "cannot read ${cli.config.outputPath}/bridge.json: $reason; relaunch with ${cli.invocation} app launch, or pass --port"
 
     /** `test` and L2 with nothing to run. Zero scenarios passing is not a pass. */
     fun noScenarios(directory: File): String =

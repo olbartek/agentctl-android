@@ -260,7 +260,7 @@ public object AgentCtl {
         private val latency by option(help = "Fixed mock latency in ms (default: the app's 300–800 ms).").int()
         private val clearSession by option("--clear-session", help = "Forget the saved session before launching.").flag()
         private val noBuild by option("--no-build", help = "Relaunch the installed app instead of building it.").flag()
-        private val port by portOption()
+        private val port by launchPortOption()
 
         override fun execute(): Int = cli.appLaunch(seed, device ?: cli.config.device, latency, clearSession, !noBuild, port)
     }
@@ -275,7 +275,7 @@ public object AgentCtl {
     ) {
         private val script by argument(help = "Commands separated by ';' or newlines.")
         private val json by option(help = "Print a JSON array of steps.").flag()
-        private val port by portOption()
+        private val port by portOption(cli.config.outputPath)
 
         override fun execute(): Int = cli.appRun(script, json, port)
     }
@@ -302,7 +302,7 @@ public object AgentCtl {
             "--step-delay",
             help = "Send the scenario one line at a time, this many seconds apart, so a recording can be followed.",
         ).double()
-        private val port by portOption()
+        private val port by launchPortOption()
 
         override fun execute(): Int = cli.appTest(
             paths,
@@ -313,14 +313,20 @@ public object AgentCtl {
     private class AppGetCommand<S, A>(private val cli: Cli<S, A>, name: String, private val path: String) : Subcommand(
         name,
         if (path == "/state") "Print the running app's root state." else "List screens, from the running app.",
-        if (path == "/state") "Example: ${cli.config.help.invocation} app state --port ${BridgeDefaults.PORT}" else null,
+        if (path == "/state") "Example: ${cli.config.help.invocation} app state" else null,
     ) {
-        private val port by portOption()
+        private val port by portOption(cli.config.outputPath)
 
         override fun execute(): Int = cli.appGet(path, port)
     }
 }
 
-/** `--port`, shared by every `app` subcommand. */
-private fun CoreCliktCommand.portOption() =
-    option(help = "The port of the app's agent bridge (the app's agent-port).").int().default(BridgeDefaults.PORT)
+/** `--port` for `app run`, `app state` and `app screens`: which bridge to talk to. */
+private fun CoreCliktCommand.portOption(outputPath: String) = option(
+    help = "The port of the app's agent bridge. Default: APPCTL_PORT, else the last launch's (${outputPath}/bridge.json), else ${BridgeDefaults.PORT}.",
+).int()
+
+/** `--port` for `app launch` and `app test`: which port to start the bridge on. */
+private fun CoreCliktCommand.launchPortOption() = option(
+    help = "The port for the app's agent bridge (the app's agent-port). Default: APPCTL_PORT, else ${BridgeDefaults.PORT} or the next free port.",
+).int()
