@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.runtime
 
+import io.github.olbartek.agentctl.BridgeDefaults
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -21,11 +22,13 @@ public class BridgeServer(
     private val dispatcher: CoroutineDispatcher,
     /** The app's application id, sent as `X-Appctl-App` on every response; `null` sends no such header. */
     private val appId: String? = null,
+    /** The platform, sent as `X-Appctl-Platform` on every response; `null` sends no such header. */
+    private val platform: String? = BridgeDefaults.PLATFORM,
     private val handler: suspend (BridgeRequest) -> BridgeResponse,
 ) {
     /** A server that sends no `X-Appctl-App`, as before 0.5 (kept so code built against 0.4 still links). */
     public constructor(dispatcher: CoroutineDispatcher, handler: suspend (BridgeRequest) -> BridgeResponse) :
-        this(dispatcher, null, handler)
+        this(dispatcher, null, null, handler)
 
     @Volatile private var socket: ServerSocket? = null
 
@@ -76,7 +79,7 @@ public class BridgeServer(
         }
         try {
             connection.getOutputStream().apply {
-                write(HttpParser.serialize(response, appId))
+                write(HttpParser.serialize(response, appId, platform))
                 flush()
             }
         } catch (_: IOException) {

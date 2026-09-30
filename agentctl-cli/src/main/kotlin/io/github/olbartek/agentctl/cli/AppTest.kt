@@ -134,6 +134,11 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             if (options.stepDelay != null && index > 0) Thread.sleep((options.stepDelay * 1000).toLong().coerceAtLeast(0))
             try {
                 val response = client.send("POST", "/run", request)
+                // Every answer, not only the launch's: another app (or this app's other platform) that has taken the
+                // port since would otherwise pass its steps off as this app's.
+                if (!response.isFrom(cli.config.applicationId, BridgeState.PLATFORM)) {
+                    return Result(name, Outcome.Broken(Message.anotherApp(launched.port, response.app, response.platform, cli.config.applicationId)))
+                }
                 body.append(response.body)
                 exitCode = response.exitCode
             } catch (error: IOException) {

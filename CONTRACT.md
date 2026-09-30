@@ -519,7 +519,9 @@ and documentation send exactly these.
 
 - **Debug builds only.** A release build of the app contains no bridge (the reference compiles it
   out: `#if DEBUG` from end to end).
-- **Loopback only.** It listens on `127.0.0.1` and never on another interface.
+- **Loopback only.** It listens on `127.0.0.1` (IPv4) and never on `::1` or another interface. A CLI
+  connects to `127.0.0.1`, never to `localhost`: that name may resolve to `::1`, where another
+  process can listen on the same port number beside the bridge.
 - **Its own port.** When another process already listens on the port (an `adb forward`, a second
   app), the bridge fails to start rather than listening beside it. A CLI that then reaches that
   port reaches the other process, which is why it checks who answers (§8.6).
@@ -573,13 +575,15 @@ Content-Type: text/plain; charset=utf-8
 Content-Length: <bytes in the body>
 X-Appctl-Exit: <code>
 X-Appctl-App: <the app's bundle ID or application ID>
+X-Appctl-Platform: <ios or android>
 Connection: close
 ```
 
 `Content-Type` is `application/json` for `?format=json`. **`X-Appctl-Exit`** is the §5 exit code
 of what the request did; the CLI's `app run` prints the body and exits with it (with 3 if the
-header is missing). **`X-Appctl-App`** names the app, on every response, errors included, so a CLI
-can tell the app it launched from another one on the same port (§8.6).
+header is missing). **`X-Appctl-App`** names the app and **`X-Appctl-Platform`** its platform, on
+every response, errors included, so a CLI can tell the app it launched from another one on the same
+port (§8.6). Both are needed: an app often has the same ID on iOS and on Android.
 
 This is TinyApp answering `POST /run` with the body `open 2`, and then `?format=json` with a script
 that does not parse. (The reference's router, on a headless store: the live bridge answers
@@ -591,6 +595,7 @@ Content-Type: text/plain; charset=utf-8
 Content-Length: 69
 X-Appctl-Exit: 0
 X-Appctl-App: com.example.tinyapp
+X-Appctl-Platform: ios
 Connection: close
 
 > open 2
@@ -603,6 +608,7 @@ Content-Type: application/json
 Content-Length: 87
 X-Appctl-Exit: 2
 X-Appctl-App: com.example.tinyapp
+X-Appctl-Platform: ios
 Connection: close
 
 {
@@ -650,13 +656,16 @@ Two apps on one machine — an iOS simulator and an Android emulator, or two che
 fight over one port. So a CLI that launches the app picks the port, and records it for the commands
 that come after.
 
-**Picking the port.** A command that launches the app (the reference's `app launch`, `app test`,
-and `check --ui`) uses the port named by `--port`, else by the environment variable
-`APPCTL_PORT`, as it is. With neither, it uses 8765 if nothing listens on `127.0.0.1:8765`, else
-the next port up that is free, up to 8864; with none free it exits 3. A port the launched app's own
-previous run held counts as free (the reference stops that app first; an Android port removes its
-own `adb forward` first), so relaunching keeps the port. The port is picked right before the app
-starts, after any build: a build takes minutes, and a port free before it may not be free after.
+**Picking the port.** A command that launches the app (the reference's `app launch`, `app test`, and
+`check --ui`) uses the port named by `--port`, else by the environment variable `APPCTL_PORT`, as it
+is. With neither, it uses 8765 if it is free, else the next port up that is free, up to 8864; with
+none free it exits 3. A port is free when a connect to it on `127.0.0.1` and on `::1` is refused (a
+connect that is not refused within a second, a listener that no longer accepts, counts as taken),
+and it can be bound on both `127.0.0.1` and `::1`. Checking both families catches a listener on
+`::1`, which can sit beside one on `127.0.0.1`. A port the launched app's own previous run held
+counts as free (the reference stops that app first; an Android port removes its own `adb forward`
+first), so relaunching keeps the port. The port is picked right before the app starts, after any
+build: a build takes minutes, and a port free before it may not be free after.
 
 **Recording it.** Once the bridge answers, the launch writes `<output directory>/bridge.json`
 (`.appctl/bridge.json` by default): one JSON object with sorted keys, pretty-printed as
@@ -692,18 +701,24 @@ launches never reads the file: it may name another device, or an app that has qu
 
 **Checking who answers.** Two apps cannot share a port (§8.1), but a port can still be taken
 between the CLI's check and the app's start, or be one the user named. So the CLI compares the
-bridge's `X-Appctl-App` (§8.4) with the app it means:
+bridge's `X-Appctl-App` and `X-Appctl-Platform` (§8.4) with the app it means, on every response it
+acts on: an app with the same ID on the other platform is another app. An error names both, as
+`answers as <app> (<platform>), not <app> (<platform>)`.
 
-- **At launch**, with the app's own ID from the host's configuration. The app was built from the
-  same checkout as the CLI and names itself, so an answer without the header is another app too.
+- **At launch**, with the app's own ID from the host's configuration and the CLI's platform. The
+  app was built from the same checkout as the CLI and names itself, so an answer without either
+  header is another app too.
   On a mismatch the CLI stops its app and, unless the port was named by `--port` or
   `APPCTL_PORT`, launches it once more on the next free port above; if that one mismatches too, or
   the port was named, it exits 3. The same goes for no answer at all while, with the app stopped,
-  something still listens on the port: the bridge could not listen there.
-- **When the port came from the file**, with the file's `appId`. A different app on that port
-  means the file is stale: exit 3, and nothing from the response is printed. A script is only posted
-  after a `GET /snapshot` does not show another app, so another app never runs it. An answer without
-  the header (an app built before it existed) is accepted.
+  something still listens on the port: the bridge could not listen there. A command that runs
+  scripts on the app it launched (the reference's `app test`) checks every response the same way;
+  a scenario whose response comes from another app fails as not run (exit 3), and its output is not
+  printed as the app's.
+- **When the port came from the file**, with the file's `appId` and `platform`. A different app
+  or platform on that port means the file is stale: exit 3, and nothing from the response is
+  printed. A script is only posted after a `GET /snapshot` does not show another app, so another app
+  never runs it. A header the answer lacks is not compared (an app built before it existed).
 - A port from `--port`, `APPCTL_PORT` or the default is not checked: the CLI cannot know which app
   was meant.
 

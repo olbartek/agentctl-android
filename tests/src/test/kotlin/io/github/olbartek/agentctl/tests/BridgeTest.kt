@@ -108,8 +108,8 @@ class BridgeRouterTest {
         assertFalse(response.contains("X-Appctl-App"))
         assertTrue(response.endsWith("\r\n\r\nok"))
         // The app's identity, right after the exit code (CONTRACT.md §8.4).
-        val identified = String(HttpParser.serialize(BridgeResponse(400, "bad request\n", exitCode = 2), "dev.app"), Charsets.UTF_8)
-        assertTrue(identified.contains("X-Appctl-Exit: 2\r\nX-Appctl-App: dev.app\r\nConnection: close\r\n"), identified)
+        val identified = String(HttpParser.serialize(BridgeResponse(400, "bad request\n", exitCode = 2), "dev.app", "android"), Charsets.UTF_8)
+        assertTrue(identified.contains("X-Appctl-Exit: 2\r\nX-Appctl-App: dev.app\r\nX-Appctl-Platform: android\r\nConnection: close\r\n"), identified)
     }
 }
 
@@ -133,13 +133,13 @@ class BridgeServerTest {
      * A live app with zero latency whose runner synthesizes appearance (there are no views in a test), answering as
      * [appId] (`null`: a bridge from before X-Appctl-App).
      */
-    private fun startBridge(appId: String? = TinyAppConfig.appCtl.applicationId): Int = runBlocking {
+    private fun startBridge(appId: String? = TinyAppConfig.appCtl.applicationId, platform: String? = "android"): Int = runBlocking {
         withContext(dispatcher) {
             val app = TinyAppConfig.live(MockLatency.ZERO, dispatcher)
             val runner = app.makeRunner(synthesizesAppearance = true)
             runner.launch()
             val router = BridgeRouter(runner) { ScreensRenderer.render(TinyAppConfig.screens, TinyAppConfig.docsText.mockExample) }
-            val server = BridgeServer(dispatcher, appId) { router.handle(it) }
+            val server = BridgeServer(dispatcher, appId, platform) { router.handle(it) }
             this@BridgeServerTest.server = server
             server.start(0)
         }
@@ -222,10 +222,33 @@ class BridgeServerTest {
         // The other app never ran the script: it is still on its list.
         assertTrue(request("GET", "/snapshot", port).body.contains("screen=items "), "the script was posted")
         assertEquals(
-            "error: the app's agent bridge on 127.0.0.1:$port answers as io.github.olbartek.agentctl.examples.tinyapp, not " +
-                "dev.other from .appctl/bridge.json, which is stale: relaunch with ./tinyctl app launch\n",
+            "error: the app's agent bridge on 127.0.0.1:$port answers as io.github.olbartek.agentctl.examples.tinyapp (android), " +
+                "not dev.other (android) from .appctl/bridge.json, which is stale: relaunch with ./tinyctl app launch\n",
             result.err,
         )
+    }
+
+    /** The same app id on another platform (an app's iOS build holding the port) is not the recorded app. */
+    @Test
+    fun theSameAppOnAnotherPlatformIsRefused() {
+        val app = TinyAppConfig.appCtl.applicationId
+        val port = startBridge(platform = "ios")
+        val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to rootWithLaunchState(port).path))
+        assertEquals(3, result.status, result.combined)
+        assertEquals(
+            "error: the app's agent bridge on 127.0.0.1:$port answers as $app (ios), not $app (android) from .appctl/bridge.json, " +
+                "which is stale: relaunch with ./tinyctl app launch\n",
+            result.err,
+        )
+        assertTrue(request("GET", "/snapshot", port).body.contains("screen=items "), "the script was posted")
+    }
+
+    /** From bridge.json, a header the answer lacks is not compared: an app built before X-Appctl-Platform (CONTRACT.md §8.6). */
+    @Test
+    fun aBridgeThatDoesNotSayItsPlatformIsAcceptedForTheRecordedApp() {
+        val port = startBridge(platform = null)
+        val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to rootWithLaunchState(port).path))
+        assertEquals(0, result.status, result.err)
     }
 
     @Test

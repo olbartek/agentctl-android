@@ -672,9 +672,11 @@ $ ./tinyctl app run "save; expect saved=true pending=1; back"
 ```
 
 **Launch state and ports.** `app launch` starts the bridge on 8765 if that port is free, or else on the next free
-one up to 8864. A port counts as taken if anything on the Mac listens on it: another device's `adb forward`, or an
-iOS simulator's bridge, which shares the Mac's loopback. It also counts as taken if anything on the device listens
-on it, such as another app's bridge. `app launch` forwards the port it chose and records the launch in
+one up to 8864. A port counts as taken if anything on the Mac holds it on either loopback, `127.0.0.1` or `::1`: a
+connection there is answered or not refused within a second, or a bind there fails (§8.6). That covers another
+device's `adb forward` and an iOS simulator's bridge, which shares the Mac's loopback. It also counts as taken if
+anything on the device listens on it, such as another app's bridge. After `adb forward`, the launch checks that the
+forward holds `127.0.0.1`, where the CLI connects, and fails otherwise. `app launch` forwards the port it chose and records the launch in
 `<outputPath>/bridge.json`:
 
 ```json
@@ -696,12 +698,15 @@ the new launch takes, so forwards do not pile up per device; no other forward is
 `app run` says the file is stale and to relaunch. The file is written exactly as agentctl-ios writes it (CONTRACT.md
 §8.6).
 
-**Who answers.** The bridge names its app on every response (`X-Appctl-App: <application id>`, §8.4), so the CLI never
-drives the wrong app. `app launch` checks that its own app answered. A different app, or an answer without the
-header, means the port was taken. A scanned port then gets one more try on the next free port, and a port you named
+**Who answers.** The bridge names its app and its platform on every response (`X-Appctl-App: <application id>` and
+`X-Appctl-Platform: android`, §8.4), so the CLI never drives the wrong app, not even the same app's iOS build, which
+often has the same ID. `app launch` checks that its own app on Android answered, and `app test` checks every response
+of every scenario the same way (a mismatch fails the scenario as not run, exit 3). A different app or platform, or an
+answer without either header, means the port was taken. A scanned port then gets one more try on the next free port, and a port you named
 fails with exit 3. When the port came from `bridge.json`, `app run` first asks `GET /snapshot` who answers, and posts
-the script only to the recorded app; `app state` and `app screens` check their own answer. A bridge from before the
-header is accepted there.
+the script only to the recorded app and platform; `app state` and `app screens` check their own answer. A header the
+answer lacks (a bridge from before it) is not compared there. An error names both sides:
+`answers as <app> (<platform>), not <app> (<platform>)`.
 
 A seed is a script and fails like one: at its first failing step, or at a `(launch)` that did not settle. The app
 logs `AgentCtlBridge: seed applied` or `AgentCtlBridge: seed FAILED (exit <code>)`, with its steps, under the

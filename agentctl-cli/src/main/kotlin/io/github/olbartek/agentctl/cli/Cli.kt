@@ -243,15 +243,15 @@ internal class Cli<S, A>(
             if (recorded != null && method != "GET") {
                 // A script changes the app it runs in, so it is only posted once the recorded app is known to answer;
                 // a GET changes nothing, and its own answer is checked instead.
-                val app = client.send("GET", "/snapshot").app
-                if (app != null && app != recorded.appId) {
-                    io.error(Message.anotherAppThanRecorded(this, resolved.port, app, recorded.appId))
+                val check = client.send("GET", "/snapshot")
+                if (check.contradicts(recorded)) {
+                    io.error(Message.anotherAppThanRecorded(this, resolved.port, check.app ?: recorded.appId, check.platform, recorded))
                     return RunStatus.INTERNAL_ERROR.code
                 }
             }
             val response = client.send(method, path, body)
-            if (recorded != null && response.app != null && response.app != recorded.appId) {
-                io.error(Message.anotherAppThanRecorded(this, resolved.port, response.app, recorded.appId))
+            if (recorded != null && response.contradicts(recorded)) {
+                io.error(Message.anotherAppThanRecorded(this, resolved.port, response.app ?: recorded.appId, response.platform, recorded))
                 return RunStatus.INTERNAL_ERROR.code
             }
             if (response.body.endsWith("\n")) io.out.print(response.body) else io.out.println(response.body)
@@ -330,21 +330,30 @@ internal object Message {
         "; the port is from ${cli.config.outputPath}/bridge.json (launched ${state.launchedAt.truncatedTo(ChronoUnit.SECONDS)} on " +
             "${state.device}), which is stale once that app has quit: relaunch with ${cli.invocation} app launch"
 
-    /** `app launch`: the bridge on [port] belongs to [other], not to this config's [appId]. */
-    fun anotherApp(port: Int, other: String?, appId: String): String =
-        "the app's agent bridge on 127.0.0.1:$port answers as ${other ?: "an app without ${HttpParser.APP_HEADER}"}, not $appId: " +
+    /** How a bridge says who it is: `<app id> (<platform>)`, as agentctl-ios writes it. */
+    private fun identity(app: String, platform: String?): String = "$app (${platform ?: "no ${HttpParser.PLATFORM_HEADER}"})"
+
+    /** `app launch`: the bridge on [port] belongs to [other] on [platform], not to this config's [appId] on Android. */
+    fun anotherApp(port: Int, other: String?, platform: String?, appId: String): String =
+        "the app's agent bridge on 127.0.0.1:$port answers as ${other?.let { identity(it, platform) } ?: "an app without ${HttpParser.APP_HEADER}"}, " +
+            "not ${identity(appId, BridgeState.PLATFORM)}: " +
             "another app holds that port; pass --port or set ${Ports.ENVIRONMENT_VARIABLE}" +
-            // Without the header, the app may also be an installed one from before it (`--no-build`).
-            (if (other == null) " (or the installed app predates ${HttpParser.APP_HEADER}: launch without --no-build)" else "")
+            // Without a header, the app may also be an installed one from before it (`--no-build`).
+            when {
+                other == null -> " (or the installed app predates ${HttpParser.APP_HEADER}: launch without --no-build)"
+                platform == null -> " (or the installed app predates ${HttpParser.PLATFORM_HEADER}: launch without --no-build)"
+                else -> ""
+            }
 
     /** `app launch`: the bridge never answered, and something else listens on [port], so it could not listen there. */
     fun couldNotListen(port: Int): String =
         "the app's agent bridge could not listen on 127.0.0.1:$port: another process holds that port; " +
             "pass --port or set ${Ports.ENVIRONMENT_VARIABLE}"
 
-    /** `app run`/`state`/`screens` on the recorded port: another app answers there now. */
-    fun anotherAppThanRecorded(cli: Cli<*, *>, port: Int, other: String, appId: String): String =
-        "the app's agent bridge on 127.0.0.1:$port answers as $other, not $appId from ${cli.config.outputPath}/bridge.json, " +
+    /** `app run`/`state`/`screens` on the recorded port: another app, or another platform's build of it, answers there now. */
+    fun anotherAppThanRecorded(cli: Cli<*, *>, port: Int, other: String, platform: String?, recorded: BridgeState): String =
+        "the app's agent bridge on 127.0.0.1:$port answers as ${identity(other, platform)}, " +
+            "not ${identity(recorded.appId, recorded.platform)} from ${cli.config.outputPath}/bridge.json, " +
             "which is stale: relaunch with ${cli.invocation} app launch"
 
     /** `bridge.json` is there but is not a launch state. */
