@@ -138,6 +138,14 @@ class BridgeStateTest {
     }
 
     @Test
+    fun aBridgeThatCouldNotListenSaysAnotherProcessHoldsThePort() {
+        assertEquals(
+            "the app's agent bridge could not listen on 127.0.0.1:8766: another process holds that port; pass --port or set APPCTL_PORT",
+            Message.couldNotListen(8766),
+        )
+    }
+
+    @Test
     fun aRetryScansAboveThePortThatWasTaken() {
         assertEquals(8768, Ports.firstFree(after = 8767) { true })
         assertNull(Ports.firstFree(after = 8864) { true })

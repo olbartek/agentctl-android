@@ -271,6 +271,17 @@ class BridgeServerTest {
     }
 
     @Test
+    fun aPortFlagOutsideOneTo65535IsAUsageError() {
+        for (command in listOf(listOf("app", "state"), listOf("app", "run", "open 2"), listOf("app", "launch", "--no-build"), listOf("app", "test", "--no-build"))) {
+            for (port in listOf("0", "65536")) {
+                val result = cli(*(command + listOf("--port", port)).toTypedArray(), config = TinyAppConfig.appCtl)
+                assertEquals(2, result.status, "${command.joinToString(" ")} --port $port: ${result.err}")
+                assertEquals("error: --port must be a port from 1 to 65535, not $port\n", result.err)
+            }
+        }
+    }
+
+    @Test
     fun anUnreadableLaunchStateSaysHowToRecover() {
         val root = rootWithLaunchState(0).also { File(it, ".appctl/bridge.json").writeText("not json") }
         val result = cli("app", "state", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path))
@@ -284,7 +295,14 @@ class BridgeServerTest {
 
     @Test
     fun aMalformedAppctlPortIsAUsageError() {
-        for (command in listOf(listOf("app", "run", "open 2"), listOf("app", "launch", "--no-build"), listOf("app", "test", "--no-build"))) {
+        val commands = listOf(
+            listOf("app", "run", "open 2"),
+            listOf("app", "launch", "--no-build"),
+            listOf("app", "test", "--no-build"),
+            // check --ui refuses it before L0 builds anything.
+            listOf("check", "--ui"),
+        )
+        for (command in commands) {
             val result = cli(*command.toTypedArray(), config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_PORT" to "abc"))
             assertEquals(2, result.status, "${command.joinToString(" ")}: ${result.err}")
             assertEquals("error: APPCTL_PORT is not a port: 'abc' (expected 1-65535)\n", result.err)

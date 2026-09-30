@@ -595,7 +595,8 @@ on it, such as another app's bridge. `app launch` forwards the port it chose and
 Mac never need a port by hand. Each command's port is `--port` if given, else `APPCTL_PORT`, else the last launch's,
 else 8765. `app launch` and `app test` take `--port` or `APPCTL_PORT` as the exact port to use, and otherwise scan as
 above. `app test` and `check --ui` rewrite the file on every launch. A relaunch keeps its port: the app is stopped
-first, and a forward to a port nothing on the device listens on any more is removed. When the recorded app has quit,
+first, and the forward its last launch on that device left (as `bridge.json` records it) is removed once nothing
+on the device listens behind it; no other forward is touched. When the recorded app has quit,
 `app run` says the file is stale and to relaunch. The file is written exactly as agentctl-ios writes it (CONTRACT.md
 §8.6).
 
@@ -670,11 +671,6 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.
-- The bridge binds with `SO_REUSEADDR`, where §8.1 has the reference bind without it. What §8.1 needs, a bind that
-  fails on a port another socket listens on, is what Linux does either way. The option also lets a relaunch rebind
-  its port over the `TIME_WAIT` connections of the bridge it replaced, where a bind without it would fail for a
-  minute. The launch state (§8.6) checks the host too: a port counts as free only if nothing listens on it on the Mac
-  and on the device, and an app's own stale `adb forward` is removed before the scan.
 
 ## The example apps
 

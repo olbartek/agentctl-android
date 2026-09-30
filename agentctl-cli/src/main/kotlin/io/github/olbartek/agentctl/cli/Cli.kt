@@ -159,6 +159,8 @@ internal class Cli<S, A>(
     }
 
     fun check(ui: Boolean, device: String?): Int {
+        // L4 launches the app: a malformed APPCTL_PORT is a usage error before anything is built.
+        if (ui && launchPort(null) == null) return RunStatus.USAGE.code
         val root = root() ?: return RunStatus.INTERNAL_ERROR.code
         return Ladder(this, root, ui, device).run()
     }
@@ -192,6 +194,9 @@ internal class Cli<S, A>(
     } catch (error: Ports.BadEnvironmentPort) {
         io.error(error.message ?: "bad ${Ports.ENVIRONMENT_VARIABLE}")
         null
+    } catch (error: Ports.BadFlagPort) {
+        io.error(error.message ?: "bad --port")
+        null
     }
 
     private class LaunchPort(val port: Int?)
@@ -206,6 +211,9 @@ internal class Cli<S, A>(
             Ports.client(flag, environment) { layout?.let(BridgeState::load) }
         } catch (error: Ports.BadEnvironmentPort) {
             io.error(error.message ?: "bad ${Ports.ENVIRONMENT_VARIABLE}")
+            return RunStatus.USAGE.code
+        } catch (error: Ports.BadFlagPort) {
+            io.error(error.message ?: "bad --port")
             return RunStatus.USAGE.code
         } catch (error: Unreadable) {
             io.error(Message.unreadableBridgeState(this, error.reason))
@@ -314,6 +322,11 @@ internal object Message {
             "another app holds that port; pass --port or set ${Ports.ENVIRONMENT_VARIABLE}" +
             // Without the header, the app may also be an installed one from before it (`--no-build`).
             (if (other == null) " (or the installed app predates ${HttpParser.APP_HEADER}: launch without --no-build)" else "")
+
+    /** `app launch`: the bridge never answered, and something else listens on [port], so it could not listen there. */
+    fun couldNotListen(port: Int): String =
+        "the app's agent bridge could not listen on 127.0.0.1:$port: another process holds that port; " +
+            "pass --port or set ${Ports.ENVIRONMENT_VARIABLE}"
 
     /** `app run`/`state`/`screens` on the recorded port: another app answers there now. */
     fun anotherAppThanRecorded(cli: Cli<*, *>, port: Int, other: String, appId: String): String =

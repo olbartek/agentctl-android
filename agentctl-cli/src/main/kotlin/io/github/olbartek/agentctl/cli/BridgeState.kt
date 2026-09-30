@@ -117,6 +117,12 @@ internal object Ports {
 
     data class Resolved(val port: Int, val source: Source, val state: BridgeState? = null)
 
+    /** `--port` is not a port: a usage error (exit 2). 0 would let the app pick a port the CLI never learns. */
+    class BadFlagPort(val value: Int) : Exception("--port must be a port from 1 to 65535, not $value")
+
+    /** [flag], if it is a port; throws [BadFlagPort] if it is not. */
+    fun validated(flag: Int?): Int? = flag?.also { if (it !in 1..65535) throw BadFlagPort(it) }
+
     /** `APPCTL_PORT` is set but is not a port: a usage error (exit 2). */
     class BadEnvironmentPort(val value: String) : Exception("$ENVIRONMENT_VARIABLE is not a port: '$value' (expected 1-65535)")
 
@@ -125,14 +131,14 @@ internal object Ports {
      * [state] is only read when neither of the first two is given.
      */
     fun client(flag: Int?, environment: Map<String, String>, state: () -> BridgeState?): Resolved {
-        flag?.let { return Resolved(it, Source.FLAG) }
+        validated(flag)?.let { return Resolved(it, Source.FLAG) }
         environmentPort(environment)?.let { return Resolved(it, Source.ENVIRONMENT) }
         state()?.let { return Resolved(it.port, Source.STATE, it) }
         return Resolved(BridgeDefaults.PORT, Source.DEFAULT)
     }
 
     /** For a launch: `--port`, else `APPCTL_PORT`, used exactly; `null` means "find a free one". */
-    fun explicit(flag: Int?, environment: Map<String, String>): Int? = flag ?: environmentPort(environment)
+    fun explicit(flag: Int?, environment: Map<String, String>): Int? = validated(flag) ?: environmentPort(environment)
 
     /** The first port of [SCAN] above [after] (if given) that [isFree] accepts, or `null` when none is. */
     fun firstFree(after: Int? = null, isFree: (Int) -> Boolean): Int? = SCAN.firstOrNull { (after == null || it > after) && isFree(it) }

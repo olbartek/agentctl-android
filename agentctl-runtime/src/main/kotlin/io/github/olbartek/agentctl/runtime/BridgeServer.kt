@@ -33,10 +33,9 @@ public class BridgeServer(
     @Throws(IOException::class)
     public fun start(port: Int): Int {
         val server = ServerSocket()
-        // CONTRACT.md §8.1 asks for a bind that fails on a port another socket listens on. On Linux (Android) that
-        // is so with SO_REUSEADDR too: it never lets two sockets listen on one port. What it does allow is a rebind
-        // over the TIME_WAIT connections a force-stopped bridge leaves for a minute, which a relaunch on the same
-        // port needs. (macOS lets a reusing socket listen beside another, which is why the reference turns it off.)
+        // CONTRACT.md §8.1: a port another socket listens on makes the bind fail, reuse or not (Linux never lets two
+        // sockets listen on one port). Reuse lets a relaunch rebind over the TIME_WAIT connections of the bridge it
+        // replaced, which would otherwise hold the port for a minute.
         server.reuseAddress = true
         server.bind(InetSocketAddress(InetAddress.getLoopbackAddress(), port))
         socket = server

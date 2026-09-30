@@ -67,7 +67,20 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             latency?.let { extras += listOf("--ei", AgentLaunchOptions.MOCK_LATENCY, it.toString()) }
             if (clearSession) extras += listOf("--ez", AgentLaunchOptions.CLEAR_SESSION, "true")
             adbOrThrow(listOf("shell", "am", "start", "-W", "-n", component) + extras, target, log)
-            answer = BridgeClient(chosen).waitUntilReady()
+            answer = try {
+                BridgeClient(chosen).waitUntilReady()
+            } catch (timeout: AppCtlException) {
+                // No bridge answered. Our app is stopped first, so a slow start of our own does not read as a port held
+                // by another; if something still listens on the device port, the app could not listen there: a scanned
+                // port moves on once, a named one fails. Otherwise it is the plain timeout.
+                stop(target, log)
+                Shell.run(listOf(adb, "-s", target.serial, "forward", "--remove", "tcp:$chosen"), root, log, append = true)
+                if (chosen !in deviceListening(target)) throw timeout
+                if (port != null || retried) throw AppCtlException(Message.couldNotListen(chosen))
+                retried = true
+                chosen = freePort(target, log, after = chosen)
+                continue
+            }
             // Another app's bridge answered on this port. The app just launched is built from the same checkout as
             // this CLI and always says which app it is, so an answer without X-Appctl-App is foreign too (an older app
             // holding the port). A port found by the scan gets one more try, on the next free port above it.
@@ -85,7 +98,11 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         }
         val port = chosen
         val snapshot = answer.body
-        BridgeState(BridgeState.PLATFORM, target.serial, port, config.applicationId, Instant.now()).save(layout)
+        try {
+            BridgeState(BridgeState.PLATFORM, target.serial, port, config.applicationId, Instant.now()).save(layout)
+        } catch (error: IOException) {
+            throw AppCtlException("cannot write ${config.outputPath}/bridge.json: $error")
+        }
         val seconds = String.format(Locale.ROOT, "%.1f", start.elapsedNow().inWholeMilliseconds / 1000.0)
         val line = snapshot.split("\n").drop(1).firstOrNull()?.trim() ?: ""
         return Launched(target, port, "launched on ${target.label} [${target.serial}] at 127.0.0.1:$port in ${seconds}s: $line")
@@ -105,6 +122,11 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         }
     }
 
+    /** The ports something listens on, on the device. */
+    private fun deviceListening(device: Device): Set<Int> = Ports.listening(
+        Shell.capture(listOf(adb, "-s", device.serial, "shell", "cat", "/proc/net/tcp", "/proc/net/tcp6")) ?: "",
+    )
+
     /**
      * The first port of [Ports.SCAN] above [after] (if given) that is free on the Mac (nothing answers or is bound
      * there: another device's forward, an iOS simulator's bridge) and on the device (nothing listens on it). The
@@ -112,9 +134,7 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
      * nothing on the device listens on it any more, so a relaunch gets its port back; no other forward is touched.
      */
     private fun freePort(device: Device, log: File, after: Int? = null): Int {
-        val listening = Ports.listening(
-            Shell.capture(listOf(adb, "-s", device.serial, "shell", "cat", "/proc/net/tcp", "/proc/net/tcp6")) ?: "",
-        )
+        val listening = deviceListening(device)
         val recorded = try {
             BridgeState.load(layout)
         } catch (_: Unreadable) {
