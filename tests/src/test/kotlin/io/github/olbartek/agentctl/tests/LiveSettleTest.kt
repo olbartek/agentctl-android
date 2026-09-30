@@ -28,14 +28,6 @@ class LiveSettleTest {
     private val executor = Executors.newSingleThreadExecutor()
     private val dispatcher = executor.asCoroutineDispatcher()
 
-    private companion object {
-        /**
-         * One poll of live settling: the UI's last busy poll can fall up to one poll before its busy time ends, so a
-         * lower bound is that much short of the busy time plus the quiet window.
-         */
-        val POLL = 20.milliseconds
-    }
-
     @AfterTest
     fun tearDown() {
         executor.shutdownNow()
@@ -72,8 +64,10 @@ class LiveSettleTest {
         val elapsed = sinceFirstAsked()
         val (result, took) = settle(uiIdle = { elapsed() >= busyFor })
         assertTrue(result.settled)
-        // The UI's busy time, then the whole quiet window after it: the UI going idle counts as a change.
-        assertTrue(took >= busyFor + 250.milliseconds - POLL, "took $took")
+        // The UI's busy time, then the whole quiet window after it: the quiet moment starts once the UI lets go, not
+        // at the last poll that saw it busy. Timed on the UI's own clock, so a poll's slack cannot hide.
+        val settledAt = elapsed()
+        assertTrue(settledAt >= busyFor + 250.milliseconds, "settled at $settledAt")
         assertTrue(took < 2.seconds, "took $took")
     }
 
@@ -82,15 +76,16 @@ class LiveSettleTest {
     fun aUiThatNeverGoesIdleIsAnEndlessAnimationNotATransition() {
         val (result, took) = settle(uiIdle = { false })
         assertTrue(result.settled)
-        assertTrue(took >= 1.seconds + 250.milliseconds - POLL, "took $took")
+        assertTrue(took >= 1.seconds + 250.milliseconds, "took $took")
         assertTrue(took < 2.seconds, "took $took")
     }
 
     /** An endless animation is idle for a moment between frames: that does not make each frame a new transition. */
     @Test
     fun aUiIdleOnlyBetweenFramesIsStillAnEndlessAnimation() {
-        var asked = 0
-        val (result, took) = settle(uiIdle = { asked++ % 3 == 2 })
+        val elapsed = sinceFirstAsked()
+        // Idle for 20 ms of every 60: in time, not in polls, which a loaded machine spaces further apart.
+        val (result, took) = settle(uiIdle = { elapsed().inWholeMilliseconds % 60 >= 40 })
         assertTrue(result.settled)
         assertTrue(took < 2.seconds, "took $took")
     }
@@ -100,9 +95,10 @@ class LiveSettleTest {
     fun aSecondTransitionIsWaitedForAfterAnIdleMoment() {
         val elapsed = sinceFirstAsked()
         // Busy for 0.8 s, idle for 0.2 s, busy for another 0.8 s: 1.6 s of it, but never a second at a stretch.
-        val (result, took) = settle(uiIdle = { elapsed().inWholeMilliseconds in 800..999 || elapsed() >= 1800.milliseconds })
+        val (result, _) = settle(uiIdle = { elapsed().inWholeMilliseconds in 800..999 || elapsed() >= 1800.milliseconds })
         assertTrue(result.settled)
-        assertTrue(took >= 1800.milliseconds + 250.milliseconds - POLL, "took $took")
+        val settledAt = elapsed()
+        assertTrue(settledAt >= 1800.milliseconds + 250.milliseconds, "settled at $settledAt")
     }
 
     /**
@@ -125,10 +121,10 @@ class LiveSettleTest {
                 }
                 assertTrue(app.settle().settled)
                 app.close()
-                start.elapsedNow()
+                elapsed()
             }
         }
-        assertTrue(took >= 1500.milliseconds + 250.milliseconds - POLL, "took $took")
+        assertTrue(took >= 1500.milliseconds + 250.milliseconds, "settled at $took")
     }
 
     /**
@@ -146,13 +142,13 @@ class LiveSettleTest {
                 val start = TimeSource.Monotonic.markNow()
                 assertTrue(app.makeRunner(synthesizesAppearance).launch().step.settled)
                 app.close()
-                start.elapsedNow()
+                if (synthesizesAppearance) start.elapsedNow() else elapsed()
             }
         }
         val seed = launch(synthesizesAppearance = true)
         assertTrue(seed < busyFor, "the seed took $seed")
         val bridge = launch(synthesizesAppearance = false)
-        assertTrue(bridge >= busyFor + 250.milliseconds - POLL, "the bridge took $bridge")
+        assertTrue(bridge >= busyFor + 250.milliseconds, "the bridge took $bridge")
     }
 
     @Test

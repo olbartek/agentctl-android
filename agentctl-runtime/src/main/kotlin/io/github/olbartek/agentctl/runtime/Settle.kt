@@ -90,13 +90,18 @@ internal suspend fun <S> settleLive(
         val busy = busySince ?: TimeSource.Monotonic.markNow().also { busySince = it }
         return busy.elapsedNow() < uiLimit
     }
+    var uiWasBusy = false
     while (start.elapsedNow() < limit) {
         delay(pollInterval)
         val next = state()
         // Asked on every poll, before anything else can short-circuit it: a busy stretch's idle moment seen only on
         // quiet polls could be missed, and the next transition taken for the old one's endless animation.
         val uiBusy = uiHolds()
-        if (next != last || callLog.inFlight > 0 || uiBusy) {
+        // The quiet moment starts once the UI lets go, not at the last poll that saw it busy, which on a loaded
+        // machine can be long before: so the poll that first sees it let go restarts it too.
+        val uiLetGo = uiWasBusy && !uiBusy
+        uiWasBusy = uiBusy
+        if (next != last || callLog.inFlight > 0 || uiBusy || uiLetGo) {
             last = next
             quietSince = TimeSource.Monotonic.markNow()
         } else if (quietSince.elapsedNow() >= quietWindow) {
