@@ -11,6 +11,9 @@ import java.nio.charset.CodingErrorAction
  * connection (CONTRACT.md §8.1). Enough for `<cli> app …` and `curl`.
  */
 public object HttpParser {
+    /** The header naming the app a bridge belongs to (CONTRACT.md §8.4). */
+    public const val APP_HEADER: String = "X-Appctl-App"
+
     /** The largest header block a request may have. */
     public const val MAX_HEADER_BYTES: Int = 64 * 1024
 
@@ -60,7 +63,12 @@ public object HttpParser {
         return Result.Request(BridgeRequest(requestLine[0], path, query, body))
     }
 
-    public fun serialize(response: BridgeResponse): ByteArray {
+    /**
+     * The response on the wire. [appId] — the app's application id — goes out as `X-Appctl-App` on every response,
+     * so the CLI can tell which app a bridge belongs to (CONTRACT.md §8.4); `null` leaves the header out.
+     */
+    @JvmOverloads
+    public fun serialize(response: BridgeResponse, appId: String? = null): ByteArray {
         val body = response.body.toByteArray(Charsets.UTF_8)
         val reason = when (response.status) {
             200 -> "OK"
@@ -69,15 +77,16 @@ public object HttpParser {
             405 -> "Method Not Allowed"
             else -> "Error"
         }
-        val head = listOf(
+        val head = (listOf(
             "HTTP/1.1 ${response.status} $reason",
             "Content-Type: ${response.contentType}",
             "Content-Length: ${body.size}",
             "X-Appctl-Exit: ${response.exitCode}",
+        ) + listOfNotNull(appId?.let { "$APP_HEADER: $it" }) + listOf(
             "Connection: close",
             "",
             "",
-        ).joinToString("\r\n")
+        )).joinToString("\r\n")
         return head.toByteArray(Charsets.UTF_8) + body
     }
 

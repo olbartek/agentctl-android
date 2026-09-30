@@ -1,6 +1,5 @@
 package io.github.olbartek.agentctl.cli
 
-import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import java.io.File
 import java.util.Locale
@@ -96,7 +95,6 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
     /** L4: the real app. Launch it seeded on a device, run a scenario through its agent bridge, check it, screenshot. */
     private fun app(): Boolean {
         val start = TimeSource.Monotonic.markNow()
-        val port = BridgeDefaults.PORT
         val check = config.appCheck
         val scenarios = File(root, config.scenariosPath)
         val scenario = check.scenario ?: ScenarioRunner.files(scenarios).firstOrNull()?.nameWithoutExtension
@@ -108,9 +106,11 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
             val launcher = AppLauncher(cli, root)
             // Zero mock latency: the bridge answers as soon as it listens, while the first screen's own appearance
             // may still be loading, and a scenario's first `expect` reads the state as it is.
+            // APPCTL_PORT names the port, as for app launch (a malformed one fails the rung); else a free one is found.
+            val port = Ports.explicit(null, cli.environment)
             val launched = launcher.launch(check.seed, device, latency = 0, clearSession = true, build = true, port = port)
             val script = File(scenarios, "$scenario.appctl").readText()
-            val bridge = BridgeClient(port)
+            val bridge = BridgeClient(launched.port)
             val run = bridge.send("POST", "/run", script)
             if (run.exitCode != 0) {
                 report("L4 app", false, "$scenario failed in the app", start)

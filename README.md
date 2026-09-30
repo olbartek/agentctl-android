@@ -410,7 +410,7 @@ exit=1
 | `test [files…]` | Run `*.appctl` scenario files (by default all of `scenariosPath`), one PASS/FAIL line each. Finding no scenario files to run is a failure, not "0 passed". |
 | `snapshots` | The screenshot tests (Roborazzi's or Paparazzi's, found in the config's `gradle.snapshotModules`); `--record` re-records the references. |
 | `check` | The verification ladder below; `--ui` adds its last two rungs. |
-| `app launch` / `app run` / `app state` / `app screens` | The same commands, against the real app on a device or emulator, through the in-app bridge. |
+| `app launch` / `app run` / `app state` / `app screens` | The same commands, against the real app on a device or emulator, through the in-app bridge. `app launch` picks a free port and records it in `<outputPath>/bridge.json`, which the others read. |
 | `app test [files…]` | The scenario files, in the real app on a device: one fresh launch each, one PASS/FAIL/SKIP line each. `--record <mp4>` records the run, `--step-delay <s>` sends a line at a time so the recording can be followed. |
 
 Exit codes are part of the contract:
@@ -558,14 +558,14 @@ extras with the same names, minus the dash. `app launch` sends them with `am sta
 
 | Extra | Type | Meaning |
 |---|---|---|
-| `agent-port` | int | the port; 8765 by default, `0` for any free one |
+| `agent-port` | int | the port; `app launch` passes the one it chose (see below). Without it the app uses 8765, and `0` means any free port |
 | `appctl-seed` | string | commands applied before the first real frame, so the app opens already in that state |
 | `mock-latency` | int, ms | a fixed latency for every mocked call |
 | `clear-session` | boolean | calls the config's `clearSession()` before the store is built |
 
 ```
 $ ./tinyctl app launch --seed "open 2"
-launched on nzoz_pixel7_api36 (Android 16) [emulator-5554] in 3.8s: screen=items/2 title="Second item" saved=false cooldown=0
+launched on agentctl_pixel7_api36 (Android 16) [emulator-5556] at 127.0.0.1:8765 in 3.8s: screen=items/2 title="Second item" saved=false cooldown=0
 $ ./tinyctl app run "save; expect saved=true pending=1; back"
 > save
   screen=items/2 title="Second item" saved=true cooldown=3 pending=1
@@ -574,6 +574,38 @@ $ ./tinyctl app run "save; expect saved=true pending=1; back"
 > back
   screen=items items=3 loading=false calls=items.fetch
 ```
+
+**Launch state and ports.** `app launch` starts the bridge on 8765 if that port is free, or else on the next free
+one up to 8864. A port counts as taken if anything on the Mac listens on it: another device's `adb forward`, or an
+iOS simulator's bridge, which shares the Mac's loopback. It also counts as taken if anything on the device listens
+on it, such as another app's bridge. `app launch` forwards the port it chose and records the launch in
+`<outputPath>/bridge.json`:
+
+```json
+{
+  "appId" : "io.github.olbartek.agentctl.examples.tinyapp",
+  "device" : "emulator-5556",
+  "launchedAt" : "2026-09-30T10:58:06Z",
+  "platform" : "android",
+  "port" : 8765
+}
+```
+
+`app run`, `app state` and `app screens` then talk to that port, so two apps (or an emulator and a simulator) on one
+Mac never need a port by hand. Each command's port is `--port` if given, else `APPCTL_PORT`, else the last launch's,
+else 8765. `app launch` and `app test` take `--port` or `APPCTL_PORT` as the exact port to use, and otherwise scan as
+above. `app test` and `check --ui` rewrite the file on every launch. A relaunch keeps its port: the app is stopped
+first, and the forward its last launch on that device left (as `bridge.json` records it) is removed once nothing
+on the device listens behind it; no other forward is touched. When the recorded app has quit,
+`app run` says the file is stale and to relaunch. The file is written exactly as agentctl-ios writes it (CONTRACT.md
+§8.6).
+
+**Who answers.** The bridge names its app on every response (`X-Appctl-App: <application id>`, §8.4), so the CLI never
+drives the wrong app. `app launch` checks that its own app answered. A different app, or an answer without the
+header, means the port was taken. A scanned port then gets one more try on the next free port, and a port you named
+fails with exit 3. When the port came from `bridge.json`, `app run` first asks `GET /snapshot` who answers, and posts
+the script only to the recorded app; `app state` and `app screens` check their own answer. A bridge from before the
+header is accepted there.
 
 A seed is a script and fails like one: at its first failing step, or at a `(launch)` that did not settle. The app
 logs `AgentCtlBridge: seed applied` or `AgentCtlBridge: seed FAILED (exit <code>)`, with its steps, under the

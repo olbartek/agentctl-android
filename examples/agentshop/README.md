@@ -97,9 +97,9 @@ cd examples/agentshop
 ./appctl test scenarios/shop-checkout-happy-path.appctl
 
 # 2. The real app on an emulator, driven through its debug-only agent bridge.
-./appctl app launch --clear-session --latency 0 --port 8799
-./appctl app run --port 8799 "$(cat scenarios/shop-checkout-happy-path.appctl)"
-./appctl app test --port 8799                        # every scenario, one fresh launch each
+./appctl app launch --clear-session --latency 0      # picks a free port, records it in .appctl/bridge.json
+./appctl app run "$(cat scenarios/shop-checkout-happy-path.appctl)"   # talks to that port
+./appctl app test                                    # every scenario, one fresh launch each
 
 # 3. The Compose UI test generated from it: taps and typing through the real UI.
 ../../gradlew -p ../.. :examples:agentshop:app:connectedDebugAndroidTest \

@@ -26,7 +26,8 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
          */
         val latency: Int?,
         val build: Boolean,
-        val port: Int,
+        /** `--port` (or `APPCTL_PORT`): launch on exactly this port; `null` finds a free one for each launch. */
+        val port: Int?,
         /** Record the whole run to this `.mp4`, with a chapters file next to it. */
         val record: String?,
         /** Send the scenario one line at a time, this many seconds apart, so a recording can be followed. */
@@ -98,7 +99,7 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
         device: Device,
         build: Boolean,
         options: Options,
-        launched: () -> Unit,
+        onLaunched: () -> Unit,
     ): Result {
         val start = TimeSource.Monotonic.markNow()
         val lines = try {
@@ -106,13 +107,14 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
         } catch (error: ScriptError) {
             return Result(name, Outcome.Failed(error.line, "parse error: ${error.description}"))
         }
-        try {
+        // Each launch finds its own free port (unless one was given) and records it in bridge.json.
+        val launched = try {
             launcher.launch(seed = null, device = device.serial, latency = options.latency ?: 0, clearSession = true, build = build, port = options.port)
         } catch (error: AppCtlException) {
             return Result(name, Outcome.Broken("launch failed: ${error.message}"))
         }
-        launched()
-        val client = BridgeClient(options.port)
+        onLaunched()
+        val client = BridgeClient(launched.port)
         // One request for the script, or one per line: the app keeps one runner across requests, so `expect` still
         // sees the calls of the step before it.
         val requests = if (options.stepDelay == null) listOf(source) else lines.map { it.text }
@@ -125,7 +127,7 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
                 body.append(response.body)
                 exitCode = response.exitCode
             } catch (error: IOException) {
-                return Result(name, Outcome.Broken(Message.bridgeUnreachable(cli, options.port, error)))
+                return Result(name, Outcome.Broken(Message.bridgeUnreachable(cli, launched.port, error)))
             }
             if (exitCode != 0) break
         }
