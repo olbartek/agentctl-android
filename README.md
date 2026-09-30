@@ -392,9 +392,11 @@ application {
 Agents should never call `./gradlew run`: it prints its build log to stdout, mixed into the step output they are
 supposed to read. [`Templates/appctl`](Templates/appctl) does this instead:
 
-1. rebuilds your executable (`installDist`), sending the build log to stderr;
-2. exits 3 if the build fails;
-3. otherwise `exec`s the binary.
+1. finds a JDK 17 or newer: `JAVA_HOME`'s, else the `java` on PATH, else Homebrew's `openjdk@21` (a Mac without a
+   system JDK), and exits 3 saying so when there is none;
+2. rebuilds your executable (`installDist`), sending the build log to stderr;
+3. exits 3 if the build fails;
+4. otherwise `exec`s the binary.
 
 ```bash
 cp Templates/appctl ./appctl     # then set MODULE and NAME at the top of the file
@@ -726,9 +728,13 @@ are shown.
 `app test` runs the scenario files this way, as `test` runs them headlessly: it builds and installs once, then for
 each file launches the app with no saved session (`clear-session`) and sends the file through the bridge.
 `--latency <ms>` sets the mock latency (0 unless given, as for L4, so the first screen has loaded when the script
-starts), `--no-build` uses the installed app, `--record <mp4>` records the device
+starts), `--no-build` uses the installed app on a device that is already running (a named AVD that is not is not
+booted: `app launch` and `app test` then print `<avd> [AVD] is not booted; …` once and exit 3, where without
+`--no-build` they boot it first), `--record <mp4>` records the device
 for the whole run (`adb shell screenrecord`, in back-to-back chunks under its three-minute limit, joined with
-`ffmpeg` when it is installed) and writes `<mp4>.chapters.txt` with the time each scenario started, and
+`ffmpeg` when it is installed) and writes `<mp4>.chapters.txt` with the time each scenario started (a video that is
+missing or empty is not reported as recorded: `warning: nothing was recorded; see <log>` on stderr, and the exit code
+is the scenarios'), and
 `--step-delay <s>` sends one line at a time so the video can be followed. A few scenarios are true headlessly but
 not in a running app: a first `expect` on the launch's own calls (`app launch` has made them before the script
 starts), a countdown's exact value (it also ticks in real time), or a date that is in the future only against the

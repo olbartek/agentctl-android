@@ -35,7 +35,8 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
      */
     fun launch(seed: String?, device: String?, latency: Int?, clearSession: Boolean, build: Boolean, port: Int?): Launched {
         val start = TimeSource.Monotonic.markNow()
-        val target = resolve(device)
+        // With --no-build the app is used as it is installed, on a device already running: one that is not is not booted.
+        val target = if (build) resolve(device) else find(device)
         val log = File(layout.logs, "app-launch.log")
         if (build) {
             val status = Shell.run(

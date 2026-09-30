@@ -104,8 +104,8 @@ internal class ScreenRecorder private constructor(
 
     /**
      * Pulls the chunks the loop wrote and joins them into [video], holding the last frame until [stoppedAt] (epoch ms;
-     * `null`: the recording's own length). The files written, or `null` when nothing was recorded. The work directory
-     * is removed once they are.
+     * `null`: the recording's own length). The files written, or `null` when nothing was recorded: no chunk, or no file
+     * with anything in it. The work directory is removed once they are all written.
      */
     fun finish(video: File, log: File, stoppedAt: Long? = null): List<File>? {
         if (!work.isDirectory) return null
@@ -124,8 +124,10 @@ internal class ScreenRecorder private constructor(
         } catch (error: IOException) {
             throw AppCtlException("the recording ${video.path} could not be saved: ${error.message}")
         }
-        if (files.all { it.isFile }) work.deleteRecursively()
-        return files
+        // A video that is missing or empty was not recorded, whatever wrote it said.
+        val written = files.filter { it.isFile && it.length() > 0 }
+        if (written.size == files.size) work.deleteRecursively()
+        return written.ifEmpty { null }
     }
 
     private fun chunks(): List<String> =

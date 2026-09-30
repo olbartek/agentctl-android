@@ -35,6 +35,11 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
 
     private val io = cli.io
 
+    /** What the recording reports: `recorded …` on stdout, and a warning (nothing recorded, ended early) on stderr. */
+    private fun printRecording(report: String) {
+        for (line in report.lines()) if (line.startsWith("warning:")) io.err.println(line) else io.print(line)
+    }
+
     /**
      * Exit codes (CONTRACT.md §5): 0 when every scenario that ran passed; 1 when one failed; 3 when there was nothing
      * to run, the app could not be built or launched, or its bridge did not answer.
@@ -42,8 +47,10 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
     fun run(paths: List<String>, options: Options): Int {
         val files = cli.scenarioFiles(paths) ?: return RunStatus.INTERNAL_ERROR.code
         val launcher = AppLauncher(cli, root)
+        // Once, before any scenario and before the recording. With --no-build a device that is not running is not
+        // booted: the not-booted line, exit 3.
         val device = try {
-            launcher.resolve(options.device)
+            if (options.build) launcher.resolve(options.device) else launcher.find(options.device)
         } catch (error: AppCtlException) {
             io.error(error.message ?: "no device")
             return RunStatus.INTERNAL_ERROR.code
@@ -81,12 +88,12 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             }
             recording?.stop()
         } catch (error: Throwable) {
-            recording?.stop()?.let(io::print)
+            recording?.stop()?.let(::printRecording)
             throw error
         }
         // After the summary, as the reference prints it.
         io.print(summary(results))
-        recorded?.let(io::print)
+        recorded?.let(::printRecording)
         return when {
             results.any { it.outcome is Outcome.Broken } -> RunStatus.INTERNAL_ERROR.code
             results.any { it.outcome is Outcome.Failed } -> RunStatus.FAILED.code

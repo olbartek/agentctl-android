@@ -19,9 +19,27 @@ NAME="shopctl"
 # The CLI finds the Android SDK (for `app` and `check --ui`) through ANDROID_HOME or local.properties at its root;
 # the repository's local.properties is two levels up, so its sdk.dir is passed on as ANDROID_HOME when that is unset.
 #
-# JAVA_HOME must name a JDK 17 or newer, as for any Gradle build.
+# The build needs a JDK 17 or newer: JAVA_HOME's when it has one, else the `java` on PATH, else Homebrew's
+# openjdk@21. With none of them it says so and exits 3.
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+# A JDK 17 or newer: JAVA_HOME's, else the `java` on PATH, else Homebrew's openjdk@21 (a Mac without a system JDK).
+java_major() { "$1" -version 2>&1 | sed -n 's/.* version "\([0-9]*\).*/\1/p' | head -n 1; }
+jdk_ok() { [ -x "$1" ] && major="$(java_major "$1")" && [ -n "$major" ] && [ "$major" -ge 17 ]; }
+if [ -z "$JAVA_HOME" ] || ! jdk_ok "$JAVA_HOME/bin/java"; then
+  if jdk_ok "$(command -v java 2>/dev/null)"; then
+    unset JAVA_HOME   # Gradle then uses the java on PATH
+  else
+    BREW_PREFIX="$(brew --prefix openjdk@21 2>/dev/null)"
+    BREW_JDK="$BREW_PREFIX/libexec/openjdk.jdk/Contents/Home"
+    if [ -n "$BREW_PREFIX" ] && jdk_ok "$BREW_JDK/bin/java"; then
+      JAVA_HOME="$BREW_JDK"; export JAVA_HOME
+    else
+      echo "$(basename "$0"): no JDK 17 or newer (JAVA_HOME: ${JAVA_HOME:-unset}); set JAVA_HOME to one, or: brew install openjdk@21" >&2
+      exit 3
+    fi
+  fi
+fi
 REPO="$(cd "$ROOT/../.." && pwd)"
 MODULE_DIR="$(echo "${MODULE#:}" | tr ':' '/')"
 if [ -z "$ANDROID_HOME" ] && [ -f "$REPO/local.properties" ]; then
