@@ -8,7 +8,6 @@ import io.github.olbartek.agentctl.runtime.RunStatus
 import java.io.File
 import java.io.IOException
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -162,105 +161,46 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
     }
 
     /**
-     * `adb shell screenrecord` for the whole run, and a chapters file with the time each scenario started.
-     * `screenrecord` stops after three minutes, so the run is recorded in back-to-back chunks, which are joined with
-     * `ffmpeg` when it is installed and kept as numbered parts when it is not. Chapters are timed from the start of
-     * the run, so on a run longer than one chunk they drift later than the joined video by the gaps between chunks
-     * (about a second each).
+     * A [ScreenRecorder] for the whole run, and a chapters file with the time each scenario started. The chunks are
+     * joined with `ffmpeg` when it is installed and kept as numbered parts when it is not. Chapters are timed from the
+     * start of the run, so on a run longer than one chunk they drift later than the joined video by the gaps between
+     * chunks (about a second each).
      */
-    class Recording private constructor(
-        private val adb: String,
-        private val device: Device,
-        private val video: File,
-        private val work: File,
-    ) {
+    class Recording private constructor(private val recorder: ScreenRecorder, private val video: File, private val log: File) {
         private val chaptersFile = File(video.path + ".chapters.txt")
         private val started = TimeSource.Monotonic.markNow()
         private val chapters = mutableListOf<String>()
-        private val chunks = mutableListOf<String>()
-
-        @Volatile private var stopping = false
-
-        @Volatile private var current: Process? = null
-        private val recorder = Thread(::record, "appctl-screenrecord").apply { isDaemon = true }
-
-        private fun record() {
-            var index = 0
-            while (!stopping) {
-                val remote = "/sdcard/appctl-record-${index++}.mp4"
-                synchronized(chunks) { chunks.add(remote) }
-                val chunkStarted = TimeSource.Monotonic.markNow()
-                val process = ProcessBuilder(adb, "-s", device.serial, "shell", "screenrecord", "--time-limit", "$CHUNK_SECONDS", remote)
-                    .redirectErrorStream(true)
-                    .redirectOutput(ProcessBuilder.Redirect.appendTo(File(work, "screenrecord.log")))
-                    .start()
-                current = process
-                val status = process.waitFor()
-                // A chunk that ends early and badly means screenrecord cannot run (the device went away, say):
-                // stop rather than respawn adb as fast as it exits.
-                if (!stopping && status != 0 && chunkStarted.elapsedNow() < CHUNK_SECONDS.seconds / 2) {
-                    stopping = true
-                }
-            }
-        }
 
         fun chapter(name: String) {
             chapters.add("${timestamp(started.elapsedNow())} $name")
         }
 
-        /** Stops the recording (`screenrecord` finishes its file on SIGINT), pulls it and writes the chapters. */
+        /** Stops the recording (the chunk being written is finished), pulls it and writes the chapters. */
         fun stop(): String {
-            stopping = true
-            // Give the last chunk a moment so the last frames are in it, then interrupt it.
-            Thread.sleep(500)
-            // Again if a chunk started just as the run ended.
-            var attempts = 0
-            while (recorder.isAlive && attempts++ < 3) {
-                Shell.capture(listOf(adb, "-s", device.serial, "shell", "pkill", "-2", "screenrecord"))
-                current?.waitFor(10, TimeUnit.SECONDS)
-                recorder.join(2000)
-            }
-            val remote = synchronized(chunks) { chunks.toList() }
-            val parts = remote.mapIndexed { index, path ->
-                val local = File(work, "part-$index.mp4")
-                Shell.run(listOf(adb, "-s", device.serial, "pull", path, local.path), work, File(work, "pull.log"), append = true)
-                Shell.run(listOf(adb, "-s", device.serial, "shell", "rm", "-f", path), work, File(work, "pull.log"), append = true)
-                local
-            }.filter { it.isFile && it.length() > 0 }
+            // Timed here: the last frame is held until the run ended, not until the recorder wound down.
+            val stoppedAt = System.currentTimeMillis()
+            recorder.stop(30.seconds)
             chaptersFile.writeText(chapters.joinToString("\n") + "\n")
-            if (parts.isEmpty()) return "warning: nothing was recorded; see ${File(work, "screenrecord.log").path}"
             val files = try {
-                // The recording's own length, so a screen that was still at the end is held until the run ended.
-                Video.join(parts, video, work, started.elapsedNow())
-            } catch (error: IOException) {
-                return "warning: the recording could not be saved to ${video.path}: ${error.message}"
-            }
+                recorder.finish(video, log, stoppedAt)
+            } catch (error: AppCtlException) {
+                return "warning: ${error.message}"
+            } ?: return "warning: nothing was recorded; see ${log.path}"
             return "recorded ${files.joinToString(", ") { it.path }} (chapters: ${chaptersFile.name})"
         }
 
         companion object {
-            /** `screenrecord`'s own limit is 180 seconds. */
-            const val CHUNK_SECONDS = 180
-
             /** Starts recording, and returns once the first chunk is being written. */
             fun start(adb: String, device: Device, video: File, layout: Layout): Recording {
-                video.absoluteFile.parentFile?.mkdirs()
-                val work = File(layout.output, "recording").apply {
-                    deleteRecursively()
-                    mkdirs()
+                val file = video.absoluteFile
+                file.parentFile?.mkdirs()
+                val log = File(layout.logs, "app-test-record.log")
+                val recorder = ScreenRecorder.start(adb, device.serial, file, File(layout.output, "recording"), log, detached = false)
+                if (!recorder.awaitStart()) {
+                    recorder.abandon(log)
+                    throw AppCtlException("adb shell screenrecord did not start; log: ${log.path}")
                 }
-                val available = Shell.capture(listOf(adb, "-s", device.serial, "shell", "which", "screenrecord"))
-                if (available.isNullOrBlank()) throw AppCtlException("screenrecord is not available on ${device.label}")
-                val recording = Recording(adb, device, video.absoluteFile, work)
-                recording.recorder.start()
-                // screenrecord prints nothing when it starts; give it a moment to write its first frames.
-                Thread.sleep(1000)
-                if (recording.current?.isAlive != true) {
-                    recording.stopping = true
-                    Shell.capture(listOf(adb, "-s", device.serial, "shell", "pkill", "-2", "screenrecord"))
-                    throw AppCtlException("adb shell screenrecord did not start; log: ${File(work, "screenrecord.log").path}")
-                }
-                return recording
+                return Recording(recorder, file, log)
             }
         }
     }

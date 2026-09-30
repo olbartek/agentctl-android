@@ -4,11 +4,9 @@ import java.io.File
 import java.io.IOException
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeSource
 
 /**
  * `app screenshot`, `app record start|stop`, `app statusbar clean|reset` and `app info`: the device itself, for demos
@@ -30,30 +28,16 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
     }
 
     fun recordStart(path: String, device: String?): String {
-        RecordState.load(layout)?.let { if (isRunning(it)) throw AppCtlException(Message.recordingRunning(cli, it)) }
         val target = target(device)
+        RecordState.load(cli, layout)?.let { if (isRunning(it)) throw AppCtlException(Message.recordingRunning(cli, it)) }
         val file = cli.resolve(path).absoluteFile.normalize()
         file.parentFile?.mkdirs()
-        val work = File(layout.output, "record").apply {
-            deleteRecursively()
-            mkdirs()
-        }
         val log = File(layout.logs, "app-record.log").apply { parentFile.mkdirs() }
-        File(work, STARTED_FILE).writeText(System.currentTimeMillis().toString())
-        // A shell loop of screenrecord chunks, detached so it outlives this command, with the file in its command
-        // line so `stop` can tell it from a process that has since taken its pid.
-        val process = ProcessBuilder("nohup", "/bin/sh", "-c", RECORDER, "appctl-record", file.path, adb, target.serial, work.path)
-            .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
-            .redirectErrorStream(true)
-            .redirectOutput(ProcessBuilder.Redirect.to(log))
-            .start()
-        val state = RecordState(target.serial, file.path, process.pid(), RecordState.PLATFORM, Instant.now())
+        val recorder = ScreenRecorder.start(adb, target.serial, file, workRoot, log, detached = true)
         // Recorded before the wait, so an interrupted start still leaves a recorder `stop` can find.
-        state.save(layout)
-        if (!started(process, target)) {
-            process.toHandle().destroy()
-            process.waitFor(5, TimeUnit.SECONDS)
-            process.destroyForcibly()
+        RecordState(target.serial, file.path, recorder.pid, RecordState.PLATFORM, Instant.now()).save(layout)
+        if (!recorder.awaitStart()) {
+            recorder.abandon(log)
             RecordState.file(layout).delete()
             throw AppCtlException("adb shell screenrecord did not start; log: ${log.path}")
         }
@@ -61,46 +45,36 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
     }
 
     fun recordStop(): String {
-        val state = RecordState.load(layout) ?: throw AppCtlException(Message.noRecording(cli))
+        val state = RecordState.load(cli, layout) ?: throw AppCtlException(Message.noRecording(cli))
+        val recorder = ScreenRecorder.of(adb, state.device, state.pid, workRoot)
+        val log = File(layout.logs, "app-record.log")
         if (!isRunning(state)) {
             RecordState.file(layout).delete()
-            throw AppCtlException(Message.recordingGone(state))
+            // What a recorder that died had finished is still on the device: it is saved, not lost.
+            val saved = recorder.finish(File(state.file), log)
+            throw AppCtlException(Message.recordingGone(state) + (saved?.let { "; saved what it recorded to ${it.joinToString(", ") { f -> f.path }}" } ?: ""))
         }
-        val recorder = ProcessHandle.of(state.pid).orElse(null)
-        // The loop finishes its last chunk on SIGTERM (screenrecord finishes its file on SIGINT), then exits.
-        recorder?.destroy()
-        val deadline = TimeSource.Monotonic.markNow() + 30.seconds
-        while (recorder?.isAlive == true && deadline.hasNotPassedNow()) Thread.sleep(100)
-        // Still running: record.json stays, so another `stop` can try again.
-        if (recorder?.isAlive == true) throw AppCtlException(Message.recorderDidNotFinish(cli, state))
+        // Timed here, not after the recorder has wound down: the hold runs until the stop was asked for.
+        val stoppedAt = System.currentTimeMillis()
+        // Still running after 30 s: record.json stays, so another `stop` can try again.
+        if (!recorder.stop(30.seconds)) throw AppCtlException(Message.recorderDidNotFinish(cli, state))
         RecordState.file(layout).delete()
-        val work = File(layout.output, "record")
-        val stopped = System.currentTimeMillis()
-        val startedAt = File(work, STARTED_FILE).takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
-        val parts = pull(state.device, work)
-        if (parts.isEmpty()) throw AppCtlException(Message.recordingNotWritten(cli, state))
-        val file = File(state.file)
-        val length = startedAt?.let { (stopped - it).milliseconds }
-        try {
-            Video.join(parts, file, work, length)
-        } catch (error: IOException) {
-            throw AppCtlException("the recording ${state.file} could not be saved: ${error.message}")
-        }
-        if (!file.isFile) throw AppCtlException(Message.recordingNotWritten(cli, state))
-        return Message.recorded(file.path, (Video.duration(file) ?: length ?: Duration.ZERO).inWholeMilliseconds / 1000.0)
+        val files = recorder.finish(File(state.file), log, stoppedAt) ?: throw AppCtlException(Message.recordingNotWritten(cli, state))
+        val seconds = files.mapNotNull(Video::duration).fold(Duration.ZERO, Duration::plus).inWholeMilliseconds / 1000.0
+        return Message.recorded(files.joinToString(", ") { it.path }, seconds)
     }
 
     fun statusbar(clean: Boolean, device: String?): String {
         val target = target(device)
         val log = File(layout.logs, "app-statusbar.log")
-        val saved = File(layout.output, "statusbar-${target.serial}.txt")
-        if (clean) {
+        // Keyed by the AVD as well: an emulator's serial is reused by the next one started.
+        val saved = File(layout.output, "statusbar-${target.serial}-${target.name.replace(Regex("[^A-Za-z0-9._-]"), "_")}.txt")
+        if (clean && !saved.isFile) {
             // Demo mode must be allowed first; what it was is kept, so `reset` can put it back.
-            if (!saved.isFile) {
-                val allowed = Shell.capture(listOf(adb, "-s", target.serial, "shell", "settings", "get", "global", StatusBar.ALLOWED), timeoutSeconds = 60)?.trim()
-                saved.parentFile?.mkdirs()
-                saved.writeText(allowed ?: "null")
-            }
+            val allowed = Shell.capture(listOf(adb, "-s", target.serial, "shell", "settings", "get", "global", StatusBar.ALLOWED), timeoutSeconds = 60)
+                ?: throw AppCtlException("adb shell settings get did not answer; log: ${log.path}")
+            saved.parentFile?.mkdirs()
+            saved.writeText(allowed.trim())
         }
         for (arguments in if (clean) StatusBar.clean else StatusBar.reset(saved.takeIf { it.isFile }?.readText()?.trim())) {
             val status = Shell.run(listOf(adb, "-s", target.serial, "shell") + arguments, root, log, append = true, timeoutSeconds = 60)
@@ -114,8 +88,10 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
         val target = target(device)
         val appId = cli.config.applicationId
         val path = Shell.capture(listOf(adb, "-s", target.serial, "shell", "pm", "path", appId), timeoutSeconds = 60)
-        if (path.isNullOrBlank()) throw AppCtlException(Message.notInstalled(cli, target))
-        val dump = Shell.capture(listOf(adb, "-s", target.serial, "shell", "dumpsys", "package", appId), timeoutSeconds = 60) ?: ""
+            ?: throw AppCtlException("adb shell pm path did not answer on ${target.label} [${target.serial}]")
+        if (path.isBlank()) throw AppCtlException(Message.notInstalled(cli, target))
+        val dump = Shell.capture(listOf(adb, "-s", target.serial, "shell", "dumpsys", "package", appId), timeoutSeconds = 60)
+            ?: throw AppCtlException("adb shell dumpsys package did not answer on ${target.label} [${target.serial}]")
         val (version, build) = AppInfo.versions(dump)
         return AppInfo(appId, build, target.serial, RecordState.PLATFORM, version).render()
     }
@@ -128,7 +104,10 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
         } catch (error: Unreadable) {
             throw AppCtlException(Message.unreadableBridgeState(cli, error.reason))
         }
-        if (recorded != null && recorded.platform == BridgeState.PLATFORM) return launcher.find(recorded.device)
+        if (recorded != null && recorded.platform == BridgeState.PLATFORM) {
+            // Unless it has gone since: then the config's, as if there were no launch state.
+            if (launcher.isConnected(recorded.device)) return launcher.find(recorded.device)
+        }
         return launcher.find(cli.config.device)
     }
 
@@ -139,60 +118,8 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
         return state.file in command
     }
 
-    /** Whether the recorder got screenrecord going on the device within a few seconds. */
-    private fun started(process: Process, device: Device): Boolean {
-        val deadline = TimeSource.Monotonic.markNow() + 5.seconds
-        while (deadline.hasNotPassedNow()) {
-            if (!process.isAlive) return false
-            val pid = Shell.capture(listOf(adb, "-s", device.serial, "shell", "pidof", "screenrecord"), timeoutSeconds = 10)
-            if (!pid.isNullOrBlank()) return true
-            Thread.sleep(250)
-        }
-        return false
-    }
-
-    /** The chunks the recorder wrote on the device, pulled into [work] and removed there. */
-    private fun pull(serial: String, work: File): List<File> {
-        val chunks = File(work, CHUNKS_FILE).takeIf { it.isFile }?.readLines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
-        val log = File(layout.logs, "app-record.log")
-        return chunks.mapIndexed { index, remote ->
-            val local = File(work, "part-$index.mp4")
-            Shell.run(listOf(adb, "-s", serial, "pull", remote, local.path), work, log, append = true, timeoutSeconds = 300)
-            Shell.run(listOf(adb, "-s", serial, "shell", "rm", "-f", remote), work, log, append = true, timeoutSeconds = 60)
-            local
-        }.filter { it.isFile && it.length() > 0 }
-    }
-
-    companion object {
-        private const val STARTED_FILE = "started-ms"
-        private const val CHUNKS_FILE = "chunks.txt"
-
-        /**
-         * The recorder: `adb shell screenrecord` in back-to-back chunks under its three-minute limit, until SIGTERM or
-         * SIGINT, when it stops the chunk being written (screenrecord finishes its file on SIGINT) and exits. Each
-         * chunk's device path goes to `chunks.txt`. A chunk that fails at once ends the loop rather than spinning.
-         * Arguments: the output file (only so `ps` shows it), adb, the serial, the work directory.
-         */
-        private val RECORDER = """
-            adb=${'$'}2; serial=${'$'}3; work=${'$'}4
-            stop=0; i=0
-            trap 'stop=1; "${'$'}adb" -s "${'$'}serial" shell pkill -2 screenrecord' INT TERM
-            while [ ${'$'}stop = 0 ]; do
-              remote=/sdcard/appctl-record-${'$'}i.mp4
-              echo "${'$'}remote" >> "${'$'}work/$CHUNKS_FILE"
-              began=${'$'}(date +%s)
-              "${'$'}adb" -s "${'$'}serial" shell screenrecord --time-limit ${AppTest.Recording.CHUNK_SECONDS} "${'$'}remote" &
-              chunk=${'$'}!
-              wait ${'$'}chunk; status=${'$'}?
-              # Interrupted by the trap: wait again, for the chunk to finish its file.
-              if [ ${'$'}stop = 1 ]; then wait ${'$'}chunk; break; fi
-              if [ ${'$'}status != 0 ] && [ ${'$'}((${'$'}(date +%s) - began)) -lt 2 ]; then
-                echo "screenrecord failed (exit ${'$'}status)"; exit 1
-              fi
-              i=${'$'}((i + 1))
-            done
-        """.trimIndent()
-    }
+    /** Where each recording's chunks and bookkeeping go, one directory per recorder. */
+    private val workRoot = File(layout.output, "record")
 }
 
 /** `<outputPath>/record.json`: the recorder `app record start` left running, for `app record stop`. As `bridge.json`. */
@@ -218,7 +145,13 @@ internal data class RecordState(
     fun save(layout: Layout) {
         val file = file(layout)
         file.parentFile?.mkdirs()
-        file.writeText(render())
+        // Whole or not at all, as bridge.json.
+        val temporary = File(file.parentFile, "${file.name}.tmp")
+        temporary.writeText(render())
+        if (!temporary.renameTo(file)) {
+            file.writeText(render())
+            temporary.delete()
+        }
     }
 
     companion object {
@@ -228,15 +161,17 @@ internal data class RecordState(
         fun file(layout: Layout): File = File(layout.output, FILE_NAME)
 
         /** The saved state, `null` when there is none; a file that is not one is an error (exit 3). */
-        fun load(layout: Layout): RecordState? {
+        fun load(cli: Cli<*, *>, layout: Layout): RecordState? {
             val file = file(layout)
             if (!file.exists()) return null
+            val name = "${cli.config.outputPath}/$FILE_NAME"
             val text = try {
                 file.readText()
             } catch (error: IOException) {
-                throw AppCtlException("cannot read ${layout.output.name}/$FILE_NAME: $error")
+                throw AppCtlException("cannot read $name: $error")
             }
-            return parse(text) ?: throw AppCtlException("cannot read ${layout.output.name}/$FILE_NAME: not a recording state")
+            return parse(text)
+                ?: throw AppCtlException("cannot read $name: not a recording state (expected device, file, pid, platform and startedAt)")
         }
 
         fun parse(text: String): RecordState? {
@@ -268,7 +203,7 @@ internal data class AppInfo(val appId: String, val build: String, val device: St
     companion object {
         /** `versionName` and `versionCode` from `dumpsys package` (the first of each, the installed package's). */
         fun versions(dump: String): Pair<String, String> {
-            val name = Regex("versionName=(\\S*)").find(dump)?.groupValues?.get(1) ?: ""
+            val name = Regex("versionName=([^\\r\\n]*)").find(dump)?.groupValues?.get(1)?.trim() ?: ""
             val code = Regex("versionCode=(\\d+)").find(dump)?.groupValues?.get(1) ?: ""
             return name to code
         }
@@ -314,6 +249,8 @@ internal object Video {
      */
     fun join(parts: List<File>, video: File, work: File, length: Duration?): List<File> {
         video.absoluteFile.parentFile?.mkdirs()
+        // An older file there must not pass for this recording if this one ends up in parts.
+        video.delete()
         val joined = if (parts.size == 1) {
             parts[0]
         } else {

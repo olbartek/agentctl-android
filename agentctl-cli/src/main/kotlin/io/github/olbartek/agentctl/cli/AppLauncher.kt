@@ -161,6 +161,9 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
      */
     fun resolve(nameOrSerial: String?): Device = locate(nameOrSerial, boots = true)
 
+    /** Whether [serial] is connected and answers (quietly: no warning for one that does not). */
+    fun isConnected(serial: String): Boolean = Devices.list(adb) {}.ready.any { it.serial == serial }
+
     /** [resolve], without booting: an AVD that is not running fails as not booted. For the `app` device commands. */
     fun find(nameOrSerial: String?): Device = locate(nameOrSerial, boots = false)
 

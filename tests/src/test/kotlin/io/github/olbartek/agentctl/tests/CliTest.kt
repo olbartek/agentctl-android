@@ -15,6 +15,8 @@ class CliTest {
     private val subcommands = listOf(
         listOf("run"), listOf("state"), listOf("screens"), listOf("docs"), listOf("test"), listOf("snapshots"), listOf("check"),
         listOf("app"), listOf("app", "launch"), listOf("app", "run"), listOf("app", "test"), listOf("app", "state"), listOf("app", "screens"),
+        listOf("app", "screenshot"), listOf("app", "record"), listOf("app", "record", "start"), listOf("app", "record", "stop"),
+        listOf("app", "statusbar"), listOf("app", "statusbar", "clean"), listOf("app", "statusbar", "reset"), listOf("app", "info"),
     )
 
     @Test

@@ -207,6 +207,9 @@ internal class Cli<S, A>(
         } catch (error: AppCtlException) {
             io.error(error.message ?: "failed")
             RunStatus.INTERNAL_ERROR.code
+        } catch (error: IOException) {
+            io.error(error.toString())
+            RunStatus.INTERNAL_ERROR.code
         }
     }
 

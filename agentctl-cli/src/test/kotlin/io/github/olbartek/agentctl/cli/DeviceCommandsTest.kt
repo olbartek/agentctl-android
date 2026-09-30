@@ -96,6 +96,8 @@ class DeviceCommandsTest {
     @Test
     fun aStillEndingIsHeldUntilTheRecordingEnded() {
         assumeTrue("ffmpeg is not installed", Shell.capture(listOf("ffmpeg", "-version")) != null)
+        assumeTrue("ffprobe is not installed", Shell.capture(listOf("ffprobe", "-version")) != null)
+        assumeTrue("ffmpeg has no libx264", Shell.capture(listOf("ffmpeg", "-hide_banner", "-encoders"))?.contains("libx264") == true)
         val work = Files.createTempDirectory("video").toFile()
         val part = File(work, "part-0.mp4")
         Shell.run(
