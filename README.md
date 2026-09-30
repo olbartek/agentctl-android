@@ -514,6 +514,38 @@ would pass having examined nothing.
 The guards are deliberately shallow: they check that a command *appears* in some script, not that its result was
 asserted.
 
+### The scenario checks
+
+`AgentScenarioChecks` is the rest of what every host's tests used to write for themselves: the unit tests alone
+catch what `test` and `docs --check` catch, and the promises the agent docs make hold for your app's own wiring. It
+takes your config, finds the repo root by the config's root marker (walking up from the test's working directory, a
+Gradle test task's module directory; `RepoRoot.find(marker, start)` is the same walk the CLI makes), and reads the
+scenarios at `scenariosPath`. Each check returns its problems as readable lines, empty when there are none
+([`ScenarioTest.kt`](tests/src/test/kotlin/io/github/olbartek/agentctl/tests/ScenarioTest.kt)):
+
+```kotlin
+@Test
+fun scenariosAreDeterministic() {
+    val problems = AgentScenarioChecks(TinyAppConfig.appCtl).deterministic(runs = 10)
+    assertTrue(problems.isEmpty(), problems.joinToString("\n"))
+}
+```
+
+- `allPass()`: every scenario passes headlessly.
+- `endWithExpect()`: every scenario's last command is an `expect`.
+- `deterministic(runs)`: each scenario prints byte-identical steps across fresh runs.
+- `sessionReplayMatches(parts)`: each scenario, split into parts resumed the way `run --session` resumes them,
+  prints the same steps and ends in the same state as one run.
+- `docsCurrent(root)`: the file at `docsPath` is what `docs` would write (the same `AppCtlConfig.docsMarkdown`).
+- `readmeListsAll(readme)`: a README (`scenarios/README.md` by default) names every scenario file in backticks, and
+  no file that is gone.
+- `noStepShows(secrets, personalCommands)`: no step's output (the echo of the command aside) contains a secret, or a
+  value a scenario types into one of `personalCommands`, ignoring case. The values stay in your test.
+
+Every headless run has its own virtual-time dispatcher, so the checks may run beside other tests. The constructor
+throws `NoScenariosFound` when there are no scenario files, like `AgentCoverage`, and `RepoRootNotFound` when no
+directory above the start holds the marker.
+
 ## The in-app bridge
 
 Add `agentctl-bridge` with **`debugImplementation`** only, as your config module, and keep the code that names them
@@ -698,6 +730,10 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   reference asks UIKit whether a view controller has a transition, presentation or dismissal under way. Compose's
   signal also sees endless animations; the shared rule that a UI busy for more than a second stops holding a step
   covers them.
+- `AgentScenarioChecks` finds the repo root from the test's working directory, where the reference starts from the
+  test's source file (`#filePath`). Its checks block (`runBlocking`) where the reference's are `async`, need no
+  serialized suite (the reference turns a process-wide executor on for each run), and compare the final state dumps
+  as they are, since pushed screens take their ids from the state, not from a per-process counter.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.

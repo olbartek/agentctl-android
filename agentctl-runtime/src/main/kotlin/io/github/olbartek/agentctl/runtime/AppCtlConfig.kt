@@ -1,6 +1,7 @@
 package io.github.olbartek.agentctl.runtime
 
 import io.github.olbartek.agentctl.CLIName
+import io.github.olbartek.agentctl.DocsRenderer
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
@@ -114,6 +115,10 @@ public class AppCtlConfig<S, A>(
 ) {
     /** A fresh deterministic headless runner. */
     public fun makeRunner(): ScriptRunner<S, A> = makeHeadless().makeRunner()
+
+    /** The generated command reference, exactly as the CLI's `docs` writes it to [docsPath]. */
+    public val docsMarkdown: String
+        get() = DocsRenderer.render(screens, mockMethods, docsText)
 
     /** Runs each scenario file against its own fresh runner. */
     public suspend fun runScenarios(files: List<java.io.File>): List<ScenarioResult> =

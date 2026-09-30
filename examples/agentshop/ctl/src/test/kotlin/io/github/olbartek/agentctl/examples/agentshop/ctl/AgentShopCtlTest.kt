@@ -1,7 +1,5 @@
 package io.github.olbartek.agentctl.examples.agentshop.ctl
 
-import io.github.olbartek.agentctl.AgentRegistry
-import io.github.olbartek.agentctl.DocsRenderer
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.StepFormatter
 import io.github.olbartek.agentctl.examples.agentshop.app.AppFeatureAgent
@@ -11,9 +9,8 @@ import io.github.olbartek.agentctl.examples.agentshop.clients.StoredSession
 import io.github.olbartek.agentctl.runtime.BridgeRequest
 import io.github.olbartek.agentctl.runtime.BridgeRouter
 import io.github.olbartek.agentctl.runtime.RunStatus
-import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import io.github.olbartek.agentctl.testsupport.AgentCoverage
-import java.io.File
+import io.github.olbartek.agentctl.testsupport.AgentScenarioChecks
 import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -27,22 +24,24 @@ import kotlinx.coroutines.withContext
 
 /**
  * What this guards: the unit tests cover what `./appctl test` and `./appctl docs --check` cover, so the host's tests
- * alone catch a failing scenario or a stale command reference.
+ * alone catch a failing scenario or a stale command reference, through the library's [AgentScenarioChecks].
  */
 class ScenarioTest {
+    private val checks = AgentScenarioChecks(AgentShopConfig.appCtl)
+
     @Test
     fun thereAreScenarios() {
-        assertEquals(105, scenarioFiles.size, "no *.appctl files at ${scenariosDirectory.path}")
+        assertEquals(exampleRoot.canonicalFile, checks.root.canonicalFile)
+        assertEquals(105, checks.files.size, "the scenarios at ${checks.scenarios.path}")
     }
 
     /** Every scenario passes against AgentShop's own headless wiring. */
     @Test
-    fun everyScenarioPasses() = runBlocking {
-        for (file in scenarioFiles) {
-            val result = ScenarioRunner.run(file) { headlessRunner() }
-            assertTrue(result.passed, result.report)
-        }
-    }
+    fun everyScenarioPasses() = assertNone(checks.allPass())
+
+    /** Every scenario ends by asserting something, so none can pass having checked nothing at its end. */
+    @Test
+    fun everyScenarioEndsWithAnExpect() = assertNone(checks.endWithExpect())
 
     /** The same through the real CLI, as CI's `examples/agentshop/appctl test` runs it. */
     @Test
@@ -55,15 +54,7 @@ class ScenarioTest {
     /** The committed command reference is what `./appctl docs` would write today. */
     @Test
     fun docsAreUpToDate() {
-        val path = AgentShopConfig.appCtl.docsPath
-        val existing = File(exampleRoot, path).readText()
-        val rendered = DocsRenderer.render(
-            screens = AgentShopConfig.screens,
-            runtimeCommands = AgentRegistry.runtimeCommands(AgentShopConfig.docsText.mockExample),
-            mockMethods = AgentShopConfig.mockMethods,
-            text = AgentShopConfig.docsText,
-        )
-        assertEquals(rendered, existing, "$path is stale. Run examples/agentshop/appctl docs.")
+        assertNone(checks.docsCurrent())
         assertEquals(0, shopctl("docs", "--check").status)
     }
 }
@@ -99,37 +90,27 @@ class CoverageTest {
  * in-memory backends — so it is checked against AgentShop's config, not only the library's example.
  */
 class DeterminismTest {
+    private val checks = AgentScenarioChecks(AgentShopConfig.appCtl)
+
     /** Ten fresh runs of every scenario print identical steps. */
     @Test
-    fun scenariosAreDeterministic() = runBlocking {
-        for (file in scenarioFiles) {
-            val outputs = (1..10).map { StepFormatter.text(ScenarioRunner.run(file) { headlessRunner() }.steps) }.toSet()
-            assertEquals(1, outputs.size, "${file.name} produced ${outputs.size} different outputs")
-        }
-    }
+    fun scenariosAreDeterministic() = assertNone(checks.deterministic(runs = 10))
 
     /**
-     * What `--session` promises: resuming replays the saved commands into a fresh runner, so a script run in three
-     * `run` calls against one runner must land in exactly the state one uninterrupted run reaches.
+     * What `--session` promises: every scenario, run in three parts that each replay the earlier parts into a fresh
+     * runner, prints the steps and reaches the state one uninterrupted run does.
      */
     @Test
-    fun sessionReplayMatchesASingleRun() = runBlocking {
-        val parts = listOf("email alice@example.com; password Passw0rd!", "submit; expect screen=home/shop products=12", "advance 1s")
+    fun sessionReplayMatchesASingleRun() = assertNone(checks.sessionReplayMatches(parts = 3))
+
+    /** Not vacuous: the state dump the replay compares follows the store, so a script really moves it. */
+    @Test
+    fun theStateDumpFollowsTheStore() = runBlocking {
         val fresh = headlessRunner().also { assertEquals(RunStatus.OK, it.launch().status) }
-
-        val split = headlessRunner().also { assertEquals(RunStatus.OK, it.launch().status) }
-        for (part in parts) {
-            val result = split.run(part)
-            assertEquals(RunStatus.OK, result.status, "$part:\n${StepFormatter.text(result.steps)}")
-        }
-
-        val single = headlessRunner().also { assertEquals(RunStatus.OK, it.launch().status) }
-        val whole = single.run(parts.joinToString("; "))
-        assertEquals(RunStatus.OK, whole.status, StepFormatter.text(whole.steps))
-        assertEquals(5, whole.steps.size)
-
-        assertEquals(single.stateDump, split.stateDump)
-        assertNotEquals(fresh.stateDump, split.stateDump, "the script left the state where launch put it")
+        val moved = headlessRunner().also { assertEquals(RunStatus.OK, it.launch().status) }
+        val result = moved.run("login-as alice; tab orders")
+        assertEquals(RunStatus.OK, result.status, StepFormatter.text(result.steps))
+        assertNotEquals(fresh.stateDump, moved.stateDump, "the script left the state where launch put it")
     }
 }
 
@@ -181,3 +162,5 @@ class BridgeTest {
         assertNull(storage.load())
     }
 }
+
+private fun assertNone(problems: List<String>) = assertTrue(problems.isEmpty(), problems.joinToString("\n"))

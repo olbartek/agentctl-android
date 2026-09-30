@@ -10,7 +10,8 @@ import java.io.File
 import kotlinx.coroutines.runBlocking
 
 /**
- * Thrown by [AgentCoverage]'s constructor when `scenarios` has no `*.appctl` files to check.
+ * Thrown by [AgentCoverage]'s and [AgentScenarioChecks]'s constructors when `scenarios` has no `*.appctl` files to
+ * check.
  *
  * Every guard on [AgentCoverage] answers "what's missing" by scanning the scenario files found at `scenarios`; an
  * empty result means "no problems found". That reading is only meaningful if there were scenario files to scan in
@@ -18,9 +19,13 @@ import kotlinx.coroutines.runBlocking
  * guard that always passes without having examined anything. The constructor refuses instead, naming the exact
  * path it looked at. It does not search elsewhere: a wrong path is a bug to fix, not to work around.
  */
-public class NoScenariosFound(public val scenarios: File) : Exception(
-    "AgentCoverage: no *.appctl files found at ${scenarios.path} — check the `scenarios` argument passed to " +
-        "AgentCoverage; every coverage guard would otherwise report success without checking anything.",
+public class NoScenariosFound(
+    /** The directory that holds no `*.appctl` files. */
+    public val scenarios: File,
+) : Exception(
+    "no *.appctl files found at ${scenarios.path} — check the `scenarios` argument passed to AgentCoverage, or the " +
+        "config's scenariosPath and the root AgentScenarioChecks resolved it against; every guard would otherwise " +
+        "report success without checking anything.",
 )
 
 /**
