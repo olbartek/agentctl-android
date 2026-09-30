@@ -48,6 +48,34 @@ internal class ScreenRecorder private constructor(
         return false
     }
 
+    /** Whether the loop is still running. */
+    val isAlive: Boolean get() = handle?.isAlive == true
+
+    /**
+     * Whether [pid] is still this recorder, and not a process that has since taken its pid: alive, with [file] in its
+     * command line, or — when the system does not say what its command line is — with its work directory here.
+     */
+    fun isRecording(file: String): Boolean {
+        val handle = handle?.takeIf { it.isAlive } ?: return false
+        val command = handle.info().commandLine().orElse(null) ?: return work.isDirectory
+        return file in command
+    }
+
+    /** When the first chunk started recording (epoch ms), once [awaitStart] saw it. */
+    val startedAt: Long? get() = File(work, STARTED).readTextOrNull()?.trim()?.toLongOrNull()
+
+    /**
+     * For a loop that died without stopping its chunk (killed outright): stops that chunk on the device, so what is
+     * pulled is a finished file.
+     */
+    fun interruptOrphanedChunk(log: File) {
+        val device = File(work, CHUNK_PID).readTextOrNull()?.lineSequence()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val running = Shell.capture(listOf(adb, "-s", serial, "shell", "ps", "-o", "ARGS=", "-p", device), timeoutSeconds = 10)
+        if (running?.contains("screenrecord") != true) return
+        Shell.run(listOf(adb, "-s", serial, "shell", "kill", "-2", device), work, log, append = true, timeoutSeconds = 30)
+        Thread.sleep(2000)
+    }
+
     /** Stops the loop, which finishes its chunk first; `false` if it is still running after [timeout]. */
     fun stop(timeout: Duration): Boolean {
         val handle = handle ?: return true
@@ -84,7 +112,7 @@ internal class ScreenRecorder private constructor(
             local.takeIf { it.isFile && it.length() > 0 }
         }
         if (parts.isEmpty()) return null
-        val started = File(work, STARTED).readTextOrNull()?.trim()?.toLongOrNull()
+        val started = startedAt
         val length = if (started != null && stoppedAt != null) (stoppedAt - started).milliseconds else null
         val files = try {
             Video.join(parts, video, work, length)
@@ -122,7 +150,10 @@ internal class ScreenRecorder private constructor(
             root.mkdirs()
             log.parentFile?.mkdirs()
             val command = (if (detached) listOf("nohup") else emptyList()) +
-                listOf("/bin/sh", "-c", SCRIPT, "appctl-record", file.path, adb, serial, root.path, chunkSeconds.toString())
+                listOf(
+                    "/bin/sh", "-c", SCRIPT, "appctl-record", file.path, adb, serial, root.path, chunkSeconds.toString(),
+                    if (detached) "" else ProcessHandle.current().pid().toString(),
+                )
             val process = ProcessBuilder(command)
                 .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
                 .redirectErrorStream(true)
@@ -135,24 +166,28 @@ internal class ScreenRecorder private constructor(
         fun of(adb: String, serial: String, pid: Long, root: File): ScreenRecorder = ScreenRecorder(adb, serial, pid, root, null)
 
         /**
-         * The loop. Arguments: the output file (for `ps` only), adb, the serial, the work root, the chunk limit. Each
+         * The loop. Arguments: the output file (for `ps` only), adb, the serial, the work root, the chunk limit, and the
+         * pid of the command it belongs to (empty when detached: it outlives it). Each
          * chunk's device shell prints its pid and becomes screenrecord (`exec`), so the pid is screenrecord's. On
          * SIGTERM or SIGINT the loop sends that pid SIGINT (screenrecord finishes its file on it), waiting for the pid
          * if the chunk is just starting and giving a new chunk a second to set up, then waits for the chunk and exits. A chunk that fails early ends the loop.
          */
         private val SCRIPT = """
-            adb=${'$'}2; serial=${'$'}3; work=${'$'}4/${'$'}${'$'}; limit=${'$'}5
-            mkdir -p "${'$'}work"
+            adb=${'$'}2; serial=${'$'}3; work=${'$'}4/${'$'}${'$'}; limit=${'$'}5; parent=${'$'}6
+            # Fresh: a pid this loop reuses must not inherit an old recorder's chunk list.
+            rm -rf "${'$'}work"; mkdir -p "${'$'}work"
             stop=0; i=0
             trap 'stop=1' INT TERM
             while [ ${'$'}stop = 0 ]; do
+              # A recorder whose command has gone (killed without a chance to stop it) stops by itself.
+              if [ -n "${'$'}parent" ] && ! kill -0 "${'$'}parent" 2>/dev/null; then break; fi
               remote=/sdcard/appctl-record-${'$'}${'$'}-${'$'}i.mp4
               echo "${'$'}remote" >> "${'$'}work/$CHUNKS"
               : > "${'$'}work/$CHUNK_PID"
               began=${'$'}(date +%s)
               "${'$'}adb" -s "${'$'}serial" shell "echo \${'$'}\${'$'} && exec screenrecord --time-limit ${'$'}limit ${'$'}remote" > "${'$'}work/$CHUNK_PID" &
               chunk=${'$'}!
-              status=0; interrupted=0; tries=0
+              status=0; interrupted=0; tries=0; seen=
               while :; do
                 if [ ${'$'}stop = 0 ]; then
                   # Returns when the chunk ends, or early when a signal arrives (then stop is 1).
@@ -162,10 +197,14 @@ internal class ScreenRecorder private constructor(
                 fi
                 device=${'$'}(head -n 1 "${'$'}work/$CHUNK_PID" 2>/dev/null | tr -d '\r')
                 if [ -n "${'$'}device" ]; then
-                  # A chunk gets a second first: screenrecord only finishes its file on SIGINT once it is set up.
-                  while [ ${'$'}interrupted = 0 ] && [ ${'$'}((${'$'}(date +%s) - began)) -lt 2 ]; do sleep 0.2; done
-                  [ ${'$'}interrupted = 0 ] && "${'$'}adb" -s "${'$'}serial" shell kill -2 "${'$'}device"
-                  interrupted=1
+                  [ -z "${'$'}seen" ] && seen=${'$'}(date +%s)
+                  # A chunk gets a second after its pid is out: screenrecord only finishes its file on SIGINT once it
+                  # is set up. Signalled once, and only while it runs (its pid may belong to another process after).
+                  while [ ${'$'}interrupted = 0 ] && [ ${'$'}((${'$'}(date +%s) - seen)) -lt 2 ]; do sleep 0.2; done
+                  if [ ${'$'}interrupted = 0 ] && kill -0 ${'$'}chunk 2>/dev/null; then
+                    # Marked only once it landed, so a later stop tries again.
+                    "${'$'}adb" -s "${'$'}serial" shell kill -2 "${'$'}device" && interrupted=1
+                  fi
                   wait ${'$'}chunk
                   kill -0 ${'$'}chunk 2>/dev/null || break
                 else
@@ -176,8 +215,9 @@ internal class ScreenRecorder private constructor(
                 fi
               done
               [ ${'$'}stop = 1 ] && break
-              if [ ${'$'}status != 0 ] && [ ${'$'}((${'$'}(date +%s) - began)) -lt ${'$'}((limit / 2)) ]; then
-                echo "screenrecord failed (exit ${'$'}status)"; exit 1
+              # A chunk that ended well before its limit, unasked, failed, whatever its status said.
+              if [ ${'$'}((${'$'}(date +%s) - began)) -lt ${'$'}((limit / 2)) ]; then
+                echo "screenrecord ended early (exit ${'$'}status)"; exit 1
               fi
               i=${'$'}((i + 1))
             done

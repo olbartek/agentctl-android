@@ -46,22 +46,31 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
 
     fun recordStop(): String {
         val state = RecordState.load(cli, layout) ?: throw AppCtlException(Message.noRecording(cli))
+        // Claimed first: of two stops at once, only one goes on; the other finds nothing to stop.
+        val claim = RecordState.claim(layout) ?: throw AppCtlException(Message.noRecording(cli))
         val recorder = ScreenRecorder.of(adb, state.device, state.pid, workRoot)
         val log = File(layout.logs, "app-record.log")
-        if (!isRunning(state)) {
-            RecordState.file(layout).delete()
-            // What a recorder that died had finished is still on the device: it is saved, not lost.
+        if (!recorder.isRecording(state.file)) {
+            claim.delete()
+            // What a recorder that died had recorded is still on the device: its last chunk is stopped, then saved.
+            recorder.interruptOrphanedChunk(log)
             val saved = recorder.finish(File(state.file), log)
             throw AppCtlException(Message.recordingGone(state) + (saved?.let { "; saved what it recorded to ${it.joinToString(", ") { f -> f.path }}" } ?: ""))
         }
         // Timed here, not after the recorder has wound down: the hold runs until the stop was asked for.
         val stoppedAt = System.currentTimeMillis()
-        // Still running after 30 s: record.json stays, so another `stop` can try again.
-        if (!recorder.stop(30.seconds)) throw AppCtlException(Message.recorderDidNotFinish(cli, state))
-        RecordState.file(layout).delete()
+        if (!recorder.stop(30.seconds)) {
+            // Still running: record.json is put back, so another `stop` can try again.
+            RecordState.unclaim(layout, claim)
+            throw AppCtlException(Message.recorderDidNotFinish(cli, state))
+        }
+        claim.delete()
+        val started = recorder.startedAt
         val files = recorder.finish(File(state.file), log, stoppedAt) ?: throw AppCtlException(Message.recordingNotWritten(cli, state))
-        val seconds = files.mapNotNull(Video::duration).fold(Duration.ZERO, Duration::plus).inWholeMilliseconds / 1000.0
-        return Message.recorded(files.joinToString(", ") { it.path }, seconds)
+        // Without ffprobe, the recording's own length.
+        val durations = files.map(Video::duration)
+        val seconds = if (durations.all { it != null }) durations.filterNotNull().fold(Duration.ZERO, Duration::plus) else (started?.let { (stoppedAt - it).milliseconds } ?: Duration.ZERO)
+        return Message.recorded(files.joinToString(", ") { it.path }, seconds.inWholeMilliseconds / 1000.0)
     }
 
     fun statusbar(clean: Boolean, device: String?): String {
@@ -111,12 +120,9 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
         return launcher.find(cli.config.device)
     }
 
-    /** Whether the recorder is still running, and is ours: alive, and its command line names the file. */
-    private fun isRunning(state: RecordState): Boolean {
-        if (state.pid <= 0 || ProcessHandle.of(state.pid).map { it.isAlive }.orElse(false) != true) return false
-        val command = Shell.capture(listOf("ps", "-o", "command=", "-p", state.pid.toString()), timeoutSeconds = 10) ?: return false
-        return state.file in command
-    }
+    /** Whether the recorder is still running, and is ours. */
+    private fun isRunning(state: RecordState): Boolean =
+        state.pid > 0 && ScreenRecorder.of(adb, state.device, state.pid, workRoot).isRecording(state.file)
 
     /** Where each recording's chunks and bookkeeping go, one directory per recorder. */
     private val workRoot = File(layout.output, "record")
@@ -159,6 +165,17 @@ internal data class RecordState(
         const val PLATFORM: String = BridgeState.PLATFORM
 
         fun file(layout: Layout): File = File(layout.output, FILE_NAME)
+
+        /** Takes record.json for one `stop` (renamed aside), or `null` when another took it first. */
+        fun claim(layout: Layout): File? {
+            val claimed = File(layout.output, "$FILE_NAME.stopping.${ProcessHandle.current().pid()}")
+            return claimed.takeIf { file(layout).renameTo(it) }
+        }
+
+        /** Gives a claimed record.json back, for a stop that could not finish. */
+        fun unclaim(layout: Layout, claimed: File) {
+            claimed.renameTo(file(layout))
+        }
 
         /** The saved state, `null` when there is none; a file that is not one is an error (exit 3). */
         fun load(cli: Cli<*, *>, layout: Layout): RecordState? {

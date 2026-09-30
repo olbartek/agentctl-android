@@ -57,7 +57,7 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             }
         }
         val results = mutableListOf<Result>()
-        try {
+        val recorded = try {
             var built = !options.build
             for (file in files) {
                 val name = file.nameWithoutExtension
@@ -79,10 +79,14 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
                 results.add(result)
                 io.print(result.report)
             }
-        } finally {
+            recording?.stop()
+        } catch (error: Throwable) {
             recording?.stop()?.let(io::print)
+            throw error
         }
+        // After the summary, as the reference prints it.
         io.print(summary(results))
+        recorded?.let(io::print)
         return when {
             results.any { it.outcome is Outcome.Broken } -> RunStatus.INTERNAL_ERROR.code
             results.any { it.outcome is Outcome.Failed } -> RunStatus.FAILED.code
@@ -177,17 +181,24 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
 
         /** Stops the recording (the chunk being written is finished), pulls it and writes the chapters. */
         fun stop(): String {
+            Runtime.getRuntime().removeShutdownHook(hook)
             // Timed here: the last frame is held until the run ended, not until the recorder wound down.
             val stoppedAt = System.currentTimeMillis()
-            recorder.stop(30.seconds)
+            // A recorder that is no longer running when the run ends stopped on its own: it failed part-way.
+            val endedEarly = !recorder.isAlive
+            if (!recorder.stop(30.seconds)) return "warning: the recorder did not finish; its chunks stay on the device; see ${log.path}"
             chaptersFile.writeText(chapters.joinToString("\n") + "\n")
             val files = try {
                 recorder.finish(video, log, stoppedAt)
             } catch (error: AppCtlException) {
                 return "warning: ${error.message}"
             } ?: return "warning: nothing was recorded; see ${log.path}"
-            return "recorded ${files.joinToString(", ") { it.path }} (chapters: ${chaptersFile.name})"
+            val report = "recorded ${files.joinToString(", ") { it.path }} (chapters: ${chaptersFile.name})"
+            return if (endedEarly) "$report\nwarning: the recording ended early; see ${log.path}" else report
         }
+
+        /** Stops the recorder if the CLI is ended (SIGTERM) before the run is: it is this process's child. */
+        private val hook = Thread { recorder.stop(10.seconds) }.also { Runtime.getRuntime().addShutdownHook(it) }
 
         companion object {
             /** Starts recording, and returns once the first chunk is being written. */
