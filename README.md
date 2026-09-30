@@ -435,7 +435,7 @@ output usable as a committed fixture. `HeadlessHost` hands your store exactly th
 | Field | Headless value |
 |---|---|
 | `scope` | a `VirtualTimeDispatcher`: every effect runs on one thread, in a fixed order, and `delay` waits on virtual time that only `advance` moves |
-| `clock` | `now()` is 2026-01-01T09:00:00Z on every read; `sleep` is virtual and counted for `pending=` |
+| `clock` | `now()` is 2026-01-01T09:00:00Z plus whatever `advance` has added; `sleep` is virtual and counted for `pending=` |
 | `uuids` | `00000000-0000-0000-0000-000000000000`, then `…0001`, … |
 | `random` | SplitMix64, seed 0 |
 | `zone`, `locale` | UTC, `en_US_POSIX` |
@@ -681,6 +681,11 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   the reference adds `LiveEnvironment.now`.
 - `app test` runs on a device through `adb` (`screenrecord` for `--record`), and fixes the mock latency at 0 unless
   `--latency` is given, as L4 does, where the reference uses the app's own latency.
+- A screen's summary, its commands' disabled checks and their argument parsing need no "store's dependency
+  context" (§6): an `AgentScreen` sees only the state, never a clock, so it cannot read another "now" than the
+  reducers. A date rule (a code's expiry, say) lives in the reducer, which reads `environment.clock`, and the state
+  carries its result. The reference computes screens inside the store's `withDependencies` instead, because a SwiftUI
+  feature's summary can read `@Dependency(\.date)` directly.
 - Live settling's UI signal (§8.5) is Compose's idleness (no recomposition pending, no frame awaited), where the
   reference asks UIKit whether a view controller has a transition, presentation or dismissal under way. Compose's
   signal also sees endless animations; the shared rule that a UI busy for more than a second stops holding a step

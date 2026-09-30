@@ -413,9 +413,12 @@ starting state, always produces byte-identical step output.** Concretely:
 - **A virtual clock**, not a real one. Nothing that measures time (a resend cooldown, a code expiry)
   progresses except through `advance`; the implementation must be able to enumerate and fire every
   pending timer up to a given point, in deadline order.
-- **A fixed notion of "now."** Whatever the app reads as the current date/time returns one constant
-  value for the whole run (the reference implementation uses 2026-01-01 09:00 UTC). The exact value
-  is an application choice; that it never varies between runs is the requirement.
+- **A fixed notion of "now."** Whatever the app reads as the current date/time starts at one constant
+  value (the reference implementation uses 2026-01-01 09:00 UTC) and moves only with `advance`: after
+  `advance 90s` it reads 90 seconds later. The exact starting value is an application choice; that
+  it never varies between runs is the requirement. Everything a step prints, and every command's
+  argument, is computed in the store's root dependency context: a screen's summary that applies a
+  date rule reads the same "now" as the reducers, not the host machine's clock.
 - **Deterministic identifiers and randomness.** Anything the app generates that would otherwise be
   random (record IDs, session identifiers, a shuffled order) must instead come from a deterministic
   source — an incrementing sequence, a seeded generator — so two runs of the same script generate
@@ -446,7 +449,7 @@ app's own `configure` hook:
 |---|---|
 | the continuous clock | a test clock that only `advance` moves, wrapped to count its sleeps for `pending` |
 | UUID generation | incrementing: `00000000-0000-0000-0000-000000000000`, then `…0001`, … |
-| the current date | 2026-01-01T09:00:00Z, on every read |
+| the current date | 2026-01-01T09:00:00Z, plus whatever `advance` has added |
 | the random number generator | SplitMix64, seeded with 0 |
 | the time zone | UTC |
 | the locale | `en_US_POSIX` |

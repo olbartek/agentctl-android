@@ -32,7 +32,8 @@ import kotlinx.coroutines.cancel
  * | Field | Headless value |
  * |---|---|
  * | `scope` | a [VirtualTimeDispatcher] scope: every effect runs on one thread, in a fixed order |
- * | `clock` | a [CountingClock] whose `now` is [FIXED_NOW] and whose `sleep` waits on virtual time |
+ * | `clock` | a [CountingClock] whose `now` is [FIXED_NOW] plus what `advance` has added, and whose `sleep` waits on
+ *   virtual time |
  * | `uuids` | [IncrementingUuids] |
  * | `random` | [SplitMix64Random] seeded with [RANDOM_SEED] |
  * | `zone` | UTC |
@@ -51,8 +52,11 @@ public class HeadlessHost<S, A>(
     public val dispatcher: VirtualTimeDispatcher = VirtualTimeDispatcher()
     public val scope: CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher)
 
-    /** The app's clock: [FIXED_NOW], virtual sleeps, and the source of `pending`. */
-    public val clock: CountingClock = CountingClock { FIXED_NOW }
+    /**
+     * The app's clock: [FIXED_NOW] plus the virtual time `advance` has added (CONTRACT.md §6), virtual sleeps, and
+     * the source of `pending`. A timer that wakes reads the time it was due at.
+     */
+    public val clock: CountingClock = CountingClock { FIXED_NOW.plusMillis(dispatcher.currentTime) }
 
     /** Every mock call, in order: what a step prints as `calls=`. */
     public val callLog: MockCallLog = MockCallLog()
@@ -101,7 +105,7 @@ public class HeadlessHost<S, A>(
     }
 
     public companion object {
-        /** 2026-01-01T09:00:00Z: `clock.now()` on every read. */
+        /** 2026-01-01T09:00:00Z: `clock.now()` before any `advance`. */
         public val FIXED_NOW: Instant = Instant.parse("2026-01-01T09:00:00Z")
 
         /** The seed of `random`: every headless run draws the same numbers in the same order. */
