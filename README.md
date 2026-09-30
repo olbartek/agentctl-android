@@ -618,6 +618,19 @@ letting the app settle between them, so a countdown ticks once per second advanc
 real time. A backend of yours that reads the time or sleeps should do it on `environment.clock`, as it would
 headlessly.
 
+A step in the running app also waits for its UI (CONTRACT.md §8.5): a screen still sliding in or out is not settled,
+so the next step, and a screenshot, start on the screen the user sees. The bridge asks Compose whether it is idle (no
+recomposition pending and no frame awaited, which is what an animation does); an app without Compose is always idle
+there. For UI of another kind, set your own signal on the `AgentLaunch`:
+
+```kotlin
+launch.isUIIdle = { !navigator.isTransitioning }   // called on the main thread
+```
+
+A UI that stays busy for more than a second (a spinner on screen) is animating without end, not in a transition, and
+stops holding the step. A launch seed does not wait for the UI: it runs behind the splash, before the store's screens
+are shown.
+
 `app test` runs the scenario files this way, as `test` runs them headlessly: it builds and installs once, then for
 each file launches the app with no saved session (`clear-session`) and sends the file through the bridge.
 `--latency <ms>` sets the mock latency (0 unless given, as for L4, so the first screen has loaded when the script
@@ -668,6 +681,10 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   the reference adds `LiveEnvironment.now`.
 - `app test` runs on a device through `adb` (`screenrecord` for `--record`), and fixes the mock latency at 0 unless
   `--latency` is given, as L4 does, where the reference uses the app's own latency.
+- Live settling's UI signal (§8.5) is Compose's idleness (no recomposition pending, no frame awaited), where the
+  reference asks UIKit whether a view controller has a transition, presentation or dismissal under way. Compose's
+  signal also sees endless animations; the shared rule that a UI busy for more than a second stops holding a step
+  covers them.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.

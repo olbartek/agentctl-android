@@ -617,6 +617,16 @@ and the steps — none — under `steps`.
   jumps it deadline by deadline (§2.2); the reference also moves the app's date with it. A mocked
   call takes the app's live latency (or `-mock-latency`), and settling waits until no mocked call is
   in flight and the state has been quiet for a moment (the reference: 250 ms quiet, a 3 s ceiling).
+- **Settling waits for the UI too.** Live settling also waits until the app's UI is idle: no
+  navigation transition in flight, as the platform reports it (the reference: no view controller
+  with a transition, presentation or dismissal under way; the Kotlin port: Compose's recomposers
+  idle). The quiet moment starts once the UI is idle, so a step takes at least the transition. A
+  command sent mid-transition can be lost: a push that lands during a pop's animation may never be
+  shown. A UI that stays busy for more than 1 s at a stretch (an endless animation, such as a
+  spinner) does not hold settling; a stretch ends once the UI has been idle for 100 ms. A launch
+  seed does not wait for the UI, since it runs before the app's screens are shown. An interactive
+  transition held open (a swipe-back the user has not let go of) counts as busy, so after 1 s it
+  stops holding like an endless animation.
   A step that starts a timer can therefore read differently from its headless counterpart once a
   tick has fired on its own.
 - **Views appear by themselves.** The app's views send their own appearance actions, so the bridge

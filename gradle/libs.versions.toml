@@ -22,8 +22,10 @@ kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutine
 clikt-core = { module = "com.github.ajalt.clikt:clikt-core", version.ref = "clikt" }
 junit = { module = "junit:junit", version.ref = "junit" }
 kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
-# The AgentShop app: Compose (versions from the BOM) and its instrumented UI tests.
+# The AgentShop app: Compose (versions from the BOM) and its instrumented UI tests. agentctl-bridge compiles against
+# compose-runtime only, to ask whether the UI is idle; it never brings Compose in.
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+compose-runtime = { module = "androidx.compose.runtime:runtime" }
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-material3 = { module = "androidx.compose.material3:material3" }

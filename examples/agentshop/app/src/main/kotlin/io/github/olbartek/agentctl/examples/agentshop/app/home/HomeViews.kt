@@ -54,6 +54,7 @@ import io.github.olbartek.agentctl.examples.agentshop.app.design.NavBar
 import io.github.olbartek.agentctl.examples.agentshop.app.design.Palette
 import io.github.olbartek.agentctl.examples.agentshop.app.design.PrimaryButton
 import io.github.olbartek.agentctl.examples.agentshop.app.design.Rule
+import io.github.olbartek.agentctl.examples.agentshop.app.design.StackHost
 import io.github.olbartek.agentctl.examples.agentshop.app.design.Typography
 import io.github.olbartek.agentctl.examples.agentshop.app.design.capitalized
 import io.github.olbartek.agentctl.examples.agentshop.app.design.message
@@ -117,54 +118,33 @@ fun HomeTabsView(state: HomeTabs.State, send: (HomeTabs.Action) -> Unit) {
             // Each tab is its own screen tree: leaving a tab and coming back makes its screen appear again.
             key(state.selectedTab) {
                 when (state.selectedTab) {
-                    HomeTabs.Tab.SHOP -> {
-                        val top = state.shopPath.top
-                        if (top == null) {
-                            ShopFeedView(state.shop) { send(HomeTabs.Action.Shop(it)) }
-                        } else {
-                            key(top.id) {
-                                val pop = { send(HomeTabs.Action.ShopPopFrom(top.id)) }
-                                BackHandler(onBack = pop)
-                                ProductDetailView(top.screen, onBack = pop) { send(HomeTabs.Action.ShopElement(top.id, it)) }
-                            }
-                        }
+                    HomeTabs.Tab.SHOP -> StackHost(state.shopPath, root = { ShopFeedView(state.shop) { send(HomeTabs.Action.Shop(it)) } }) { top ->
+                        val pop = { send(HomeTabs.Action.ShopPopFrom(top.id)) }
+                        BackHandler(onBack = pop)
+                        ProductDetailView(top.screen, onBack = pop) { send(HomeTabs.Action.ShopElement(top.id, it)) }
                     }
-                    HomeTabs.Tab.CART -> {
-                        val top = state.cartPath.top
-                        if (top == null) {
-                            CartView(state.cart) { send(HomeTabs.Action.Cart(it)) }
-                        } else {
-                            key(top.id) {
-                                when (val screen = top.screen) {
-                                    is HomeTabs.CartPath.Checkout -> {
-                                        val pop = { send(HomeTabs.Action.CartPopFrom(top.id)) }
-                                        BackHandler(onBack = pop)
-                                        CheckoutView(screen.state, onBack = pop) {
-                                            send(HomeTabs.Action.CartElement(top.id, HomeTabs.CartPathAction.Checkout(it)))
-                                        }
-                                    }
-                                    // The order is placed: there is no going back to checkout.
-                                    is HomeTabs.CartPath.Confirmation -> {
-                                        BackHandler {}
-                                        OrderConfirmationView(screen.state) {
-                                            send(HomeTabs.Action.CartElement(top.id, HomeTabs.CartPathAction.Confirmation(it)))
-                                        }
-                                    }
+                    HomeTabs.Tab.CART -> StackHost(state.cartPath, root = { CartView(state.cart) { send(HomeTabs.Action.Cart(it)) } }) { top ->
+                        when (val screen = top.screen) {
+                            is HomeTabs.CartPath.Checkout -> {
+                                val pop = { send(HomeTabs.Action.CartPopFrom(top.id)) }
+                                BackHandler(onBack = pop)
+                                CheckoutView(screen.state, onBack = pop) {
+                                    send(HomeTabs.Action.CartElement(top.id, HomeTabs.CartPathAction.Checkout(it)))
+                                }
+                            }
+                            // The order is placed: there is no going back to checkout.
+                            is HomeTabs.CartPath.Confirmation -> {
+                                BackHandler {}
+                                OrderConfirmationView(screen.state) {
+                                    send(HomeTabs.Action.CartElement(top.id, HomeTabs.CartPathAction.Confirmation(it)))
                                 }
                             }
                         }
                     }
-                    HomeTabs.Tab.ORDERS -> {
-                        val top = state.ordersPath.top
-                        if (top == null) {
-                            OrdersListView(state.ordersList) { send(HomeTabs.Action.OrdersList(it)) }
-                        } else {
-                            key(top.id) {
-                                val pop = { send(HomeTabs.Action.OrdersPopFrom(top.id)) }
-                                BackHandler(onBack = pop)
-                                OrderDetailView(top.screen, onBack = pop) { send(HomeTabs.Action.OrdersElement(top.id, it)) }
-                            }
-                        }
+                    HomeTabs.Tab.ORDERS -> StackHost(state.ordersPath, root = { OrdersListView(state.ordersList) { send(HomeTabs.Action.OrdersList(it)) } }) { top ->
+                        val pop = { send(HomeTabs.Action.OrdersPopFrom(top.id)) }
+                        BackHandler(onBack = pop)
+                        OrderDetailView(top.screen, onBack = pop) { send(HomeTabs.Action.OrdersElement(top.id, it)) }
                     }
                     HomeTabs.Tab.PROFILE -> ProfileView(state.profile) { send(HomeTabs.Action.Profile(it)) }
                 }

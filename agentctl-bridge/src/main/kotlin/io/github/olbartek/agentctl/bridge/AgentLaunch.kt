@@ -43,8 +43,30 @@ public class AgentLaunch<S, A>(config: AppCtlConfig<S, A>, intent: Intent?) {
         message.split("\n").forEach { Log.i(TAG, it) }
     }
 
+    init {
+        // Compose's idleness, unless the config's live host brings a check of its own.
+        if (session.host.isUIIdle == null) session.host.isUIIdle = ComposeUI::isIdle
+    }
+
     /** The app's live store: render it, and send the user's actions to it. */
     public val store: AgentStore<S, A> get() = session.host.store
+
+    /**
+     * Whether the app's UI is idle — no navigation transition or animation in flight — which settling waits for
+     * (CONTRACT.md §8.5). Called on the main thread. Default: Compose's idleness (no recomposition pending and no
+     * frame awaited), which is always idle in an app without Compose. Add your own UI's transitions to it (Views,
+     * say), or replace it:
+     *
+     * ```kotlin
+     * val compose = launch.isUIIdle
+     * launch.isUIIdle = { compose?.invoke() != false && !navigator.isTransitioning }
+     * ```
+     */
+    public var isUIIdle: (() -> Boolean)?
+        get() = session.host.isUIIdle
+        set(value) {
+            session.host.isUIIdle = value
+        }
 
     private val ready = MutableStateFlow(options.seed == null)
 

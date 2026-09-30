@@ -12,7 +12,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -34,6 +33,7 @@ import io.github.olbartek.agentctl.examples.agentshop.app.design.PrimaryButton
 import io.github.olbartek.agentctl.examples.agentshop.app.design.PromptLink
 import io.github.olbartek.agentctl.examples.agentshop.app.design.ScreenHeader
 import io.github.olbartek.agentctl.examples.agentshop.app.design.SecureFieldKind
+import io.github.olbartek.agentctl.examples.agentshop.app.design.StackHost
 import io.github.olbartek.agentctl.examples.agentshop.app.design.Typography
 import io.github.olbartek.agentctl.examples.agentshop.app.design.message
 import io.github.olbartek.agentctl.examples.agentshop.app.design.screenTag
@@ -55,13 +55,8 @@ import io.github.olbartek.agentctl.examples.agentshop.auth.VerifyEmailAgent
  */
 @Composable
 fun AuthFlowView(state: AuthFlow.State, send: (AuthFlow.Action) -> Unit) {
-    val top = state.path.top
-    if (top == null) {
-        LoginView(state.login) { send(AuthFlow.Action.Login(it)) }
-        return
-    }
     // A new push is a new screen: its `onAppear` runs again, as in a navigation stack.
-    key(top.id) {
+    StackHost(state.path, root = { LoginView(state.login) { send(AuthFlow.Action.Login(it)) } }) { top ->
         val id = top.id
         BackHandler { send(AuthFlow.Action.PopFrom(id)) }
         when (val screen = top.screen) {

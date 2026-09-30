@@ -26,6 +26,9 @@ kotlin {
 dependencies {
     api(project(":agentctl-runtime"))
     implementation(libs.kotlinx.coroutines.android)
+    // Whether a Compose UI is idle (ComposeUI): used only when the app has Compose, so never a dependency of the app.
+    compileOnly(platform(libs.compose.bom))
+    compileOnly(libs.compose.runtime)
 }
 
 // Published like the JVM modules (JitPack builds `publishToMavenLocal`), from the release variant.

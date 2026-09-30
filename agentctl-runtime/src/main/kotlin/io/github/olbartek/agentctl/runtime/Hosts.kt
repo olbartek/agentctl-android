@@ -150,21 +150,37 @@ public class LiveHost<S, A>(
 
     public val store: AgentStore<S, A> = makeStore(environment)
 
+    /**
+     * Whether the app's UI is idle: no navigation transition or animation in flight. [settle] waits for it as well as
+     * for the store (CONTRACT.md §8.5), so a step after a push or a pop starts on the screen the user sees. Called on
+     * [dispatcher]. `null`, the default, is a UI that is always idle; `agentctl-bridge` sets Compose's idleness unless
+     * the host has set its own.
+     */
+    public var isUIIdle: (() -> Boolean)? = null
+
     /** Cancels every effect still running (its timers and mocked calls). The host is unusable afterwards. */
     public fun close() {
         scope.cancel()
     }
 
     /**
-     * Settles on real time — no mock call in flight, and the state quiet for a moment — because a running app's
-     * latency and timers are real, unlike the headless host's. Call on [dispatcher].
+     * Settles on real time — no mock call in flight, the UI idle ([isUIIdle]), and the state quiet for a moment —
+     * because a running app's latency, timers and transitions are real, unlike the headless host's. Call on
+     * [dispatcher].
      */
-    public suspend fun settle(): SettleResult = settleLive(
-        state = { store.state },
-        callLog = callLog,
-        pending = { clock.activeSleeps },
-        quietWindow = 250.milliseconds,
-    )
+    public suspend fun settle(): SettleResult = settle(waitingForUI = true)
+
+    /** [settle], waiting for the UI only when [waitingForUI]: not while the store's screens are not shown (a seed). */
+    internal suspend fun settle(waitingForUI: Boolean): SettleResult {
+        val isUIIdle = isUIIdle.takeIf { waitingForUI }
+        return settleLive(
+            state = { store.state },
+            callLog = callLog,
+            pending = { clock.activeSleeps },
+            quietWindow = 250.milliseconds,
+            uiIdle = { isUIIdle?.invoke() ?: true },
+        )
+    }
 
     /**
      * The settling between two deadlines of an `advance`: long enough for what a timer fires to reach the store and
@@ -192,7 +208,8 @@ public class LiveHost<S, A>(
         faults = faults,
         pending = { clock.activeSleeps },
         environment = RunnerEnvironment(
-            settle = { settle() },
+            // Synthesized appearance means no views show the store yet: there is no UI of it to wait for.
+            settle = { settle(waitingForUI = !synthesizesAppearance) },
             advance = { duration -> clock.advance(duration.toDuration(), between = { settleBetweenDeadlines() }) },
             synthesizesAppearance = synthesizesAppearance,
         ),
