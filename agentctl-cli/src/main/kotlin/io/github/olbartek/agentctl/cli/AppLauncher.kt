@@ -191,24 +191,9 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         throw AppCtlException("the emulator $avd did not boot within 5 minutes; log: ${log.path}")
     }
 
-    private fun connected(): List<Device> {
-        val output = Shell.capture(listOf(adb, "devices")) ?: throw AppCtlException("cannot run adb ($adb)")
-        return output.lines().drop(1).mapNotNull { line ->
-            val parts = line.trim().split(Regex("\\s+"))
-            if (parts.size < 2 || parts[1] != "device") return@mapNotNull null
-            val serial = parts[0]
-            val avd = if (serial.startsWith("emulator-")) {
-                Shell.capture(listOf(adb, "-s", serial, "emu", "avd", "name"))?.lines()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-            } else {
-                null
-            }
-            val name = avd ?: getprop(serial, "ro.product.model") ?: serial
-            Device(serial, name, getprop(serial, "ro.build.version.release") ?: "?")
-        }
-    }
+    private fun connected(): List<Device> = Devices.connected(adb) { cli.io.err.println("warning: $it") }
 
-    private fun getprop(serial: String, property: String): String? =
-        Shell.capture(listOf(adb, "-s", serial, "shell", "getprop", property))?.trim()?.takeIf { it.isNotEmpty() }
+    private fun getprop(serial: String, property: String): String? = Devices.getprop(adb, serial, property)
 
     private fun adbOrThrow(arguments: List<String>, device: Device, log: File) {
         val status = Shell.run(listOf(adb, "-s", device.serial) + arguments, root, log, append = true)
@@ -244,4 +229,48 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         /** `adb shell` joins its arguments into one device shell command line: quote a value for that shell. */
         fun shellQuoted(value: String): String = "'" + value.replace("'", "'\\''") + "'"
     }
+}
+
+/** The devices `adb` lists, each asked who it is. A device that does not answer is skipped, not waited for. */
+internal object Devices {
+    /** How long a device gets to answer one question: a frozen emulator never does. */
+    const val PROBE_SECONDS: Long = 10
+
+    /** How long `adb devices` gets, which may have to start the adb server. */
+    const val LIST_SECONDS: Long = 60
+
+    /**
+     * The devices `adb devices` lists as ready, with their names and Android releases. One whose shell does not
+     * answer within [probeSeconds] (a frozen emulator is still listed as `device`) is left out, and [warn] says so.
+     */
+    fun connected(adb: String, probeSeconds: Long = PROBE_SECONDS, warn: (String) -> Unit): List<Device> {
+        // The listing gets the usual time: it may start the adb server first. Only each device's answer is short.
+        val started = TimeSource.Monotonic.markNow()
+        val output = Shell.capture(listOf(adb, "devices"), timeoutSeconds = LIST_SECONDS) ?: throw AppCtlException(
+            if (started.elapsedNow() >= LIST_SECONDS.seconds) Message.adbDidNotAnswer(LIST_SECONDS) else "cannot run adb ($adb)",
+        )
+        return output.lines().drop(1).mapNotNull { line ->
+            val parts = line.trim().split(Regex("\\s+"))
+            if (parts.size < 2 || parts[1] != "device") return@mapNotNull null
+            val serial = parts[0]
+            // Asked first: it is how a device that does not answer is found out, before anything else waits on it.
+            val release = Shell.capture(listOf(adb, "-s", serial, "shell", "getprop", "ro.build.version.release"), timeoutSeconds = probeSeconds)
+            if (release == null) {
+                warn("$serial does not answer (adb shell timed out after $probeSeconds s); skipping it")
+                return@mapNotNull null
+            }
+            val avd = if (serial.startsWith("emulator-")) {
+                Shell.capture(listOf(adb, "-s", serial, "emu", "avd", "name"), timeoutSeconds = probeSeconds)
+                    ?.lines()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+            } else {
+                null
+            }
+            val name = avd ?: getprop(adb, serial, "ro.product.model", probeSeconds) ?: serial
+            Device(serial, name, release.trim().ifEmpty { "?" })
+        }
+    }
+
+    fun getprop(adb: String, serial: String, property: String, timeoutSeconds: Long = PROBE_SECONDS): String? =
+        Shell.capture(listOf(adb, "-s", serial, "shell", "getprop", property), timeoutSeconds = timeoutSeconds)
+            ?.trim()?.takeIf { it.isNotEmpty() }
 }

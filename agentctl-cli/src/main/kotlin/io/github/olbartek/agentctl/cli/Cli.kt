@@ -341,6 +341,10 @@ internal object Message {
     fun noScenarios(directory: File): String =
         "no scenario files (*.appctl) in ${directory.path}: check the config's scenariosPath, or name the files to run"
 
+    /** `adb devices` itself timed out: the adb server, not a device, is stuck. As the reference words a stuck simctl. */
+    fun adbDidNotAnswer(seconds: Long): String =
+        "adb devices did not answer within $seconds s; the adb server may be stuck: run 'adb kill-server', or restart the emulator"
+
     fun staleDocs(config: AppCtlConfig<*, *>): String = "${config.docsPath} is stale. Run ${config.help.invocation} docs."
 
     /** The `check` ladder's one-column form of [staleDocs]. */
