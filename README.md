@@ -411,6 +411,7 @@ exit=1
 | `snapshots` | The screenshot tests (Roborazzi's or Paparazzi's, found in the config's `gradle.snapshotModules`); `--record` re-records the references. |
 | `check` | The verification ladder below; `--ui` adds its last two rungs. |
 | `app launch` / `app run` / `app state` / `app screens` | The same commands, against the real app on a device or emulator, through the in-app bridge. `app launch` picks a free port and records it in `<outputPath>/bridge.json`, which the others read. |
+| `app screenshot <png>` / `app record start <mp4>` / `app record stop` / `app statusbar clean\|reset` / `app info` | The device itself, for demos: a screenshot; a recording that runs across other commands until `stop` (only the recorder `start` began is stopped; a still ending is held until the stop); a 9:41 status bar with full Wi-Fi and battery (SystemUI's demo mode), or the device's own; the installed app's ID, version and build as one JSON line. Each acts on `--device`, else the last launch's device (`bridge.json`), else the config's, and never boots an emulator. |
 | `app test [files…]` | The scenario files, in the real app on a device: one fresh launch each, one PASS/FAIL/SKIP line each. `--record <mp4>` records the run, `--step-delay <s>` sends a line at a time so the recording can be followed. |
 
 Exit codes are part of the contract:
@@ -686,6 +687,10 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   reducers. A date rule (a code's expiry, say) lives in the reducer, which reads `environment.clock`, and the state
   carries its result. The reference computes screens inside the store's `withDependencies` instead, because a SwiftUI
   feature's summary can read `@Dependency(\.date)` directly.
+- The device commands (`app screenshot`, `app record`, `app statusbar`, `app info`) take `--device` where the reference
+  takes `--sim`. `app record` runs `adb shell screenrecord` in back-to-back chunks under its three-minute limit,
+  joined with `ffmpeg`, with the last frame held until the stop, since `screenrecord` writes frames only when the
+  screen changes. The clean status bar is SystemUI's demo mode, whose mobile icon Android 16 does not draw.
 - Live settling's UI signal (§8.5) is Compose's idleness (no recomposition pending, no frame awaited), where the
   reference asks UIKit whether a view controller has a transition, presentation or dismissal under way. Compose's
   signal also sees endless animations; the shared rule that a UI busy for more than a second stops holding a step

@@ -230,24 +230,12 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             chaptersFile.writeText(chapters.joinToString("\n") + "\n")
             if (parts.isEmpty()) return "warning: nothing was recorded; see ${File(work, "screenrecord.log").path}"
             val files = try {
-                join(parts)
+                // The recording's own length, so a screen that was still at the end is held until the run ended.
+                Video.join(parts, video, work, started.elapsedNow())
             } catch (error: IOException) {
                 return "warning: the recording could not be saved to ${video.path}: ${error.message}"
             }
             return "recorded ${files.joinToString(", ") { it.path }} (chapters: ${chaptersFile.name})"
-        }
-
-        /** The chunks as one video, or as numbered parts beside where it would be if `ffmpeg` cannot join them. */
-        private fun join(parts: List<File>): List<File> {
-            if (parts.size == 1) return listOf(parts[0].copyTo(video, overwrite = true))
-            val list = File(work, "parts.txt").apply { writeText(parts.joinToString("\n") { "file '${it.absolutePath}'" } + "\n") }
-            val status = Shell.run(
-                listOf("ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list.path, "-c", "copy", video.path),
-                work,
-                File(work, "ffmpeg.log"),
-            )
-            if (status == 0) return listOf(video)
-            return parts.mapIndexed { index, part -> part.copyTo(File(video.parentFile, "${video.nameWithoutExtension}.part${index + 1}.mp4"), overwrite = true) }
         }
 
         companion object {

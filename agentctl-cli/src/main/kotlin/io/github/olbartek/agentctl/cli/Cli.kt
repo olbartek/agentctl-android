@@ -188,6 +188,28 @@ internal class Cli<S, A>(
 
     fun appGet(path: String, port: Int?): Int = bridgeCall(port, "GET", path, null)
 
+    fun appScreenshot(file: String, device: String?): Int = onDevice { it.screenshot(file, device) }
+
+    fun appRecordStart(file: String, device: String?): Int = onDevice { it.recordStart(file, device) }
+
+    fun appRecordStop(): Int = onDevice { it.recordStop() }
+
+    fun appStatusbar(clean: Boolean, device: String?): Int = onDevice { it.statusbar(clean, device) }
+
+    fun appInfo(device: String?): Int = onDevice { it.info(device) }
+
+    /** A device command: what it prints on success, or its error with exit 3. */
+    private fun onDevice(body: (DeviceCommands) -> String): Int {
+        val root = root() ?: return RunStatus.INTERNAL_ERROR.code
+        return try {
+            io.print(body(DeviceCommands(this, root)))
+            0
+        } catch (error: AppCtlException) {
+            io.error(error.message ?: "failed")
+            RunStatus.INTERNAL_ERROR.code
+        }
+    }
+
     /** A launch's port: `--port` or `APPCTL_PORT` exactly, or `null` inside to find a free one; `null` on a usage error. */
     private fun launchPort(flag: Int?): LaunchPort? = try {
         LaunchPort(Ports.explicit(flag, environment))
@@ -344,6 +366,38 @@ internal object Message {
     /** `adb devices` itself timed out: the adb server, not a device, is stuck. As the reference words a stuck simctl. */
     fun adbDidNotAnswer(seconds: Long): String =
         "adb devices did not answer within $seconds s; the adb server may be stuck: run 'adb kill-server', or restart the emulator"
+
+    // `app screenshot`, `app record`, `app statusbar` and `app info`: the reference's words, with the device's.
+
+    fun saved(file: File, device: Device): String = "saved ${file.path} (${device.label} [${device.serial}])"
+
+    fun recording(cli: Cli<*, *>, file: File, device: Device): String =
+        "recording ${file.path} (${device.label} [${device.serial}]); stop with ${cli.invocation} app record stop"
+
+    fun recordingRunning(cli: Cli<*, *>, state: RecordState): String =
+        "a recording is already running: ${state.file} (started ${state.startedAt}); stop it with ${cli.invocation} app record stop"
+
+    fun recorded(file: String, seconds: Double): String = "recorded $file (${String.format(java.util.Locale.ROOT, "%.1f", seconds)}s)"
+
+    fun noRecording(cli: Cli<*, *>): String = "no recording to stop (no ${cli.config.outputPath}/${RecordState.FILE_NAME})"
+
+    fun recordingGone(state: RecordState): String = "the recording of ${state.file} is no longer running"
+
+    fun recorderDidNotFinish(cli: Cli<*, *>, state: RecordState): String =
+        "the recorder of ${state.file} did not finish within 30 s; try ${cli.invocation} app record stop again"
+
+    fun recordingNotWritten(cli: Cli<*, *>, state: RecordState): String =
+        "the recording ${state.file} was not written; see ${cli.config.outputPath}/logs/app-record.log"
+
+    fun statusBar(clean: Boolean, device: Device): String =
+        "status bar ${if (clean) "clean" else "reset"} on ${device.label} [${device.serial}]"
+
+    fun notInstalled(cli: Cli<*, *>, device: Device): String =
+        "${cli.config.applicationId} is not installed on ${device.label} [${device.serial}]; run ${cli.invocation} app launch"
+
+    /** An AVD that is not running: it has no serial yet, so its bracket says what it is. */
+    fun notBooted(cli: Cli<*, *>, label: String, id: String): String =
+        "$label [$id] is not booted; boot it, or run ${cli.invocation} app launch"
 
     /** `--device` names a device that is running but frozen: it is not booted again beside itself. */
     fun deviceDoesNotAnswer(name: String, serial: String): String =
