@@ -94,6 +94,10 @@ public object AgentCtl {
                 AppTestCommand(cli),
                 AppGetCommand(cli, "state", "/state"),
                 AppGetCommand(cli, "screens", "/screens"),
+                AppScreenshotCommand(cli),
+                AppRecordGroup().subcommands(AppRecordStartCommand(cli), AppRecordStopCommand(cli)),
+                AppStatusbarGroup().subcommands(AppStatusbarCommand(cli, clean = true), AppStatusbarCommand(cli, clean = false)),
+                AppInfoCommand(cli),
             ),
         )
 
@@ -310,6 +314,69 @@ public object AgentCtl {
         )
     }
 
+    private class AppScreenshotCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "screenshot",
+        "Save a PNG of the device's screen.",
+        "Example: ${cli.config.help.invocation} app screenshot ${cli.config.outputPath}/screenshots/home.png",
+    ) {
+        private val file by argument(help = "The .png to write; its directory is created.")
+        private val device by deviceOption(cli)
+
+        override fun execute(): Int = cli.appScreenshot(file, device)
+    }
+
+    private class AppRecordGroup : CoreCliktCommand(name = "record") {
+        override fun help(context: Context): String = "Record the device's screen to an .mp4, across other commands."
+
+        override fun run() = Unit
+    }
+
+    private class AppRecordStartCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "start",
+        "Start recording; the recorder keeps running after this command returns.",
+        examples(
+            "${cli.config.help.invocation} app record start ${cli.config.outputPath}/demo.mp4",
+            "${cli.config.help.invocation} app record stop",
+        ),
+    ) {
+        private val file by argument(help = "The .mp4 to write; its directory is created.")
+        private val device by deviceOption(cli)
+
+        override fun execute(): Int = cli.appRecordStart(file, device)
+    }
+
+    private class AppRecordStopCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "stop",
+        "Stop the recording app record start began, and finish the file.",
+    ) {
+        override fun execute(): Int = cli.appRecordStop()
+    }
+
+    private class AppStatusbarGroup : CoreCliktCommand(name = "statusbar") {
+        override fun help(context: Context): String =
+            "Set a clean status bar for screenshots (9:41, full signal and battery), or reset it."
+
+        override fun run() = Unit
+    }
+
+    private class AppStatusbarCommand<S, A>(private val cli: Cli<S, A>, private val clean: Boolean) : Subcommand(
+        if (clean) "clean" else "reset",
+        if (clean) "9:41, full signal, full battery." else "The device's own status bar again.",
+    ) {
+        private val device by deviceOption(cli)
+
+        override fun execute(): Int = cli.appStatusbar(clean, device)
+    }
+
+    private class AppInfoCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "info",
+        "Print the installed app's ID, version and build, and the device, as one JSON line.",
+    ) {
+        private val device by deviceOption(cli)
+
+        override fun execute(): Int = cli.appInfo(device)
+    }
+
     private class AppGetCommand<S, A>(private val cli: Cli<S, A>, name: String, private val path: String) : Subcommand(
         name,
         if (path == "/state") "Print the running app's root state." else "List screens, from the running app.",
@@ -320,6 +387,12 @@ public object AgentCtl {
         override fun execute(): Int = cli.appGet(path, port)
     }
 }
+
+/** `--device` for the commands that act on the device itself. */
+private fun CoreCliktCommand.deviceOption(cli: Cli<*, *>) = option(
+    help = "adb serial or AVD name. Default: the last launch's (${cli.config.outputPath}/bridge.json), else " +
+        "${cli.config.device ?: "the only connected device"}.",
+)
 
 /** `--port` for `app run`, `app state` and `app screens`: which bridge to talk to. */
 private fun CoreCliktCommand.portOption(outputPath: String) = option(

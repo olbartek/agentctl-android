@@ -159,7 +159,15 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
      * An `adb` serial, an AVD name (a running emulator's, or one to boot), a model name, or — with no name — the only
      * connected device.
      */
-    fun resolve(nameOrSerial: String?): Device {
+    fun resolve(nameOrSerial: String?): Device = locate(nameOrSerial, boots = true)
+
+    /** Whether [serial] is connected and answers (quietly: no warning for one that does not). */
+    fun isConnected(serial: String): Boolean = Devices.list(adb) {}.ready.any { it.serial == serial }
+
+    /** [resolve], without booting: an AVD that is not running fails as not booted. For the `app` device commands. */
+    fun find(nameOrSerial: String?): Device = locate(nameOrSerial, boots = false)
+
+    private fun locate(nameOrSerial: String?, boots: Boolean): Device {
         val listing = Devices.list(adb) { cli.io.err.println("warning: $it") }
         val devices = listing.ready
         if (nameOrSerial == null) {
@@ -173,11 +181,12 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         listing.frozen.firstOrNull { it.serial == nameOrSerial || it.avd == nameOrSerial }?.let { frozen ->
             throw AppCtlException(Message.deviceDoesNotAnswer(nameOrSerial, frozen.serial))
         }
-        val avds = Shell.capture(listOf(AndroidSdk.emulator(root, cli.environment), "-list-avds"))?.lines()?.map { it.trim() } ?: emptyList()
+        val avds = Shell.capture(listOf(AndroidSdk.emulator(root, cli.environment), "-list-avds"))?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
         if (nameOrSerial !in avds) {
             val names = (devices.map { it.name } + avds).toSortedSet().joinToString(", ")
             throw AppCtlException("no device or AVD named '$nameOrSerial'. Available: $names")
         }
+        if (!boots) throw AppCtlException(Message.notBooted(cli, nameOrSerial, "AVD"))
         return boot(nameOrSerial, devices.map { it.serial }.toSet())
     }
 

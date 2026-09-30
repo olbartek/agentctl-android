@@ -27,13 +27,13 @@ internal data class BridgeState(
 ) {
     fun render(): String {
         val fields = sortedMapOf(
-            "appId" to quoted(appId),
-            "device" to quoted(device),
-            "launchedAt" to quoted(launchedAt.truncatedTo(ChronoUnit.SECONDS).toString()),
-            "platform" to quoted(platform),
+            "appId" to FlatJson.quote(appId),
+            "device" to FlatJson.quote(device),
+            "launchedAt" to FlatJson.quote(launchedAt.truncatedTo(ChronoUnit.SECONDS).toString()),
+            "platform" to FlatJson.quote(platform),
             "port" to port.toString(),
         )
-        return fields.entries.joinToString(",\n", prefix = "{\n", postfix = "\n}\n") { (key, value) -> "  \"$key\" : $value" }
+        return FlatJson.pretty(fields)
     }
 
     fun save(layout: Layout) {
@@ -86,20 +86,6 @@ internal data class BridgeState(
             )
         }
 
-        private fun quoted(text: String): String = buildString {
-            append('"')
-            for (character in text) {
-                when (character) {
-                    '"' -> append("\\\"")
-                    '\\' -> append("\\\\")
-                    '\n' -> append("\\n")
-                    '\r' -> append("\\r")
-                    '\t' -> append("\\t")
-                    else -> if (character < ' ') append("\\u%04x".format(character.code)) else append(character)
-                }
-            }
-            append('"')
-        }
     }
 }
 
@@ -183,6 +169,33 @@ internal object Ports {
  * Anything else, including nesting, is not a launch state.
  */
 internal object FlatJson {
+    /** [text] as a JSON string, escaped as Foundation's encoder escapes it (slashes left alone). */
+    fun quote(text: String): String = buildString {
+        append('"')
+        for (character in text) {
+            when (character) {
+                '"' -> append("\\\"")
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (character < ' ') append("\\u%04x".format(character.code)) else append(character)
+            }
+        }
+        append('"')
+    }
+
+    /**
+     * Fields as Foundation's `.prettyPrinted, .sortedKeys` encoder lays them out (`"key" : value`, two-space
+     * indent), with one trailing newline: the form of `bridge.json` and `record.json`. Values are already JSON.
+     */
+    fun pretty(fields: Map<String, String>): String =
+        fields.toSortedMap().entries.joinToString(",\n", prefix = "{\n", postfix = "\n}\n") { (key, value) -> "  \"$key\" : $value" }
+
+    /** The same, compact: `{"key":value,...}`, as `.sortedKeys` without `.prettyPrinted` writes it. */
+    fun compact(fields: Map<String, String>): String =
+        fields.toSortedMap().entries.joinToString(",", prefix = "{", postfix = "}") { (key, value) -> "\"$key\":$value" }
+
     fun parse(text: String): Map<String, Any?>? = try {
         Reader(text).readObject()
     } catch (_: IllegalArgumentException) {

@@ -72,7 +72,9 @@ class AdvanceableClockTest {
         val timer = scope.launch {
             // A tick that takes a while, as on a loaded CI runner or in a real app: longer than a fixed wait between
             // deadlines would have allowed.
-            clock.every(1.seconds) {
+            // Minute ticks: the clock also runs in real time, so with second ticks a slow run let a 4th come due by
+            // itself (as agentctl-ios a618ee0 found).
+            clock.every(60.seconds) {
                 delay(50)
                 ticks.incrementAndGet()
             }
@@ -83,7 +85,7 @@ class AdvanceableClockTest {
         // loaded CI runner: when the timer had not started its next sleep yet, `advance` found nothing due and jumped
         // to the end, and the timer ticked once instead of three times.
         var deadlines = 0
-        clock.advance(3.seconds, between = {
+        clock.advance(180.seconds, between = {
             deadlines++
             until { ticks.get() >= minOf(deadlines, 3) && clock.activeSleeps == 1 }
         })
