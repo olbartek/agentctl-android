@@ -70,7 +70,8 @@ internal suspend fun <S> settleLive(
     pending: () -> Int,
     quietWindow: Duration = 100.milliseconds,
     pollInterval: Duration = 20.milliseconds,
-    limit: Duration = 3.seconds,
+    // A real chain of mock calls at the default latency, plus a transition, takes more than 3 s (CONTRACT.md §8.5).
+    limit: Duration = 10.seconds,
     uiIdle: () -> Boolean = { true },
     uiLimit: Duration = 1.seconds,
     uiIdleGap: Duration = 100.milliseconds,

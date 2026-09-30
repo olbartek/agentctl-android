@@ -82,7 +82,9 @@ class ScreenRecorderTest {
     fun aStopFinishesTheChunkBeingWritten() {
         val recorder = ScreenRecorder.start(adb(), "emulator-5556", File(sandbox, "demo.mp4"), File(sandbox, "work"), log, detached = false, chunkSeconds = 30)
         assertTrue(recorder.awaitStart(10.seconds), log.readText())
-        Thread.sleep(300)
+        // Recording, not merely started: on a loaded machine the fake takes a while to open its file.
+        val recording = TimeSource.Monotonic.markNow()
+        while (chunkFiles().isEmpty() && recording.elapsedNow() < 10.seconds) Thread.sleep(50)
         val start = TimeSource.Monotonic.markNow()
         assertTrue(recorder.stop(10.seconds))
         assertTrue(start.elapsedNow() < 5.seconds, "took ${start.elapsedNow()}")

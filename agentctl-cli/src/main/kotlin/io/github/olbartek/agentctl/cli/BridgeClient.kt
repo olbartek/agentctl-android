@@ -19,11 +19,11 @@ internal class BridgeClient(private val port: Int) {
         fun isFrom(appId: String, platform: String): Boolean = app == appId && this.platform == platform
 
         /**
-         * Whether this answer shows another app than [recorded] (`bridge.json`'s): a header that is present and differs.
-         * A header the answer lacks is not compared: an app built before it existed (CONTRACT.md §8.6).
+         * Whether this answer is not from [recorded] (`bridge.json`'s) app and platform. A header the answer lacks is a
+         * mismatch too: the launch that recorded them was answered with both, as the same build always answers
+         * (CONTRACT.md §8.6).
          */
-        fun contradicts(recorded: BridgeState): Boolean =
-            (app != null && app != recorded.appId) || (platform != null && platform != recorded.platform)
+        fun contradicts(recorded: BridgeState): Boolean = !isFrom(recorded.appId, recorded.platform)
     }
 
     @Throws(IOException::class)

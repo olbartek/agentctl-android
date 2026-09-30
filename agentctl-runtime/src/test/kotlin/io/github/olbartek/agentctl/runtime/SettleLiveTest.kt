@@ -2,6 +2,7 @@ package io.github.olbartek.agentctl.runtime
 
 import io.github.olbartek.agentctl.MockCallLog
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -66,5 +67,42 @@ class SettleLiveTest {
             assertTrue(elapsed >= 1.seconds, "at $pollInterval: settled after $elapsed")
             assertTrue(elapsed < 2.seconds, "at $pollInterval: settled after $elapsed")
         }
+    }
+
+    /**
+     * A chain of four mock calls, each in flight for about 0.9 s and started right after the one before (a sign-in's
+     * requests at the default latency), settles once the last one has returned: past the old 3 s ceiling, within 10 s.
+     */
+    @Test
+    fun aChainOfCallsLongerThanThreeSecondsSettles() {
+        val calls = MockCallLog()
+        val chain = Thread {
+            repeat(4) { index ->
+                calls.begin("auth.step$index")
+                Thread.sleep(900)
+                calls.end("auth.step$index")
+                Thread.sleep(20)
+            }
+        }
+        val start = TimeSource.Monotonic.markNow()
+        calls.begin("auth.first")
+        chain.start()
+        calls.end("auth.first")
+        val result = runBlocking { settleLive({ 0 }, calls, pending = { 0 }, quietWindow = 250.milliseconds) }
+        val elapsed = start.elapsedNow()
+        chain.join()
+        assertTrue(result.settled, "gave up after $elapsed")
+        assertTrue(elapsed >= 3.5.seconds, "settled mid-chain, after $elapsed")
+    }
+
+    /** A call that never returns does not hold settling for ever: the step gives up at the 10 s ceiling. */
+    @Test
+    fun aCallThatNeverReturnsGivesUpAtTenSeconds() {
+        val calls = MockCallLog().apply { begin("auth.hangs") }
+        val start = TimeSource.Monotonic.markNow()
+        val result = runBlocking { settleLive({ 0 }, calls, pending = { 0 }, quietWindow = 250.milliseconds) }
+        val elapsed = start.elapsedNow()
+        assertFalse(result.settled)
+        assertTrue(elapsed >= 10.seconds && elapsed < 11.seconds, "gave up after $elapsed")
     }
 }

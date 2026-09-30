@@ -245,13 +245,13 @@ internal class Cli<S, A>(
                 // a GET changes nothing, and its own answer is checked instead.
                 val check = client.send("GET", "/snapshot")
                 if (check.contradicts(recorded)) {
-                    io.error(Message.anotherAppThanRecorded(this, resolved.port, check.app ?: recorded.appId, check.platform, recorded))
+                    io.error(Message.anotherAppThanRecorded(this, resolved.port, check.app, check.platform, recorded))
                     return RunStatus.INTERNAL_ERROR.code
                 }
             }
             val response = client.send(method, path, body)
             if (recorded != null && response.contradicts(recorded)) {
-                io.error(Message.anotherAppThanRecorded(this, resolved.port, response.app ?: recorded.appId, response.platform, recorded))
+                io.error(Message.anotherAppThanRecorded(this, resolved.port, response.app, response.platform, recorded))
                 return RunStatus.INTERNAL_ERROR.code
             }
             if (response.body.endsWith("\n")) io.out.print(response.body) else io.out.println(response.body)
@@ -351,8 +351,8 @@ internal object Message {
             "pass --port or set ${Ports.ENVIRONMENT_VARIABLE}"
 
     /** `app run`/`state`/`screens` on the recorded port: another app, or another platform's build of it, answers there now. */
-    fun anotherAppThanRecorded(cli: Cli<*, *>, port: Int, other: String, platform: String?, recorded: BridgeState): String =
-        "the app's agent bridge on 127.0.0.1:$port answers as ${identity(other, platform)}, " +
+    fun anotherAppThanRecorded(cli: Cli<*, *>, port: Int, other: String?, platform: String?, recorded: BridgeState): String =
+        "the app's agent bridge on 127.0.0.1:$port answers as ${other?.let { identity(it, platform) } ?: "an app without ${HttpParser.APP_HEADER}"}, " +
             "not ${identity(recorded.appId, recorded.platform)} from ${cli.config.outputPath}/bridge.json, " +
             "which is stale: relaunch with ${cli.invocation} app launch"
 
