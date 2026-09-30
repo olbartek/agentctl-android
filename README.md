@@ -533,8 +533,10 @@ only variant there is. `snapshots --record` takes the matching `record…` tasks
 names the modules' directories unless `gradle.snapshotReferences` says where the references live. A task of any
 other tool goes in `gradle.snapshotsVerify` and `gradle.snapshotsRecord`, which run as named.
 
-`--device` (or the config's `device`) names an `adb` serial or an AVD. An AVD that is not running is booted. With
-neither, the only connected device is used.
+`--device` (or the config's `device`) names an `adb` serial, an AVD or a phone's model. An AVD that is not running is
+booted. With neither, the only connected device is used. A name is never resolved by picking one of several: when two
+running devices share it (two emulators of one AVD started with `-read-only`, two phones of one model), the command
+lists their serials, exits 2 and asks for `--device <serial>`.
 
 The rule that makes this pay off: **verify at the cheapest rung that proves the change.**
 

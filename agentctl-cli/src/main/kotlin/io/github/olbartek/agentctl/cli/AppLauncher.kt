@@ -2,6 +2,7 @@ package io.github.olbartek.agentctl.cli
 
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.HttpParser
+import io.github.olbartek.agentctl.runtime.RunStatus
 import java.io.File
 import java.io.IOException
 import java.net.InetAddress
@@ -177,7 +178,10 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
                 else "several devices connected (${devices.joinToString(", ") { it.serial }}); pass --device <serial>",
             )
         }
-        devices.firstOrNull { it.serial == nameOrSerial || it.name == nameOrSerial }?.let { return it }
+        // Never picked silently: two emulators of one AVD (-read-only) or two phones of one model share a name.
+        val matches = devices.filter { it.serial == nameOrSerial || it.name == nameOrSerial }
+        if (matches.size > 1) throw AppCtlException(Message.severalDevices(nameOrSerial, matches), RunStatus.USAGE)
+        matches.singleOrNull()?.let { return it }
         // Running but frozen: booting its AVD again would only start a second copy beside it.
         listing.frozen.firstOrNull { it.serial == nameOrSerial || it.avd == nameOrSerial }?.let { frozen ->
             throw AppCtlException(Message.deviceDoesNotAnswer(nameOrSerial, frozen.serial))

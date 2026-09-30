@@ -167,7 +167,7 @@ internal class Cli<S, A>(
             0
         } catch (error: AppCtlException) {
             io.error(error.message ?: "launch failed")
-            RunStatus.INTERNAL_ERROR.code
+            error.status.code
         }
     }
 
@@ -191,7 +191,7 @@ internal class Cli<S, A>(
 
     fun appInfo(device: String?): Int = onDevice { it.info(device) }
 
-    /** A device command: what it prints on success, or its error with exit 3. */
+    /** A device command: what it prints on success, or its error with its exit code (3 unless the name was ambiguous). */
     private fun onDevice(body: (DeviceCommands) -> String): Int {
         val root = root() ?: return RunStatus.INTERNAL_ERROR.code
         return try {
@@ -199,7 +199,7 @@ internal class Cli<S, A>(
             0
         } catch (error: AppCtlException) {
             io.error(error.message ?: "failed")
-            RunStatus.INTERNAL_ERROR.code
+            error.status.code
         } catch (error: IOException) {
             io.error(error.toString())
             RunStatus.INTERNAL_ERROR.code
@@ -317,7 +317,8 @@ internal object Session {
 }
 
 /** A failure outside the script engine: exit code 3. */
-internal class AppCtlException(message: String) : Exception(message)
+/** A failure the CLI reports as one `error:` line, and exits with [status] (3 unless the user asked for something wrong). */
+internal class AppCtlException(message: String, val status: RunStatus = RunStatus.INTERNAL_ERROR) : Exception(message)
 
 /** The messages that name the CLI itself. They spell it with the host's own invocation. */
 internal object Message {
@@ -389,6 +390,20 @@ internal object Message {
     /** An AVD that is not running: it has no serial yet, so its bracket says what it is. */
     fun notBooted(cli: Cli<*, *>, label: String, id: String): String =
         "$label [$id] is not booted; boot it, or run ${cli.invocation} app launch"
+
+    /**
+     * `--device` names several running devices (two emulators of one AVD, two phones of one model): none is picked. Newest
+     * Android release first, then by serial, as agentctl-ios lists simulators (newest runtime, then UDID).
+     */
+    fun severalDevices(name: String, devices: List<Device>): String {
+        val release = { device: Device -> device.release.split('.').map { it.toIntOrNull() ?: 0 } }
+        val newestFirst = Comparator<Device> { a, b ->
+            val (x, y) = release(a) to release(b)
+            (0 until maxOf(x.size, y.size)).map { (y.getOrElse(it) { 0 }).compareTo(x.getOrElse(it) { 0 }) }.firstOrNull { it != 0 } ?: 0
+        }.thenBy { it.serial }
+        return "several devices are named '$name'; pass --device <serial>:\n" +
+            devices.sortedWith(newestFirst).joinToString("\n") { "  ${it.serial}  ${it.label}" }
+    }
 
     /** `--device` names a device that is running but frozen: it is not booted again beside itself. */
     fun deviceDoesNotAnswer(name: String, serial: String): String =
