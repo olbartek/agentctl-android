@@ -53,14 +53,14 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             if (options.build) launcher.resolve(options.device) else launcher.find(options.device)
         } catch (error: AppCtlException) {
             io.error(error.message ?: "no device")
-            return RunStatus.INTERNAL_ERROR.code
+            return error.status.code
         }
         val recording = options.record?.let { path ->
             try {
                 Recording.start(AndroidSdk.adb(root, cli.environment), device, cli.resolve(path), Layout(root, cli.config.outputPath))
             } catch (error: AppCtlException) {
                 io.error(error.message ?: "recording failed")
-                return RunStatus.INTERNAL_ERROR.code
+                return error.status.code
             }
         }
         val results = mutableListOf<Result>()

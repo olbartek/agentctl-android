@@ -2,6 +2,7 @@ package io.github.olbartek.agentctl.cli
 
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.HttpParser
+import io.github.olbartek.agentctl.runtime.RunStatus
 import java.io.File
 import java.io.IOException
 import java.net.InetAddress
@@ -47,9 +48,11 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             )
             if (status != 0) throw AppCtlException("${config.gradle.install} failed; log: ${log.path}")
         }
-        // Stopped first, so a bridge it left listening does not count against the port it can have again. The port is
-        // chosen now, after the build and install, right before the launch.
+        // Stopped first, so a bridge it left listening does not count against the port it can have again, and the
+        // forward its last launch here left goes with it: forwards do not pile up per device, whatever port this launch
+        // takes. The port is chosen now, after the build and install, right before the launch.
         stop(target, log)
+        removeOwnForward(target, log)
         var chosen = port ?: freePort(target, log)
         val component = config.applicationId + "/" + config.launchActivity
         var answer: BridgeClient.Response
@@ -129,22 +132,27 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
     )
 
     /**
-     * The first port of [Ports.SCAN] above [after] (if given) that is free on the Mac (nothing answers or is bound
-     * there: another device's forward, an iOS simulator's bridge) and on the device (nothing listens on it). The
-     * forward this app's own last launch on this device left (recorded in `bridge.json`) is removed first when
-     * nothing on the device listens on it any more, so a relaunch gets its port back; no other forward is touched.
+     * Removes the forward this app's last launch on [device] left (recorded in `bridge.json`), once the app is stopped;
+     * a relaunch then gets that port back, and no other forward is touched.
      */
-    private fun freePort(device: Device, log: File, after: Int? = null): Int {
-        val listening = deviceListening(device)
+    private fun removeOwnForward(device: Device, log: File) {
         val recorded = try {
             BridgeState.load(layout)
         } catch (_: Unreadable) {
             null
         }
         val forwards = Shell.capture(listOf(adb, "forward", "--list")) ?: ""
-        Ports.ownStaleForward(recorded, device.serial, config.applicationId, forwards, listening)?.let { stale ->
-            Shell.run(listOf(adb, "-s", device.serial, "forward", "--remove", "tcp:$stale"), root, log, append = true)
+        Ports.ownForward(recorded, device.serial, config.applicationId, forwards)?.let { own ->
+            Shell.run(listOf(adb, "-s", device.serial, "forward", "--remove", "tcp:$own"), root, log, append = true)
         }
+    }
+
+    /**
+     * The first port of [Ports.SCAN] above [after] (if given) that is free on the Mac (nothing answers or is bound
+     * there: another device's forward, an iOS simulator's bridge) and on the device (nothing listens on it).
+     */
+    private fun freePort(device: Device, log: File, after: Int? = null): Int {
+        val listening = deviceListening(device)
         return Ports.firstFree(after) { it !in listening && freeOnHost(it) }
             ?: throw AppCtlException(
                 "no free port for the app's agent bridge in ${Ports.SCAN.first}-${Ports.SCAN.last}: pass --port or set ${Ports.ENVIRONMENT_VARIABLE}",
@@ -177,7 +185,10 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
                 else "several devices connected (${devices.joinToString(", ") { it.serial }}); pass --device <serial>",
             )
         }
-        devices.firstOrNull { it.serial == nameOrSerial || it.name == nameOrSerial }?.let { return it }
+        // Never picked silently: two emulators of one AVD (-read-only) or two phones of one model share a name.
+        val matches = devices.filter { it.serial == nameOrSerial || it.name == nameOrSerial }
+        if (matches.size > 1) throw AppCtlException(Message.severalDevices(nameOrSerial, matches), RunStatus.USAGE)
+        matches.singleOrNull()?.let { return it }
         // Running but frozen: booting its AVD again would only start a second copy beside it.
         listing.frozen.firstOrNull { it.serial == nameOrSerial || it.avd == nameOrSerial }?.let { frozen ->
             throw AppCtlException(Message.deviceDoesNotAnswer(nameOrSerial, frozen.serial))

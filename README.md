@@ -533,8 +533,10 @@ only variant there is. `snapshots --record` takes the matching `record…` tasks
 names the modules' directories unless `gradle.snapshotReferences` says where the references live. A task of any
 other tool goes in `gradle.snapshotsVerify` and `gradle.snapshotsRecord`, which run as named.
 
-`--device` (or the config's `device`) names an `adb` serial or an AVD. An AVD that is not running is booted. With
-neither, the only connected device is used.
+`--device` (or the config's `device`) names an `adb` serial, an AVD or a phone's model. An AVD that is not running is
+booted. With neither, the only connected device is used. A name is never resolved by picking one of several: when two
+running devices share it (two emulators of one AVD started with `-read-only`, two phones of one model), the command
+lists their serials, exits 2 and asks for `--device <serial>`.
 
 The rule that makes this pay off: **verify at the cheapest rung that proves the change.**
 
@@ -689,8 +691,8 @@ on it, such as another app's bridge. `app launch` forwards the port it chose and
 Mac never need a port by hand. Each command's port is `--port` if given, else `APPCTL_PORT`, else the last launch's,
 else 8765. `app launch` and `app test` take `--port` or `APPCTL_PORT` as the exact port to use, and otherwise scan as
 above. `app test` and `check --ui` rewrite the file on every launch. A relaunch keeps its port: the app is stopped
-first, and the forward its last launch on that device left (as `bridge.json` records it) is removed once nothing
-on the device listens behind it; no other forward is touched. When the recorded app has quit,
+first, and the forward its last launch on that device left (as `bridge.json` records it) is removed, whatever port
+the new launch takes, so forwards do not pile up per device; no other forward is touched. When the recorded app has quit,
 `app run` says the file is stale and to relaunch. The file is written exactly as agentctl-ios writes it (CONTRACT.md
 §8.6).
 
