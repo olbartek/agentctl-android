@@ -53,8 +53,7 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
         if (!recorder.isRecording(state.file)) {
             claim.delete()
             // What a recorder that died had recorded is still on the device: its last chunk is stopped, then saved.
-            recorder.interruptOrphanedChunk(log)
-            val saved = recorder.finish(File(state.file), log)
+            val saved = recorder.finish(File(state.file), log, stoppedAt = recorder.interruptOrphanedChunk(log))
             throw AppCtlException(Message.recordingGone(state) + (saved?.let { "; saved what it recorded to ${it.joinToString(", ") { f -> f.path }}" } ?: ""))
         }
         // Timed here, not after the recorder has wound down: the hold runs until the stop was asked for.
@@ -281,13 +280,17 @@ internal object Video {
             }
             out
         }
-        val hold = length?.let { total -> duration(joined)?.let { total - it } }
+        val recorded = duration(joined)
+        val hold = length?.let { total -> recorded?.let { total - it } }
         if (hold != null && hold > 0.2.seconds) {
             val seconds = String.format(java.util.Locale.ROOT, "%.3f", hold.inWholeMilliseconds / 1000.0)
             val padded = File(work, "held.mp4")
+            // A constant rate for tpad to clone at (screenrecord's is variable, and a still screen's single frame has
+            // none, so it is given timestamps first).
+            val rate = (if (recorded == Duration.ZERO) "setpts=N/30/TB," else "") + "fps=30"
             val status = ffmpeg(
                 listOf(
-                    "-i", joined.path, "-vf", "tpad=stop_mode=clone:stop_duration=$seconds",
+                    "-i", joined.path, "-vf", "$rate,tpad=stop_mode=clone:stop_duration=$seconds",
                     "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", padded.path,
                 ),
                 work,
@@ -297,10 +300,16 @@ internal object Video {
         return listOf(joined.copyTo(video, overwrite = true))
     }
 
-    /** A video's length, from `ffprobe`; `null` without it. */
-    fun duration(video: File): Duration? =
-        Shell.capture(listOf("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video.path), timeoutSeconds = 60)
-            ?.trim()?.toDoubleOrNull()?.let { (it * 1000).toLong().milliseconds }
+    /**
+     * A video's length, from `ffprobe`; `null` without it. A still screen recorded as a single frame has no length
+     * (`N/A`): zero.
+     */
+    fun duration(video: File): Duration? {
+        val output = Shell.capture(listOf("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video.path), timeoutSeconds = 60)
+            ?.trim() ?: return null
+        if (output == "N/A") return Duration.ZERO
+        return output.toDoubleOrNull()?.let { (it * 1000).toLong().milliseconds }
+    }
 
     private fun ffmpeg(arguments: List<String>, work: File): Int =
         Shell.run(listOf("ffmpeg", "-y", "-loglevel", "error") + arguments, work, File(work, "ffmpeg.log"), append = true, timeoutSeconds = 600)

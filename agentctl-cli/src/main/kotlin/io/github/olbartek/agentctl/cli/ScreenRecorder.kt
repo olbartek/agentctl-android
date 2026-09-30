@@ -66,14 +66,16 @@ internal class ScreenRecorder private constructor(
 
     /**
      * For a loop that died without stopping its chunk (killed outright): stops that chunk on the device, so what is
-     * pulled is a finished file.
+     * pulled is a finished file. When it was stopped (epoch ms), since it recorded until then; `null` if none ran.
      */
-    fun interruptOrphanedChunk(log: File) {
-        val device = File(work, CHUNK_PID).readTextOrNull()?.lineSequence()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+    fun interruptOrphanedChunk(log: File): Long? {
+        val device = File(work, CHUNK_PID).readTextOrNull()?.lineSequence()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val running = Shell.capture(listOf(adb, "-s", serial, "shell", "ps", "-o", "ARGS=", "-p", device), timeoutSeconds = 10)
-        if (running?.contains("screenrecord") != true) return
+        if (running?.contains("screenrecord") != true) return null
+        val stoppedAt = System.currentTimeMillis()
         Shell.run(listOf(adb, "-s", serial, "shell", "kill", "-2", device), work, log, append = true, timeoutSeconds = 30)
         Thread.sleep(2000)
+        return stoppedAt
     }
 
     /** Stops the loop, which finishes its chunk first; `false` if it is still running after [timeout]. */

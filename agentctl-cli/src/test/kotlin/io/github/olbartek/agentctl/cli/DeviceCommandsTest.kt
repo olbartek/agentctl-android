@@ -110,4 +110,23 @@ class DeviceCommandsTest {
         val duration = Video.duration(video) ?: error("no duration")
         assertTrue(duration >= 2.8.seconds && duration <= 3.3.seconds, "duration $duration")
     }
+
+    /** A still screen is recorded as one frame with no rate: it is held too. */
+    @Test
+    fun aSingleFrameIsHeldUntilTheRecordingEnded() {
+        assumeTrue("ffmpeg is not installed", Shell.capture(listOf("ffmpeg", "-version")) != null)
+        assumeTrue("ffprobe is not installed", Shell.capture(listOf("ffprobe", "-version")) != null)
+        assumeTrue("ffmpeg has no libx264", Shell.capture(listOf("ffmpeg", "-hide_banner", "-encoders"))?.contains("libx264") == true)
+        val work = Files.createTempDirectory("video").toFile()
+        val part = File(work, "part-0.mp4")
+        Shell.run(
+            listOf("ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=128x128:rate=1", "-frames:v", "1", "-pix_fmt", "yuv420p", part.path),
+            work,
+            File(work, "make.log"),
+        )
+        val video = File(work, "out/still.mp4")
+        Video.join(listOf(part), video, work, length = 3.seconds)
+        val duration = Video.duration(video) ?: error("no duration")
+        assertTrue(duration >= 2.8.seconds && duration <= 3.3.seconds, "duration $duration")
+    }
 }
