@@ -225,6 +225,55 @@ object TinyRootAgent : AgentContainer<TinyRoot.State, TinyRoot.Action> {
 }
 ```
 
+The other command kinds: `text` takes the rest of the line as it is typed, `onOff` a switch (`terms on`), and
+`choice` one of a fixed set of words, from which it generates both the documented argument and the error, so the two
+cannot drift apart:
+
+```kotlin
+// an enum's entries in their order, each spelled by `word`
+AgentCommand.choice("tab", of = Tab.entries, word = { it.code }, help = "Switch tab.") { TabSelected(it) }
+// words standing for values
+AgentCommand.choice("sort", listOf("new" to Sort.NEWEST, "cheap" to Sort.PRICE_ASCENDING), help = "Sort.") { SortTapped(it) }
+// the word itself
+AgentCommand.choice("login-as", listOf("alice", "bob"), help = "Sign in.") { LoginAs(it) }
+```
+
+`tab <shop|cart|orders|profile>` is how the first is documented, and `tab home` fails with
+`tab <shop|cart|orders|profile>: invalid argument: expected shop|cart|orders|profile`.
+
+A container that offers commands on *every* screen beneath it — a root's `login-as`, a tab bar's `tab` — declares
+them once as `inheritedCommands`, and `inheritingCommands` adds them both to the active screen and to every screen of
+the registry, so the docs cannot list a command the app does not offer. They go after the commands of the screens
+beneath, and before the container's own `back`, whichever you apply first; a command with `paths` is offered on those
+paths only. A root can also offer a `back` for when nothing is pushed, which fails with
+`back: nothing to go back to on <path>` rather than as an unknown command. From AgentShop's
+[`AppFeature.kt`](examples/agentshop/shop/src/main/kotlin/io/github/olbartek/agentctl/examples/agentshop/app/AppFeature.kt):
+
+```kotlin
+object AppFeatureAgent : AgentContainer<AppFeature.State, AppFeature.Action> {
+    override val inheritedCommands: List<AgentCommand<AppFeature.State, AppFeature.Action>> = listOf(
+        AgentCommand.choice("login-as", listOf("alice" to MockAccounts.alice.user, "bob" to MockAccounts.bob.user), help = LOGIN_AS_HELP) {
+            AppFeature.Action.LoginAs(MockAccounts.session(it))
+        },
+        AgentCommand.action("reset", help = RESET_HELP, action = AppFeature.Action.Reset),
+    )
+
+    override fun activeScreen(state: AppFeature.State): ActiveScreen<AppFeature.Action> {
+        val screen: ActiveScreen<AppFeature.Action> = …   // the active child, as above
+        return inheritingCommands(screen, state).appendingBackFallback(containerName)
+    }
+
+    override val registry: List<ScreenDoc>
+        get() {
+            val screens = AuthFlowAgent.registry + OnboardingFlowAgent.registry + HomeTabsAgent.registry   // abridged
+            return inheritingCommands(screens).map { it.inheriting(listOf(CommandDoc.backFallback(containerName))) }
+        }
+}
+```
+
+A container's `containerName`, the source its commands are shown with, defaults to its class name without an `Agent`
+suffix, as a screen's `screenName` does.
+
 Command lookup is **leaf first**: the active screen's own commands, then its containers', then the root's. A screen
 can shadow a container's command of the same name.
 
@@ -241,6 +290,11 @@ fun mock(backend: MockBackend): ItemsClient = ItemsClient(
     },
 )
 ```
+
+Each client lists the codes `mock` may force on its methods as `MockMethod`s. A failure every call can have, whatever
+its client's own errors, is added once rather than per method: `(AuthClient.mockMethods +
+OrdersClient.mockMethods).accepting(listOf("network"))` gives each method `network` after its own codes, unless it
+already lists it, so `mock`'s `valid:` list and the docs read as if every client had written it out.
 
 The app's store and clients take everything outside themselves from an `AgentEnvironment`:
 
@@ -579,6 +633,11 @@ Its release twin
 ([`src/release/…/AppStore.kt`](examples/tinyapp-android/src/release/kotlin/io/github/olbartek/agentctl/examples/tinyapp/android/AppStore.kt))
 builds the same store on `AgentEnvironment.system(MainScope())`.
 
+To run the plain app over its live dependencies unless an agent launched it, check
+`AgentLaunch.isRequested(activity.intent)` before creating the `AgentLaunch`: it is true when the intent carries the
+`agent-port` extra, which the CLI's `app` subcommands always send and a launch from the home screen or Android
+Studio's Run does not. A JVM host reads its command line with `AgentLaunchOptions.isRequested(arguments)`.
+
 Keep `AgentLaunch` one per process, and start it from a scope that outlives the activity. Right after a cold boot
 the system recreates activities as its overlays settle, and a start tied to the first activity would be cancelled
 half-way through its seed.
@@ -730,6 +789,12 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   reference asks UIKit whether a view controller has a transition, presentation or dismissal under way. Compose's
   signal also sees endless animations; the shared rule that a UI busy for more than a second stops holding a step
   covers them.
+- `choice`'s enum form takes the entries and how each is spelled (`of = Tab.entries, word = { it.code }`), where the
+  reference takes a `String`-backed enum type and its raw values: a Kotlin enum has no raw value.
+- The wrapper has no stale-cache recovery. The reference's plans a failed SwiftPM build afresh, because SwiftPM's
+  incremental build can trip over its own cache after a pull or a branch switch; Gradle's does not need it.
+- A container's `containerName` defaults to its class name without an `Agent` suffix, as a screen's `screenName`
+  does, so `AppFeatureAgent` shows its commands as `AppFeature`'s, where the reference's default is the type name.
 - `AgentScenarioChecks` finds the repo root from the test's working directory, where the reference starts from the
   test's source file (`#filePath`). Its checks block (`runBlocking`) where the reference's are `async`, need no
   serialized suite (the reference turns a process-wide executor on for each run), and compare the final state dumps

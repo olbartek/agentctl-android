@@ -17,12 +17,9 @@ import io.github.olbartek.agentctl.examples.agentshop.models.OrderRequest
 import io.github.olbartek.agentctl.examples.agentshop.models.OrdersError
 import io.github.olbartek.agentctl.examples.agentshop.models.Outcome
 import io.github.olbartek.agentctl.examples.agentshop.models.attempt
-import io.github.olbartek.agentctl.examples.agentshop.models.codeChoices
-import io.github.olbartek.agentctl.examples.agentshop.models.codeOf
 import io.github.olbartek.agentctl.examples.agentshop.models.formatCents
 import io.github.olbartek.agentctl.examples.agentshop.models.isValidCardNumber
 import io.github.olbartek.agentctl.examples.agentshop.models.isValidZip
-import io.github.olbartek.agentctl.invalidArgument
 import io.github.olbartek.agentctl.next
 
 /**
@@ -149,8 +146,6 @@ object Checkout {
 }
 
 object CheckoutAgent : AgentScreen<Checkout.State, Checkout.Action> {
-    private val shippings = codeChoices<Checkout.Shipping>()
-    private val payments = codeChoices<Checkout.Payment>()
 
     override val screenPaths: List<String> = listOf("home/cart/checkout")
 
@@ -181,15 +176,14 @@ object CheckoutAgent : AgentScreen<Checkout.State, Checkout.Action> {
         AgentCommand.text("street", help = "Set the street.") { Checkout.Action.StreetChanged(it) },
         AgentCommand.text("city", help = "Set the city.") { Checkout.Action.CityChanged(it) },
         AgentCommand.text("zip", help = "Set the zip code (five digits).") { Checkout.Action.ZipChanged(it) },
-        AgentCommand.parsing(
+        AgentCommand.choice(
             "shipping",
-            argument = "<$shippings>",
+            of = Checkout.Shipping.entries,
+            word = { it.code },
             help = "Standard is free; express adds ${formatCents(Checkout.EXPRESS_SHIPPING_CENTS)}.",
-        ) { text ->
-            Checkout.Action.ShippingTapped(codeOf<Checkout.Shipping>(text) ?: invalidArgument("expected $shippings"))
-        },
-        AgentCommand.parsing("payment", argument = "<$payments>", help = "Pay by card or with Apple Pay.") { text ->
-            Checkout.Action.PaymentTapped(codeOf<Checkout.Payment>(text) ?: invalidArgument("expected $payments"))
+        ) { Checkout.Action.ShippingTapped(it) },
+        AgentCommand.choice("payment", of = Checkout.Payment.entries, word = { it.code }, help = "Pay by card or with Apple Pay.") {
+            Checkout.Action.PaymentTapped(it)
         },
         AgentCommand.text(
             "card",

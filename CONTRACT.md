@@ -145,6 +145,13 @@ Where this text and the reference implementation disagree, one of them has a bug
     value was supplied but rejected, as above), or a sentence the app supplies for "this command
     doesn't apply right now", which follows the usage and its colon with no prefix of its own
     (`<usage>: <sentence>`; TinyApp has no such command).
+    A command whose argument is one of a fixed set of words (the libraries' `choice`) is documented
+    as `<name> <a|b|c>`, the words in the app's order, and rejects any other word with
+    `invalid argument: expected a|b|c` (`tab home` fails with
+    `tab <shop|cart|orders|profile>: invalid argument: expected shop|cart|orders|profile`); an
+    `on|off` switch is such a command. A root that offers `back` when nothing is pushed (the
+    libraries' back fallback) fails it with `back: nothing to go back to on <path>` and documents it
+    as `Fails with 'nothing to go back to' when no screen is pushed.`
 
 ### 1.4 Parse errors
 

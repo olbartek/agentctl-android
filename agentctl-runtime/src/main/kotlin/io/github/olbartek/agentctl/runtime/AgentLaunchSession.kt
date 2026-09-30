@@ -42,6 +42,12 @@ public data class AgentLaunchOptions(
             return options
         }
 
+        /**
+         * Whether a launch with these command-line [arguments] asks for the bridge: the CLI always passes
+         * `-agent-port`, and any other launch does not. The JVM form of `AgentLaunch.isRequested`.
+         */
+        public fun isRequested(arguments: List<String>): Boolean = "-$PORT" in arguments
+
         /** 0–65535, or `null`: a value that is not a port is ignored (CONTRACT.md §8.2). */
         public fun portOrNull(text: String?): Int? = text?.toIntOrNull()?.takeIf { it in 0..65535 }
 

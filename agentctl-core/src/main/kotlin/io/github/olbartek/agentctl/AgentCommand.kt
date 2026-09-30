@@ -102,13 +102,68 @@ public class AgentCommand<S, A>(
             gate: CommandGate<S>? = null,
             note: String? = null,
             makeAction: (Boolean) -> A,
-        ): AgentCommand<S, A> = parsing(name, "<on|off>", help, paths, gate, note) { text ->
-            when (text) {
-                "on" -> makeAction(true)
-                "off" -> makeAction(false)
-                else -> invalidArgument("expected on|off")
+        ): AgentCommand<S, A> = choice(name, listOf("on" to true, "off" to false), help, paths, gate, note, makeAction)
+
+        /**
+         * A command whose argument is one of a fixed set of words, each standing for a value, e.g. `filter all` for
+         * `null` and `filter shoes` for a shoes category.
+         *
+         * The argument is documented as `<a|b|c>` and anything else is rejected with `invalid argument: expected a|b|c`,
+         * both generated from [options] in their order, so the docs, the error and the accepted words cannot drift
+         * apart the way a hand-written [parsing] with its own `argument` string and error text can.
+         *
+         * @throws IllegalArgumentException when [options] is empty, lists a word twice, or has a word that is empty or
+         *   contains `|` or whitespace: the words are the documented `<a|b|c>`, so a malformed list is a host bug.
+         */
+        public fun <S, A, V> choice(
+            name: String,
+            options: List<Pair<String, V>>,
+            help: String,
+            paths: List<String>? = null,
+            gate: CommandGate<S>? = null,
+            note: String? = null,
+            makeAction: (V) -> A,
+        ): AgentCommand<S, A> {
+            val names = options.map { it.first }
+            require(names.isNotEmpty()) { "choice '$name' needs at least one option" }
+            require(names.toSet().size == names.size) { "choice '$name' lists an option twice: $names" }
+            require(names.all { word -> word.isNotEmpty() && '|' !in word && word.none { it.isWhitespace() } }) {
+                "choice '$name' has an option that is empty or contains '|' or whitespace: $names"
+            }
+            val words = names.joinToString("|")
+            return parsing(name, "<$words>", help, paths, gate, note) { text ->
+                val option = options.firstOrNull { it.first == text } ?: invalidArgument("expected $words")
+                makeAction(option.second)
             }
         }
+
+        /** A command whose argument is one of [options], passed on as typed. See [choice]. */
+        @JvmName("choiceOfWords")
+        public fun <S, A> choice(
+            name: String,
+            options: List<String>,
+            help: String,
+            paths: List<String>? = null,
+            gate: CommandGate<S>? = null,
+            note: String? = null,
+            makeAction: (String) -> A,
+        ): AgentCommand<S, A> = choice(name, options.map { it to it }, help, paths, gate, note, makeAction)
+
+        /**
+         * A command whose argument is one of [of], spelled by [word], offered in their order, e.g.
+         * `choice("tab", of = Tab.entries, word = Tab::code, help = "Switch tab.") { TabSelected(it) }` documents
+         * `tab <shop|cart>`. See [choice].
+         */
+        public fun <S, A, V> choice(
+            name: String,
+            of: Iterable<V>,
+            word: (V) -> String,
+            help: String,
+            paths: List<String>? = null,
+            gate: CommandGate<S>? = null,
+            note: String? = null,
+            makeAction: (V) -> A,
+        ): AgentCommand<S, A> = choice(name, of.map { word(it) to it }, help, paths, gate, note, makeAction)
 
         /** A command whose argument must be parsed and may be rejected (throw with [invalidArgument]). */
         public fun <S, A> parsing(
@@ -141,4 +196,18 @@ public class ResolvedCommand<out A>(
 
     public fun <P> map(embed: (A) -> P): ResolvedCommand<P> =
         ResolvedCommand(name, argument, help, source, disabledReason) { embed(makeAction(it)) }
+
+    public companion object {
+        /**
+         * `back` for when no container has anything to pop: it fails with `nothing to go back to on <path>` instead
+         * of the runner's "unknown command", which would read as if the app had no `back` at all.
+         *
+         * The root appends it last ([appendingBackFallback]), so any container that can pop shadows it, and lists
+         * [CommandDoc.backFallback] on every screen of its registry.
+         */
+        public fun <A> backFallback(path: String, source: String): ResolvedCommand<A> =
+            ResolvedCommand("back", null, CommandDoc.BACK_FALLBACK_HELP, source, null) {
+                notApplicable("nothing to go back to on $path")
+            }
+    }
 }

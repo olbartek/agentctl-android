@@ -67,6 +67,46 @@ public interface AgentContainer<S, A> {
 
     /** Every screen reachable through this container, with inherited commands appended. */
     public val registry: List<ScreenDoc>
+
+    /** Shown as the source of [inheritedCommands]. Defaults to the class name without an `Agent` suffix. */
+    public val containerName: String get() = javaClass.simpleName.removeSuffix("Agent")
+
+    /**
+     * Commands this container offers on every screen beneath it, whatever is pushed: a root's `login-as` and `reset`,
+     * a tab bar's `tab`. Declared once, they reach both the active screen ([inheritingCommands] with a state) and every
+     * screen of the registry ([inheritingCommands] with docs), so the two cannot disagree. A command with `paths` is
+     * offered only on those descendant paths. Commands that depend on what is pushed, such as `back`, stay in
+     * [activeScreen]. Defaults to none.
+     */
+    public val inheritedCommands: List<AgentCommand<S, A>> get() = emptyList()
+
+    /**
+     * [screen] with [inheritedCommands] added, resolved against this container's [state]. Call it on the child's
+     * screen in [activeScreen].
+     *
+     * They go after the commands of the screen and of the containers beneath this one, and before any command this
+     * container added itself (its `back`), whichever of the two is applied first; a command whose name is already
+     * there keeps the descendant's version, as with [appending].
+     */
+    public fun inheritingCommands(screen: ActiveScreen<A>, state: S): ActiveScreen<A> {
+        val extra = inheritedCommands.filter { it.paths?.contains(screen.path) ?: true }.map { it.resolve(state, containerName) }
+        return screen.copy(commands = insertingInherited(extra, screen.commands, { it.name }, { it.source }))
+    }
+
+    /**
+     * [docs] with [inheritedCommands] added to each screen, in the same place as on the active screen. Call it on every
+     * screen the container's [registry] lists.
+     */
+    public fun inheritingCommands(docs: List<ScreenDoc>): List<ScreenDoc> = docs.map { screen ->
+        val extra = inheritedCommands.filter { it.paths?.contains(screen.path) ?: true }.map { it.doc(containerName) }
+        screen.copy(commands = insertingInherited(extra, screen.commands, { it.name }, { it.source }))
+    }
+
+    private fun <C> insertingInherited(extra: List<C>, commands: List<C>, name: (C) -> String, source: (C) -> String): List<C> {
+        val existing = commands.map(name).toSet()
+        val own = commands.indexOfFirst { source(it) == containerName }.takeIf { it >= 0 } ?: commands.size
+        return commands.subList(0, own) + extra.filter { name(it) !in existing } + commands.subList(own, commands.size)
+    }
 }
 
 /** The screen an agent is looking at, with commands lifted to some ancestor's action type. */
@@ -101,6 +141,13 @@ public fun <A> ActiveScreen<A>.appending(extra: List<ResolvedCommand<A>>): Activ
     return copy(commands = commands + extra.filter { it.name !in existing })
 }
 
+/**
+ * Appends [ResolvedCommand.backFallback] for this screen's path. The root calls it last, so a `back` from any container
+ * beneath it wins.
+ */
+public fun <A> ActiveScreen<A>.appendingBackFallback(source: String): ActiveScreen<A> =
+    appending(listOf(ResolvedCommand.backFallback(path, source)))
+
 /** A command as documented by the CLI's `screens` command and the generated command reference. */
 public data class CommandDoc(
     val name: String,
@@ -110,6 +157,14 @@ public data class CommandDoc(
     val note: String? = null,
 ) {
     val usage: String get() = if (argument != null) "$name $argument" else name
+
+    public companion object {
+        /** The help of the root's `back` fallback, in the docs and on the resolved command alike. */
+        public const val BACK_FALLBACK_HELP: String = "Fails with 'nothing to go back to' when no screen is pushed."
+
+        /** How the root's [ResolvedCommand.backFallback] is documented, on every screen of its registry. */
+        public fun backFallback(source: String): CommandDoc = CommandDoc("back", null, BACK_FALLBACK_HELP, source)
+    }
 }
 
 /** A screen path with every command available there, including inherited ones. */

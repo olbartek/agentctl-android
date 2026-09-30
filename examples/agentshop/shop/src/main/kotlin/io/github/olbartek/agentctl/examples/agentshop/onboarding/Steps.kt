@@ -15,9 +15,7 @@ import io.github.olbartek.agentctl.examples.agentshop.models.OnboardingAnswers
 import io.github.olbartek.agentctl.examples.agentshop.models.Outcome
 import io.github.olbartek.agentctl.examples.agentshop.models.ProductCategory
 import io.github.olbartek.agentctl.examples.agentshop.models.attempt
-import io.github.olbartek.agentctl.examples.agentshop.models.codeChoices
 import io.github.olbartek.agentctl.examples.agentshop.models.isValidZip
-import io.github.olbartek.agentctl.invalidArgument
 import io.github.olbartek.agentctl.next
 
 /** The welcome carousel: three pages, then interests. "Skip" goes straight to interests. */
@@ -113,8 +111,6 @@ object Interests {
 }
 
 object InterestsAgent : AgentScreen<Interests.State, Interests.Action> {
-    private val categories = codeChoices<ProductCategory>()
-
     override val screenPaths: List<String> = listOf("onboarding/interests")
 
     override fun screenPath(state: Interests.State): String = "onboarding/interests"
@@ -130,14 +126,12 @@ object InterestsAgent : AgentScreen<Interests.State, Interests.Action> {
     override fun errorCode(state: Interests.State): String? = state.error?.code
 
     override val commands: List<AgentCommand<Interests.State, Interests.Action>> = listOf(
-        AgentCommand.parsing(
+        AgentCommand.choice(
             "toggle",
-            argument = "<$categories>",
+            of = ProductCategory.entries,
+            word = { it.code },
             help = "Pick or unpick a category (${Interests.MINIMUM}–${Interests.MAXIMUM}); a fifth reports error=tooMany.",
-        ) { text ->
-            val category = ProductCategory.ofCode(text) ?: invalidArgument("expected $categories")
-            Interests.Action.Toggled(category)
-        },
+        ) { Interests.Action.Toggled(it) },
         AgentCommand.action(
             "continue",
             help = "Save the picks and go on to the address.",
