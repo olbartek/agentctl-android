@@ -83,9 +83,9 @@ class LiveSettleTest {
     /** An endless animation is idle for a moment between frames: that does not make each frame a new transition. */
     @Test
     fun aUiIdleOnlyBetweenFramesIsStillAnEndlessAnimation() {
-        val elapsed = sinceFirstAsked()
-        // Idle for 20 ms of every 60: in time, not in polls, which a loaded machine spaces further apart.
-        val (result, took) = settle(uiIdle = { elapsed().inWholeMilliseconds % 60 >= 40 })
+        var asked = 0
+        // Idle on every third poll: counted in polls, since a time pattern can alias with a loaded machine's slow ones.
+        val (result, took) = settle(uiIdle = { ++asked % 3 == 0 })
         assertTrue(result.settled)
         assertTrue(took < 2.seconds, "took $took")
     }
