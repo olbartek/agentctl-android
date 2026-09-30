@@ -74,6 +74,12 @@ public object ScreensRenderer {
 public object BridgeDefaults {
     /** The port the bridge listens on without `agent-port`, and the port the CLI connects to without `--port`. */
     public const val PORT: Int = 8765
+
+    /**
+     * The platform this port's bridges and CLI name, sent as `X-Appctl-Platform` and recorded in `bridge.json`: an app
+     * id alone cannot tell an app's iOS build from its Android one (CONTRACT.md §8.4).
+     */
+    public const val PLATFORM: String = "android"
 }
 
 /**

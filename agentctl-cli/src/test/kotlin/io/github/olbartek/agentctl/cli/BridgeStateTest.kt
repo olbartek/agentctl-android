@@ -125,15 +125,28 @@ class BridgeStateTest {
     @Test
     fun aLaunchAnsweredByAnotherAppSaysWhichOrThatItDidNotSay() {
         assertEquals(
-            "the app's agent bridge on 127.0.0.1:8765 answers as dev.other, not dev.app: another app holds that port; " +
-                "pass --port or set APPCTL_PORT",
-            Message.anotherApp(8765, "dev.other", "dev.app"),
+            "the app's agent bridge on 127.0.0.1:8765 answers as dev.other (android), not dev.app (android): another app holds " +
+                "that port; pass --port or set APPCTL_PORT",
+            Message.anotherApp(8765, "dev.other", "android", "dev.app"),
+        )
+        // The same app id, another platform's build: the iOS app of a two-platform product (CONTRACT.md §8.4).
+        assertEquals(
+            "the app's agent bridge on 127.0.0.1:8765 answers as dev.app (ios), not dev.app (android): another app holds " +
+                "that port; pass --port or set APPCTL_PORT",
+            Message.anotherApp(8765, "dev.app", "ios", "dev.app"),
+        )
+        // An app id without a platform cannot say which build it is: not taken for this one.
+        assertEquals(
+            "the app's agent bridge on 127.0.0.1:8765 answers as dev.app (no X-Appctl-Platform), not dev.app (android): " +
+                "another app holds that port; pass --port or set APPCTL_PORT (or the installed app predates X-Appctl-Platform: launch " +
+                "without --no-build)",
+            Message.anotherApp(8765, "dev.app", null, "dev.app"),
         )
         // The app just launched always names itself: silence is another app, or an installed one from before the header.
         assertEquals(
-            "the app's agent bridge on 127.0.0.1:8765 answers as an app without X-Appctl-App, not dev.app: another app " +
-                "holds that port; pass --port or set APPCTL_PORT (or the installed app predates X-Appctl-App: launch without --no-build)",
-            Message.anotherApp(8765, null, "dev.app"),
+            "the app's agent bridge on 127.0.0.1:8765 answers as an app without X-Appctl-App, not dev.app (android): another " +
+                "app holds that port; pass --port or set APPCTL_PORT (or the installed app predates X-Appctl-App: launch without --no-build)",
+            Message.anotherApp(8765, null, null, "dev.app"),
         )
     }
 
@@ -192,6 +205,40 @@ class BridgeStateTest {
         assertNull(Ports.ownForward(null, "emulator-5556", mine.appId, forwardList))
         // A recorded port with no forward any more: nothing to remove.
         assertNull(Ports.ownForward(mine.copy(port = 8799), "emulator-5556", mine.appId, forwardList))
+    }
+
+    /** A listener on the other loopback is not beside the port but on it: the other platform's CLI may connect there. */
+    @Test
+    fun aPortHeldOnlyOnIpv6LoopbackIsNotFree() {
+        java.net.ServerSocket().use { v6 ->
+            try {
+                v6.bind(java.net.InetSocketAddress(java.net.InetAddress.getByName("::1"), 0))
+            } catch (_: java.io.IOException) {
+                return // no IPv6 here
+            }
+            assertEquals(false, AppLauncher.freeOnHost(v6.localPort))
+        }
+    }
+
+    /** A listener that no longer accepts (its backlog full, its app stopped) does not refuse a connection: taken. */
+    @Test
+    fun aListenerThatDoesNotAnswerIsStillTaken() {
+        java.net.ServerSocket().use { wildcard ->
+            wildcard.reuseAddress = true
+            wildcard.bind(java.net.InetSocketAddress(0), 1)
+            val port = wildcard.localPort
+            val waiting = (1..8).map {
+                java.nio.channels.SocketChannel.open().apply {
+                    configureBlocking(false)
+                    connect(java.net.InetSocketAddress("127.0.0.1", port))
+                }
+            }
+            try {
+                assertEquals(false, AppLauncher.freeOnHost(port))
+            } finally {
+                waiting.forEach { it.close() }
+            }
+        }
     }
 
     @Test

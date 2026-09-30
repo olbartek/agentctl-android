@@ -14,6 +14,9 @@ public object HttpParser {
     /** The header naming the app a bridge belongs to (CONTRACT.md §8.4). */
     public const val APP_HEADER: String = "X-Appctl-App"
 
+    /** The bridge's platform (`android`, `ios`) on every response, beside [APP_HEADER] (CONTRACT.md §8.4). */
+    public const val PLATFORM_HEADER: String = "X-Appctl-Platform"
+
     /** The largest header block a request may have. */
     public const val MAX_HEADER_BYTES: Int = 64 * 1024
 
@@ -64,11 +67,12 @@ public object HttpParser {
     }
 
     /**
-     * The response on the wire. [appId] — the app's application id — goes out as `X-Appctl-App` on every response,
-     * so the CLI can tell which app a bridge belongs to (CONTRACT.md §8.4); `null` leaves the header out.
+     * The response on the wire. [appId] — the app's application id — goes out as `X-Appctl-App` on every response, and
+     * [platform] as `X-Appctl-Platform`, so the CLI can tell which app, and which build of it, a bridge belongs to
+     * (CONTRACT.md §8.4); `null` leaves a header out.
      */
     @JvmOverloads
-    public fun serialize(response: BridgeResponse, appId: String? = null): ByteArray {
+    public fun serialize(response: BridgeResponse, appId: String? = null, platform: String? = null): ByteArray {
         val body = response.body.toByteArray(Charsets.UTF_8)
         val reason = when (response.status) {
             200 -> "OK"
@@ -82,7 +86,7 @@ public object HttpParser {
             "Content-Type: ${response.contentType}",
             "Content-Length: ${body.size}",
             "X-Appctl-Exit: ${response.exitCode}",
-        ) + listOfNotNull(appId?.let { "$APP_HEADER: $it" }) + listOf(
+        ) + listOfNotNull(appId?.let { "$APP_HEADER: $it" }, platform?.let { "$PLATFORM_HEADER: $it" }) + listOf(
             "Connection: close",
             "",
             "",

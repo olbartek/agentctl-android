@@ -5,10 +5,13 @@ import io.github.olbartek.agentctl.runtime.HttpParser
 import io.github.olbartek.agentctl.runtime.RunStatus
 import java.io.File
 import java.io.IOException
+import java.net.BindException
+import java.net.ConnectException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.time.Instant
 import java.util.Locale
 import kotlin.time.Duration.Companion.seconds
@@ -66,6 +69,11 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
                 chosen = freePort(target, log, after = chosen)
                 continue
             }
+            // The CLI connects to 127.0.0.1 only: a forward that does not hold it there would send it elsewhere.
+            if (!holdsIpv4Loopback(chosen)) {
+                Shell.run(listOf(adb, "-s", target.serial, "forward", "--remove", "tcp:$chosen"), root, log, append = true)
+                throw AppCtlException("adb forward tcp:$chosen does not listen on 127.0.0.1:$chosen; log: ${log.path}")
+            }
             val extras = mutableListOf("--ei", AgentLaunchOptions.PORT, chosen.toString())
             seed?.let { extras += listOf("--es", AgentLaunchOptions.SEED, shellQuoted(it)) }
             latency?.let { extras += listOf("--ei", AgentLaunchOptions.MOCK_LATENCY, it.toString()) }
@@ -88,12 +96,13 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             // Another app's bridge answered on this port. The app just launched is built from the same checkout as
             // this CLI and always says which app it is, so an answer without X-Appctl-App is foreign too (an older app
             // holding the port). A port found by the scan gets one more try, on the next free port above it.
-            if (answer.app == config.applicationId) break
+            // The app id alone is not enough: an app's iOS build may hold the port with the same id.
+            if (answer.isFrom(config.applicationId, BridgeState.PLATFORM)) break
             if (port != null || retried) {
                 // Leave nothing half-launched: our app without a bridge, a forward to the other app.
                 stop(target, log)
                 Shell.run(listOf(adb, "-s", target.serial, "forward", "--remove", "tcp:$chosen"), root, log, append = true)
-                throw AppCtlException(Message.anotherApp(chosen, answer.app, config.applicationId))
+                throw AppCtlException(Message.anotherApp(chosen, answer.app, answer.platform, config.applicationId))
             }
             retried = true
             stop(target, log)
@@ -226,29 +235,56 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
     }
 
     companion object {
+        private val IPV4_LOOPBACK: InetAddress = InetAddress.getByName("127.0.0.1")
+        private val IPV6_LOOPBACK: InetAddress = InetAddress.getByName("::1")
+
         /**
-         * Whether nothing on the Mac holds 127.0.0.1:[port], as the reference checks it. A connection there must find
-         * nothing: that catches a live listener on 127.0.0.1 or on the wildcard address (an iOS simulator's bridge,
-         * another device's forward), which a bind with reuse on macOS would not. Then a bind must succeed, with reuse,
-         * so the TIME_WAIT connections of the last run on that port do not count as taken.
+         * Whether nothing on the Mac holds [port] on either loopback, as the reference checks it (CONTRACT.md §8.6).
+         * A port is taken when a connection to 127.0.0.1 or ::1 is answered, or does not come back at all (a listener
+         * whose backlog is full, a stopped app: only a refusal means nothing is there), or when a bind to 127.0.0.1 or
+         * ::1 fails. The binds reuse the address, so the TIME_WAIT connections of the last run on that port do not
+         * count; a Mac without IPv6 has no ::1 to hold anything.
          */
-        fun freeOnHost(port: Int): Boolean {
-            val loopback = InetAddress.getByName("127.0.0.1")
+        fun freeOnHost(port: Int): Boolean = listOf(IPV4_LOOPBACK, IPV6_LOOPBACK).none { address -> heldOn(address, port) }
+
+        private fun heldOn(address: InetAddress, port: Int): Boolean {
             try {
-                Socket().use { it.connect(InetSocketAddress(loopback, port), 200) }
-                return false
+                // Not refused within a second: a listener that no longer accepts (CONTRACT.md §8.6).
+                Socket().use { it.connect(InetSocketAddress(address, port), 1000) }
+                return true
+            } catch (_: SocketTimeoutException) {
+                return true
+            } catch (_: ConnectException) {
+                // Refused: nothing listens there. See whether it can be bound.
             } catch (_: IOException) {
-                // Nothing answers: see whether it can be bound.
+                // No such address here (IPv6 off): it can hold nothing.
+                if (address == IPV6_LOOPBACK) return false
             }
             return try {
                 ServerSocket().use {
                     it.reuseAddress = true
-                    it.bind(InetSocketAddress(loopback, port), 1)
+                    it.bind(InetSocketAddress(address, port), 1)
                 }
+                false
+            } catch (_: BindException) {
                 true
             } catch (_: IOException) {
-                false
+                address == IPV4_LOOPBACK
             }
+        }
+
+        /**
+         * Whether something holds 127.0.0.1:[port] (a bind there fails): after `adb forward`, that the forward really
+         * listens where the CLI will connect, and not beside another listener on the other loopback.
+         */
+        fun holdsIpv4Loopback(port: Int): Boolean = try {
+            ServerSocket().use {
+                it.reuseAddress = true
+                it.bind(InetSocketAddress(IPV4_LOOPBACK, port), 1)
+            }
+            false
+        } catch (_: IOException) {
+            true
         }
 
         /** `adb shell` joins its arguments into one device shell command line: quote a value for that shell. */
