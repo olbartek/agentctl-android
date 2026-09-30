@@ -160,7 +160,8 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
      * connected device.
      */
     fun resolve(nameOrSerial: String?): Device {
-        val devices = connected()
+        val listing = Devices.list(adb) { cli.io.err.println("warning: $it") }
+        val devices = listing.ready
         if (nameOrSerial == null) {
             return devices.singleOrNull() ?: throw AppCtlException(
                 if (devices.isEmpty()) "no device connected (start an emulator, or pass --device <AVD name>)"
@@ -168,6 +169,10 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             )
         }
         devices.firstOrNull { it.serial == nameOrSerial || it.name == nameOrSerial }?.let { return it }
+        // Running but frozen: booting its AVD again would only start a second copy beside it.
+        listing.frozen.firstOrNull { it.serial == nameOrSerial || it.avd == nameOrSerial }?.let { frozen ->
+            throw AppCtlException(Message.deviceDoesNotAnswer(nameOrSerial, frozen.serial))
+        }
         val avds = Shell.capture(listOf(AndroidSdk.emulator(root, cli.environment), "-list-avds"))?.lines()?.map { it.trim() } ?: emptyList()
         if (nameOrSerial !in avds) {
             val names = (devices.map { it.name } + avds).toSortedSet().joinToString(", ")
@@ -184,14 +189,13 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             .start()
         val start = TimeSource.Monotonic.markNow()
         while (start.elapsedNow() < 300.seconds) {
-            val booted = connected().firstOrNull { it.serial !in before && it.name == avd }
+            // Quietly: a device that does not answer was reported once already, by resolve.
+            val booted = Devices.list(adb) {}.ready.firstOrNull { it.serial !in before && it.name == avd }
             if (booted != null && getprop(booted.serial, "sys.boot_completed") == "1") return booted
             Thread.sleep(1000)
         }
         throw AppCtlException("the emulator $avd did not boot within 5 minutes; log: ${log.path}")
     }
-
-    private fun connected(): List<Device> = Devices.connected(adb) { cli.io.err.println("warning: $it") }
 
     private fun getprop(serial: String, property: String): String? = Devices.getprop(adb, serial, property)
 
@@ -239,37 +243,54 @@ internal object Devices {
     /** How long `adb devices` gets, which may have to start the adb server. */
     const val LIST_SECONDS: Long = 60
 
+    /** A device `adb` lists as ready whose shell does not answer: a frozen emulator, and its AVD if its console says. */
+    data class Frozen(val serial: String, val avd: String?)
+
+    /** What `adb devices` lists: the devices that answer, and those that do not. */
+    data class Listing(val ready: List<Device>, val frozen: List<Frozen>)
+
     /**
      * The devices `adb devices` lists as ready, with their names and Android releases. One whose shell does not
      * answer within [probeSeconds] (a frozen emulator is still listed as `device`) is left out, and [warn] says so.
      */
-    fun connected(adb: String, probeSeconds: Long = PROBE_SECONDS, warn: (String) -> Unit): List<Device> {
+    fun connected(adb: String, probeSeconds: Long = PROBE_SECONDS, warn: (String) -> Unit): List<Device> =
+        list(adb, probeSeconds, warn).ready
+
+    /** [connected], and the devices it left out because they do not answer. */
+    fun list(adb: String, probeSeconds: Long = PROBE_SECONDS, warn: (String) -> Unit): Listing {
+        val frozen = mutableListOf<Frozen>()
         // The listing gets the usual time: it may start the adb server first. Only each device's answer is short.
         val started = TimeSource.Monotonic.markNow()
         val output = Shell.capture(listOf(adb, "devices"), timeoutSeconds = LIST_SECONDS) ?: throw AppCtlException(
             if (started.elapsedNow() >= LIST_SECONDS.seconds) Message.adbDidNotAnswer(LIST_SECONDS) else "cannot run adb ($adb)",
         )
-        return output.lines().drop(1).mapNotNull { line ->
+        val ready = output.lines().drop(1).mapNotNull { line ->
             val parts = line.trim().split(Regex("\\s+"))
             if (parts.size < 2 || parts[1] != "device") return@mapNotNull null
             val serial = parts[0]
             // Asked first: it is how a device that does not answer is found out, before anything else waits on it.
             val release = Shell.capture(listOf(adb, "-s", serial, "shell", "getprop", "ro.build.version.release"), timeoutSeconds = probeSeconds)
+            val avd = { avdName(adb, serial, probeSeconds) }
             if (release == null) {
                 warn("$serial does not answer (adb shell timed out after $probeSeconds s); skipping it")
+                // Its console may still answer (it did when the guest froze), so it can be told apart by name.
+                frozen.add(Frozen(serial, avd()))
                 return@mapNotNull null
             }
-            val avd = if (serial.startsWith("emulator-")) {
-                Shell.capture(listOf(adb, "-s", serial, "emu", "avd", "name"), timeoutSeconds = probeSeconds)
-                    ?.lines()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-            } else {
-                null
-            }
-            val name = avd ?: getprop(adb, serial, "ro.product.model", probeSeconds) ?: serial
+            val name = avd() ?: getprop(adb, serial, "ro.product.model", probeSeconds) ?: serial
             Device(serial, name, release.trim().ifEmpty { "?" })
         }
+        return Listing(ready, frozen)
     }
 
+    /** An emulator's AVD name, from its console; `null` for a device that is not an emulator. */
+    private fun avdName(adb: String, serial: String, timeoutSeconds: Long): String? {
+        if (!serial.startsWith("emulator-")) return null
+        return Shell.capture(listOf(adb, "-s", serial, "emu", "avd", "name"), timeoutSeconds = timeoutSeconds)
+            ?.lines()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    /** One system property of a device, `null` when it is empty or the device does not answer in time. */
     fun getprop(adb: String, serial: String, property: String, timeoutSeconds: Long = PROBE_SECONDS): String? =
         Shell.capture(listOf(adb, "-s", serial, "shell", "getprop", property), timeoutSeconds = timeoutSeconds)
             ?.trim()?.takeIf { it.isNotEmpty() }

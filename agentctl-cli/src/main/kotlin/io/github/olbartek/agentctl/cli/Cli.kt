@@ -345,6 +345,11 @@ internal object Message {
     fun adbDidNotAnswer(seconds: Long): String =
         "adb devices did not answer within $seconds s; the adb server may be stuck: run 'adb kill-server', or restart the emulator"
 
+    /** `--device` names a device that is running but frozen: it is not booted again beside itself. */
+    fun deviceDoesNotAnswer(name: String, serial: String): String =
+        "$name is running as $serial but does not answer (adb shell timed out after ${Devices.PROBE_SECONDS} s): " +
+            "restart it (adb -s $serial emu kill), or pass another --device"
+
     fun staleDocs(config: AppCtlConfig<*, *>): String = "${config.docsPath} is stale. Run ${config.help.invocation} docs."
 
     /** The `check` ladder's one-column form of [staleDocs]. */

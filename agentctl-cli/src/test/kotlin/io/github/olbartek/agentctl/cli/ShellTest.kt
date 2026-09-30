@@ -29,11 +29,16 @@ class ShellTest {
     @Test
     fun aCommandThatRanOutOfTimeIsKilled() {
         val marker = "appctl-shell-test-${ProcessHandle.current().pid()}"
-        assertNull(Shell.capture(listOf("sh", "-c", "exec -a $marker sleep 30"), timeoutSeconds = 1))
+        // A sleep only this test starts: GNU and BSD sleep both take a fraction.
+        val nap = "sleep 30.${ProcessHandle.current().pid()}"
+        // The marker is in the shell's command line, and its sleep is its child: both must go. (No `exec -a`: dash,
+        // Ubuntu's sh, has none.)
+        assertNull(Shell.capture(listOf("sh", "-c", ": $marker; $nap; :"), timeoutSeconds = 1))
         val file = Files.createTempFile("capture", ".out").toFile()
-        assertEquals(-1, Shell.captureTo(listOf("sh", "-c", "exec -a $marker sleep 30"), file, timeoutSeconds = 1))
+        assertEquals(-1, Shell.captureTo(listOf("sh", "-c", ": $marker; $nap; :"), file, timeoutSeconds = 1))
+        file.delete()
         Thread.sleep(200)
-        val left = ProcessHandle.allProcesses().filter { it.info().commandLine().orElse("").contains(marker) }.count()
+        val left = ProcessHandle.allProcesses().filter { it.info().commandLine().orElse("").let { line -> marker in line || nap in line } }.count()
         assertEquals(0, left, "a timed-out command is still running")
     }
 

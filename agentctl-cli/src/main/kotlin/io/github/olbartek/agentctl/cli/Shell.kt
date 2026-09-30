@@ -83,13 +83,20 @@ internal object Shell {
      */
     private fun finish(process: Process, timeoutSeconds: Long): Int? {
         if (process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) return process.exitValue()
-        val all = process.descendants().toList() + process.toHandle()
-        all.forEach { it.destroy() }
+        stoppable(process).forEach { it.destroy() }
         if (!process.waitFor(KILL_AFTER_SECONDS, TimeUnit.SECONDS)) process.destroyForcibly()
-        all.filter { it.isAlive }.forEach { it.destroyForcibly() }
+        // Taken again: a parent that outlived SIGTERM may have started more.
+        stoppable(process).filter { it.isAlive }.forEach { it.destroyForcibly() }
         process.waitFor(5, TimeUnit.SECONDS)
         return null
     }
+
+    /**
+     * A process that ran out of time and what it started, but never an adb server: an adb client that finds none
+     * starts one, which stays its child until the client exits, and every later adb command needs it.
+     */
+    private fun stoppable(process: Process): List<ProcessHandle> =
+        process.descendants().toList().filter { "fork-server" !in it.info().commandLine().orElse("") } + process.toHandle()
 
     /** How long a command that ran out of time gets to end on SIGTERM before it is killed. */
     private const val KILL_AFTER_SECONDS: Long = 2
