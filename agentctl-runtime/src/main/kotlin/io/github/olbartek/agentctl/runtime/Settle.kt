@@ -4,6 +4,7 @@ import io.github.olbartek.agentctl.MockCallLog
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 import kotlinx.coroutines.delay
 
@@ -54,9 +55,14 @@ internal fun <S> settleHeadless(
 }
 
 /**
- * Live settling for the running app: wait until no mock call is in flight and the state has not changed for
- * `quietWindow`, or until `limit`. Mock latency is real here, so this uses real time. Must run on the store's
- * own dispatcher (the main thread), where the state is read.
+ * Live settling for the running app: wait until no mock call is in flight, the UI is idle ([uiIdle]: no transition or
+ * animation in flight) and the state has not changed for `quietWindow`, or until `limit` (CONTRACT.md §8.5). Mock
+ * latency is real here, so this uses real time. Must run on the store's own dispatcher (the main thread), where the
+ * state and the UI are read.
+ *
+ * A UI busy for longer than [uiLimit] at a stretch is animating without end (a spinner on screen), not in a
+ * transition: from then on it no longer holds settling, so a screen with a spinner still settles. A stretch ends
+ * only once the UI has stayed idle for [uiIdleGap], since an endless animation is idle for a moment between frames.
  */
 internal suspend fun <S> settleLive(
     state: () -> S,
@@ -65,14 +71,32 @@ internal suspend fun <S> settleLive(
     quietWindow: Duration = 100.milliseconds,
     pollInterval: Duration = 20.milliseconds,
     limit: Duration = 3.seconds,
+    uiIdle: () -> Boolean = { true },
+    uiLimit: Duration = 1.seconds,
+    uiIdleGap: Duration = 100.milliseconds,
 ): SettleResult {
     val start = TimeSource.Monotonic.markNow()
     var last = state()
     var quietSince = TimeSource.Monotonic.markNow()
+    var busySince: TimeMark? = null
+    var idleSince: TimeMark? = null
+    fun uiHolds(): Boolean {
+        if (uiIdle()) {
+            val idle = idleSince ?: TimeSource.Monotonic.markNow().also { idleSince = it }
+            if (idle.elapsedNow() >= uiIdleGap) busySince = null
+            return false
+        }
+        idleSince = null
+        val busy = busySince ?: TimeSource.Monotonic.markNow().also { busySince = it }
+        return busy.elapsedNow() < uiLimit
+    }
     while (start.elapsedNow() < limit) {
         delay(pollInterval)
         val next = state()
-        if (next != last || callLog.inFlight > 0) {
+        // Asked on every poll, before anything else can short-circuit it: a busy stretch's idle moment seen only on
+        // quiet polls could be missed, and the next transition taken for the old one's endless animation.
+        val uiBusy = uiHolds()
+        if (next != last || callLog.inFlight > 0 || uiBusy) {
             last = next
             quietSince = TimeSource.Monotonic.markNow()
         } else if (quietSince.elapsedNow() >= quietWindow) {
