@@ -184,16 +184,14 @@ class BridgeStateTest {
     @Test
     fun onlyThisAppsOwnForwardOnThisDeviceIsEverRemoved() {
         val mine = state.copy(device = "emulator-5556", port = 8766)
-        // Its app has quit: nothing listens behind it.
-        assertEquals(8766, Ports.ownStaleForward(mine, "emulator-5556", mine.appId, forwardList, listening = emptySet()))
-        // Still running (a second launch of it, say): kept.
-        assertNull(Ports.ownStaleForward(mine, "emulator-5556", mine.appId, forwardList, listening = setOf(8766)))
+        // A launch stops the app first, so its last forward goes whatever still listens on the device.
+        assertEquals(8766, Ports.ownForward(mine, "emulator-5556", mine.appId, forwardList))
         // Another app's record, another device's, or no record: nothing is removed.
-        assertNull(Ports.ownStaleForward(mine, "emulator-5556", "dev.other", forwardList, emptySet()))
-        assertNull(Ports.ownStaleForward(mine, "emulator-5554", mine.appId, forwardList, emptySet()))
-        assertNull(Ports.ownStaleForward(null, "emulator-5556", mine.appId, forwardList, emptySet()))
-        // A forward to another device port (8770 → 9000) is judged by its device port.
-        assertNull(Ports.ownStaleForward(mine.copy(port = 8770), "emulator-5556", mine.appId, forwardList, setOf(9000)))
+        assertNull(Ports.ownForward(mine, "emulator-5556", "dev.other", forwardList))
+        assertNull(Ports.ownForward(mine, "emulator-5554", mine.appId, forwardList))
+        assertNull(Ports.ownForward(null, "emulator-5556", mine.appId, forwardList))
+        // A recorded port with no forward any more: nothing to remove.
+        assertNull(Ports.ownForward(mine.copy(port = 8799), "emulator-5556", mine.appId, forwardList))
     }
 
     @Test

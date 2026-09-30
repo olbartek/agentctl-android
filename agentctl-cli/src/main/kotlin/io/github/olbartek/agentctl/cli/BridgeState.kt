@@ -148,14 +148,13 @@ internal object Ports {
     }
 
     /**
-     * The host port of the forward this app's last launch on [serial] left behind, if nothing on the device listens
-     * behind it any more: the one `bridge.json` records for this app and device. Another app's forward, or another
-     * tool's, is never this.
+     * The host port of the forward this app's last launch on [serial] left, which a new launch removes once it has
+     * stopped the app (so its bridge no longer listens behind it): the one `bridge.json` records for this app and
+     * device. Another app's forward, another device's, or another tool's is never this.
      */
-    fun ownStaleForward(recorded: BridgeState?, serial: String, appId: String, forwardList: String, listening: Set<Int>): Int? {
+    fun ownForward(recorded: BridgeState?, serial: String, appId: String, forwardList: String): Int? {
         if (recorded == null || recorded.platform != BridgeState.PLATFORM || recorded.device != serial || recorded.appId != appId) return null
-        val forward = forwards(forwardList).firstOrNull { it.serial == serial && it.host == recorded.port } ?: return null
-        return forward.host.takeIf { forward.device !in listening }
+        return forwards(forwardList).firstOrNull { it.serial == serial && it.host == recorded.port }?.host
     }
 
     private fun environmentPort(environment: Map<String, String>): Int? {

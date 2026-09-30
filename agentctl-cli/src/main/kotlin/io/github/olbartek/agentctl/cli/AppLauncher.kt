@@ -48,9 +48,11 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             )
             if (status != 0) throw AppCtlException("${config.gradle.install} failed; log: ${log.path}")
         }
-        // Stopped first, so a bridge it left listening does not count against the port it can have again. The port is
-        // chosen now, after the build and install, right before the launch.
+        // Stopped first, so a bridge it left listening does not count against the port it can have again, and the
+        // forward its last launch here left goes with it: forwards do not pile up per device, whatever port this launch
+        // takes. The port is chosen now, after the build and install, right before the launch.
         stop(target, log)
+        removeOwnForward(target, log)
         var chosen = port ?: freePort(target, log)
         val component = config.applicationId + "/" + config.launchActivity
         var answer: BridgeClient.Response
@@ -130,22 +132,27 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
     )
 
     /**
-     * The first port of [Ports.SCAN] above [after] (if given) that is free on the Mac (nothing answers or is bound
-     * there: another device's forward, an iOS simulator's bridge) and on the device (nothing listens on it). The
-     * forward this app's own last launch on this device left (recorded in `bridge.json`) is removed first when
-     * nothing on the device listens on it any more, so a relaunch gets its port back; no other forward is touched.
+     * Removes the forward this app's last launch on [device] left (recorded in `bridge.json`), once the app is stopped;
+     * a relaunch then gets that port back, and no other forward is touched.
      */
-    private fun freePort(device: Device, log: File, after: Int? = null): Int {
-        val listening = deviceListening(device)
+    private fun removeOwnForward(device: Device, log: File) {
         val recorded = try {
             BridgeState.load(layout)
         } catch (_: Unreadable) {
             null
         }
         val forwards = Shell.capture(listOf(adb, "forward", "--list")) ?: ""
-        Ports.ownStaleForward(recorded, device.serial, config.applicationId, forwards, listening)?.let { stale ->
-            Shell.run(listOf(adb, "-s", device.serial, "forward", "--remove", "tcp:$stale"), root, log, append = true)
+        Ports.ownForward(recorded, device.serial, config.applicationId, forwards)?.let { own ->
+            Shell.run(listOf(adb, "-s", device.serial, "forward", "--remove", "tcp:$own"), root, log, append = true)
         }
+    }
+
+    /**
+     * The first port of [Ports.SCAN] above [after] (if given) that is free on the Mac (nothing answers or is bound
+     * there: another device's forward, an iOS simulator's bridge) and on the device (nothing listens on it).
+     */
+    private fun freePort(device: Device, log: File, after: Int? = null): Int {
+        val listening = deviceListening(device)
         return Ports.firstFree(after) { it !in listening && freeOnHost(it) }
             ?: throw AppCtlException(
                 "no free port for the app's agent bridge in ${Ports.SCAN.first}-${Ports.SCAN.last}: pass --port or set ${Ports.ENVIRONMENT_VARIABLE}",
