@@ -112,7 +112,7 @@ dependencyResolutionManagement {
 
 // a module's build.gradle.kts
 dependencies {
-    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.5.0")
+    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.5.1")
 }
 ```
 
@@ -365,7 +365,7 @@ which you can copy).
 dependencies {
     implementation(project(":feature:items"))           // screens and store: agentctl-core
     debugImplementation(project(":appctl-config"))      // the AppCtlConfig: agentctl-runtime
-    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.5.0")
+    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.5.1")
 }
 ```
 
@@ -534,9 +534,10 @@ names the modules' directories unless `gradle.snapshotReferences` says where the
 other tool goes in `gradle.snapshotsVerify` and `gradle.snapshotsRecord`, which run as named.
 
 `--device` (or the config's `device`) names an `adb` serial, an AVD or a phone's model. An AVD that is not running is
-booted. With neither, the only connected device is used. A name is never resolved by picking one of several: when two
-running devices share it (two emulators of one AVD started with `-read-only`, two phones of one model), the command
-lists their serials, exits 2 and asks for `--device <serial>`.
+booted. With neither, the only connected device is used. The boot passes `-no-metrics -crash-report-mode never`: after
+an emulator crash, a plain boot stops at the crash-report consent prompt and never opens its adb ports. A name is never
+resolved by picking one of several: when two running devices share it (two emulators of one AVD started with
+`-read-only`, two phones of one model), the command lists their serials, exits 2 and asks for `--device <serial>`.
 
 The rule that makes this pay off: **verify at the cheapest rung that proves the change.**
 
@@ -841,8 +842,9 @@ Android modules.
 
 ## Status
 
-Version 0.5.0, released together with agentctl-ios 0.5.0 after both passed on the two NZOZ apps they were extracted
-for, run side by side. The two example apps in this repository are the integrations CI exercises, and the API may still
+Version 0.5.1. 0.5.0 was released together with agentctl-ios 0.5.0 after both passed on the two NZOZ apps they were
+extracted for, run side by side; 0.5.1 is an Android-only patch, booting an AVD without the emulator's crash-report
+prompt. The two example apps in this repository are the integrations CI exercises, and the API may still
 change between minor versions before 1.0. MIT licensed.
 
 This port and [agentctl-ios](https://github.com/olbartek/agentctl-ios) move in lockstep: the same features, the same
