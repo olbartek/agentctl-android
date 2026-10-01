@@ -213,7 +213,7 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
 
     private fun boot(avd: String, before: Set<String>): Device {
         val log = File(layout.logs, "emulator-$avd.log").also { it.parentFile.mkdirs() }
-        ProcessBuilder(AndroidSdk.emulator(root, cli.environment), "-avd", avd, "-no-snapshot-save", "-no-boot-anim")
+        ProcessBuilder(bootCommand(AndroidSdk.emulator(root, cli.environment), avd))
             .redirectErrorStream(true)
             .redirectOutput(log)
             .start()
@@ -286,6 +286,14 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         } catch (_: IOException) {
             true
         }
+
+        /**
+         * The line an AVD is booted with. `-no-metrics -crash-report-mode never`: after an emulator crash, a plain
+         * boot stops at the crash-report consent prompt and never opens its adb ports, so it would never finish.
+         */
+        fun bootCommand(emulator: String, avd: String): List<String> = listOf(
+            emulator, "-avd", avd, "-no-snapshot-save", "-no-boot-anim", "-no-metrics", "-crash-report-mode", "never",
+        )
 
         /** `adb shell` joins its arguments into one device shell command line: quote a value for that shell. */
         fun shellQuoted(value: String): String = "'" + value.replace("'", "'\\''") + "'"
