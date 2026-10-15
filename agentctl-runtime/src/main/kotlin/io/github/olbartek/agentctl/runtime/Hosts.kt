@@ -1,10 +1,12 @@
 package io.github.olbartek.agentctl.runtime
 
 import io.github.olbartek.agentctl.AgentContainer
+import io.github.olbartek.agentctl.AgentCoordinator
 import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.AgentStore
+import io.github.olbartek.agentctl.AppIntent
 import io.github.olbartek.agentctl.CountingClock
 import io.github.olbartek.agentctl.IncrementingUuids
 import io.github.olbartek.agentctl.MockBackend
@@ -18,6 +20,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.Locale
 import java.util.UUID
+import kotlin.experimental.ExperimentalTypeInference
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -25,42 +28,13 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.job
 
 /**
- * How a host builds an app in two stages, so that `device relaunch` starts the app's state over while what its clients
- * stored stays (CONTRACT.md §2.4), as the reference's hosts rebuild the store over the same dependencies.
+ * An app running in the CLI's process with the deterministic environment CONTRACT.md §6 requires, through its
+ * [AgentDriver] ([StoreDriver] or [ViewModelDriver]).
  *
- * [prepare] runs once per host, on an environment whose `scope` is the host's: build the clients there, and anything
- * they keep (a session store, a cart on disk). It returns the function that builds the store on the scope it is given,
- * once at launch and again at each relaunch; the store runs its effects in that scope, which a relaunch cancels.
- *
- * ```kotlin
- * HeadlessHost(MyAppAgent, mockMethods, deviceConfig, AppFactory { environment ->
- *     val clients = MyClients.mocked(environment.mocks, SessionStorage.inMemory())
- *     return@AppFactory { scope -> MyApp.store(environment, clients, scope) }
- * })
- * ```
- *
- * A host given a plain `makeStore` instead runs all of it again at each relaunch, clients included.
- */
-public fun interface AppFactory<S, A> {
-    /** Builds what outlives a relaunch, and returns how to build a store on a scope. */
-    public fun prepare(environment: AgentEnvironment): (CoroutineScope) -> AgentStore<S, A>
-}
-
-/** This environment with another [scope]: what each store of a host is built on. */
-internal fun AgentEnvironment.withScope(scope: CoroutineScope): AgentEnvironment =
-    AgentEnvironment(scope, clock, mocks, uuids, random, zone, locale, device)
-
-/** A [makeStore] as an [AppFactory]: everything is built again at each launch. */
-internal fun <S, A> rebuilding(makeStore: (AgentEnvironment) -> AgentStore<S, A>): AppFactory<S, A> =
-    AppFactory { environment -> { scope -> makeStore(environment.withScope(scope)) } }
-
-/**
- * A real store running in the CLI's process with the deterministic environment CONTRACT.md §6 requires.
- *
- * It builds exactly this [AgentEnvironment] and hands it to the host's `makeStore` (or its [AppFactory]):
+ * It builds exactly this [AgentEnvironment] and hands it to the host's `makeDriver` (or `makeStore`, [AppFactory] or
+ * `coordinator`):
  *
  * | Field | Headless value |
  * |---|---|
@@ -73,39 +47,24 @@ internal fun <S, A> rebuilding(makeStore: (AgentEnvironment) -> AgentStore<S, A>
  * | `locale` | `en_US_POSIX` |
  * | `mocks` | a fresh call log and fault registry, zero latency, on the clock above |
  * | `device` | a driven [AgentDevice] |
+ * | `tasks` | counted on `scope`, for an MVVM app's view models |
  *
  * Nothing else is pinned: an app that reads `System.currentTimeMillis()`, `Locale.getDefault()` or
- * `Dispatchers.IO` around the environment is not deterministic headlessly, and `makeStore` is where a host pins
+ * `Dispatchers.IO` around the environment is not deterministic headlessly, and `makeDriver` is where a host pins
  * whatever else it uses.
+ *
+ * Built by name for each architecture: `HeadlessHost(container, mockMethods, deviceConfig, makeStore)` for a store,
+ * `HeadlessHost(mockMethods, deviceConfig) { AppCoordinator(it) }` for MVVM.
  */
-public class HeadlessHost<S, A>(
-    public val container: AgentContainer<S, A>,
+public class HeadlessHost<D : AgentDriver<A, *>, A>(
     public val mockMethods: List<MockMethod>,
     /** What of the device scripts can drive, and the actions its events become (`device`). */
     public val deviceConfig: AgentDeviceConfig<A>,
-    app: AppFactory<S, A>,
+    makeDriver: (AgentEnvironment) -> D,
 ) {
-    /**
-     * A host whose [makeStore] builds the whole app. `device relaunch` runs it again, so whatever it builds starts over,
-     * clients included; an app whose clients keep something across a relaunch uses an [AppFactory].
-     */
-    public constructor(
-        container: AgentContainer<S, A>,
-        mockMethods: List<MockMethod>,
-        deviceConfig: AgentDeviceConfig<A>,
-        makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-    ) : this(container, mockMethods, deviceConfig, rebuilding(makeStore))
-
-    /** A host without a device configuration: no `device` command. */
-    public constructor(
-        container: AgentContainer<S, A>,
-        mockMethods: List<MockMethod>,
-        makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-    ) : this(container, mockMethods, AgentDeviceConfig.none(), rebuilding(makeStore))
-
     public val dispatcher: VirtualTimeDispatcher = VirtualTimeDispatcher()
 
-    /** The host's scope. Each store runs its effects in a child of it, which `device relaunch` cancels. */
+    /** The host's scope. Each launch of the app runs its work in a child of it, which `device relaunch` cancels. */
     public val scope: CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher)
 
     /**
@@ -123,53 +82,30 @@ public class HeadlessHost<S, A>(
     /** The simulated device, which `device` changes. */
     public val device: AgentDevice = AgentDevice(isDriven = true, offlineErrorCode = deviceConfig.offlineErrorCode)
 
-    private val mocks = MockBackend(callLog, faults, MockLatency.ZERO, clock, SplitMix64Random(RANDOM_SEED), device)
-    private val uuids = IncrementingUuids()
-    private val random = SplitMix64Random(RANDOM_SEED)
-
-    private val hostEnvironment = AgentEnvironment(
+    /** What the driver is given: the host's own scope, which outlives every launch, and everything above. */
+    public val environment: AgentEnvironment = AgentEnvironment(
         scope = scope,
         clock = clock,
-        mocks = mocks,
-        uuids = uuids,
-        random = random,
+        mocks = MockBackend(callLog, faults, MockLatency.ZERO, clock, SplitMix64Random(RANDOM_SEED), device),
+        uuids = IncrementingUuids(),
+        random = SplitMix64Random(RANDOM_SEED),
         zone = FIXED_ZONE,
         locale = FIXED_LOCALE,
         device = device,
     )
 
-    private val makeStore: (CoroutineScope) -> AgentStore<S, A> = app.prepare(hostEnvironment)
-
-    /**
-     * What the current store was built on. `device relaunch` builds the next store on a copy whose only difference is
-     * a fresh [AgentEnvironment.scope], so the old store's effects end with it while everything else carries over.
-     */
-    public var environment: AgentEnvironment = hostEnvironment.withScope(childScope(scope))
-        private set
-
-    /** The app's store. `device relaunch` replaces it with a fresh one. */
-    public var store: AgentStore<S, A> = makeStore(environment.scope)
-        private set
-
-    /** Cancels the store's effects and builds a fresh store from its initial state: `device relaunch`. */
-    private fun relaunch(): AgentStore<S, A> {
-        environment.scope.cancel()
-        environment = hostEnvironment.withScope(childScope(scope))
-        store = makeStore(environment.scope)
-        return store
-    }
+    /** The app, as the engine sees it. */
+    public val driver: D = makeDriver(environment)
 
     public fun settle(): SettleResult = settleHeadless(
         dispatcher = dispatcher,
-        state = { store.state },
+        fingerprint = driver::fingerprint,
         callLog = callLog,
-        effectsInFlight = { store.effectsInFlight },
         pending = { clock.activeSleeps },
     )
 
-    public fun makeRunner(): ScriptRunner<S, A> = ScriptRunner(
-        store = store,
-        container = container,
+    public fun makeRunner(): ScriptRunner<A> = ScriptRunner(
+        driver = driver,
         callLog = callLog,
         faults = faults,
         pending = { clock.activeSleeps },
@@ -181,7 +117,6 @@ public class HeadlessHost<S, A>(
         mockMethods = mockMethods,
         device = device,
         deviceConfig = deviceConfig,
-        relaunch = ::relaunch,
     )
 
     /** Cancels every effect still running. The host is unusable afterwards. */
@@ -205,49 +140,74 @@ public class HeadlessHost<S, A>(
 }
 
 /**
- * The app's store as the in-app bridge runs it in debug builds: real time and real mock latency, plus the hooks
- * the agent runtime needs (call log, faults, effect count and a clock that counts pending sleeps).
+ * A store app, headlessly: [app] builds its clients once per host and a store at each launch, so `device relaunch`
+ * keeps what the clients stored.
+ */
+public fun <S, A> HeadlessHost(
+    container: AgentContainer<S, A>,
+    mockMethods: List<MockMethod>,
+    deviceConfig: AgentDeviceConfig<A>,
+    app: AppFactory<S, A>,
+): HeadlessHost<StoreDriver<S, A>, A> = HeadlessHost(mockMethods, deviceConfig) { StoreDriver(container, it, app) }
+
+/**
+ * A store app, headlessly, whose [makeStore] builds the whole app. `device relaunch` runs it again, so whatever it
+ * builds starts over, clients included; an app whose clients keep something across a relaunch uses an [AppFactory].
+ */
+public fun <S, A> HeadlessHost(
+    container: AgentContainer<S, A>,
+    mockMethods: List<MockMethod>,
+    deviceConfig: AgentDeviceConfig<A>,
+    makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+): HeadlessHost<StoreDriver<S, A>, A> = HeadlessHost(container, mockMethods, deviceConfig, rebuilding(makeStore))
+
+/** A store app, headlessly, without a device configuration: no `device` command. */
+public fun <S, A> HeadlessHost(
+    container: AgentContainer<S, A>,
+    mockMethods: List<MockMethod>,
+    makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+): HeadlessHost<StoreDriver<S, A>, A> =
+    HeadlessHost(container, mockMethods, AgentDeviceConfig.none(), rebuilding(makeStore))
+
+/**
+ * An MVVM app, headlessly: [coordinator] builds the app's coordinator on each launch's environment ([ViewModelDriver]):
+ * `HeadlessHost(mockMethods, deviceConfig) { AppCoordinator(it) }`. A lambda that returns an [AgentDriver] instead
+ * goes to the class's constructor, so a host's own driver is written the same way.
+ */
+@OptIn(ExperimentalTypeInference::class)
+@OverloadResolutionByLambdaReturnType
+public fun <C : AgentCoordinator<C>> HeadlessHost(
+    mockMethods: List<MockMethod>,
+    deviceConfig: AgentDeviceConfig<AppIntent<C>> = AgentDeviceConfig.none(),
+    coordinator: (AgentEnvironment) -> C,
+): HeadlessHost<ViewModelDriver<C>, AppIntent<C>> =
+    HeadlessHost(mockMethods, deviceConfig, makeDriver = { ViewModelDriver(it, coordinator) })
+
+/** A store app's store. `device relaunch` replaces it. */
+public val <S, A> HeadlessHost<StoreDriver<S, A>, A>.store: AgentStore<S, A> get() = driver.store
+
+/**
+ * The app as the in-app bridge runs it in debug builds: real time and real mock latency, plus the hooks the agent
+ * runtime needs (call log, faults, and a clock that counts pending sleeps), through its [AgentDriver].
  *
  * Time is real, but `advance` can move it forward: the environment's clock is an [AdvanceableClock], whose `now()`
  * moves with it. A backend of the host's own that reads the time or sleeps should do so on `environment.clock`, so
  * `advance` moves it too.
  *
- * @param dispatcher the store's thread: `Dispatchers.Main.immediate` in an Android app. The bridge runs every
- *   request on it.
+ * @param dispatcher the app's thread: `Dispatchers.Main.immediate` in an Android app. The bridge runs every request on
+ *   it.
  */
-public class LiveHost<S, A>(
-    public val container: AgentContainer<S, A>,
+public class LiveHost<D : AgentDriver<A, *>, A>(
     public val mockMethods: List<MockMethod>,
     public val latency: MockLatency,
     public val dispatcher: CoroutineDispatcher,
     /** What of the device scripts can drive, and the actions its events become (`device`). */
     public val deviceConfig: AgentDeviceConfig<A>,
-    app: AppFactory<S, A>,
+    makeDriver: (AgentEnvironment) -> D,
 ) {
-    /**
-     * A host whose [makeStore] builds the whole app. `device relaunch` runs it again, so whatever it builds starts over,
-     * clients included; an app whose clients keep something across a relaunch uses an [AppFactory].
-     */
-    public constructor(
-        container: AgentContainer<S, A>,
-        mockMethods: List<MockMethod>,
-        latency: MockLatency,
-        dispatcher: CoroutineDispatcher,
-        deviceConfig: AgentDeviceConfig<A>,
-        makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-    ) : this(container, mockMethods, latency, dispatcher, deviceConfig, rebuilding(makeStore))
-
-    /** A host without a device configuration: no `device` command. */
-    public constructor(
-        container: AgentContainer<S, A>,
-        mockMethods: List<MockMethod>,
-        latency: MockLatency,
-        dispatcher: CoroutineDispatcher,
-        makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-    ) : this(container, mockMethods, latency, dispatcher, AgentDeviceConfig.none(), rebuilding(makeStore))
-
-    /** The host's scope. Each store runs its effects in a child of it, which `device relaunch` cancels. */
+    /** The host's scope. Each launch of the app runs its work in a child of it, which `device relaunch` cancels. */
     public val scope: CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher)
+
     /** The app's clock: real time that `advance` moves forward, with its sleeps counted for `pending`. */
     public val clock: AdvanceableClock = AdvanceableClock()
     public val callLog: MockCallLog = MockCallLog()
@@ -256,12 +216,11 @@ public class LiveHost<S, A>(
     /** The simulated device, which `device` changes. */
     public val device: AgentDevice = AgentDevice(isDriven = true, offlineErrorCode = deviceConfig.offlineErrorCode)
 
-    private val mocks = MockBackend(callLog, faults, latency, clock, Random.Default, device)
-
-    private val hostEnvironment = AgentEnvironment(
+    /** What the driver is given: the host's own scope, which outlives every launch, and everything above. */
+    public val environment: AgentEnvironment = AgentEnvironment(
         scope = scope,
         clock = clock,
-        mocks = mocks,
+        mocks = MockBackend(callLog, faults, latency, clock, Random.Default, device),
         uuids = { UUID.randomUUID() },
         random = Random.Default,
         zone = ZoneId.systemDefault(),
@@ -269,35 +228,12 @@ public class LiveHost<S, A>(
         device = device,
     )
 
-    private val makeStore: (CoroutineScope) -> AgentStore<S, A> = app.prepare(hostEnvironment)
-
-    /** What the current store was built on; `device relaunch` gives the next store a fresh [AgentEnvironment.scope]. */
-    public var environment: AgentEnvironment = hostEnvironment.withScope(childScope(scope))
-        private set
-
-    /** The app's store. `device relaunch` replaces it; [onRelaunch] hears of it, so the app shows the new one. */
-    public var store: AgentStore<S, A> = makeStore(environment.scope)
-        private set
-
-    /** Called on [dispatcher] with the new store after `device relaunch`: `agentctl-bridge`'s `AgentLaunch` shows it. */
-    public var onRelaunch: ((AgentStore<S, A>) -> Unit)? = null
-
-    /**
-     * Cancels the store's effects and builds a fresh store from its initial state, over the same clock, mocks and
-     * device: `device relaunch`. The app's root shows it once [onRelaunch] has passed it on, and its views send their
-     * own appearance.
-     */
-    private fun relaunch(): AgentStore<S, A> {
-        environment.scope.cancel()
-        environment = hostEnvironment.withScope(childScope(scope))
-        store = makeStore(environment.scope)
-        onRelaunch?.invoke(store)
-        return store
-    }
+    /** The app, as the engine sees it. Its `onRelaunch` tells the app's shell to show the new app. */
+    public val driver: D = makeDriver(environment)
 
     /**
      * Whether the app's UI is idle: no navigation transition or animation in flight. [settle] waits for it as well as
-     * for the store (CONTRACT.md §8.5), so a step after a push or a pop starts on the screen the user sees. Called on
+     * for the app (CONTRACT.md §8.5), so a step after a push or a pop starts on the screen the user sees. Called on
      * [dispatcher]. `null`, the default, is a UI that is always idle; `agentctl-bridge` sets Compose's idleness unless
      * the host has set its own.
      */
@@ -309,17 +245,17 @@ public class LiveHost<S, A>(
     }
 
     /**
-     * Settles on real time — no mock call in flight, the UI idle ([isUIIdle]), and the state quiet for a moment —
+     * Settles on real time — no mock call in flight, the UI idle ([isUIIdle]), and the app quiet for a moment —
      * because a running app's latency, timers and transitions are real, unlike the headless host's. Call on
      * [dispatcher].
      */
     public suspend fun settle(): SettleResult = settle(waitingForUI = true)
 
-    /** [settle], waiting for the UI only when [waitingForUI]: not while the store's screens are not shown (a seed). */
+    /** [settle], waiting for the UI only when [waitingForUI]: not while the app's screens are not shown (a seed). */
     internal suspend fun settle(waitingForUI: Boolean): SettleResult {
         val isUIIdle = isUIIdle.takeIf { waitingForUI }
         return settleLive(
-            state = { store.state },
+            fingerprint = driver::fingerprint,
             callLog = callLog,
             pending = { clock.activeSleeps },
             quietWindow = 250.milliseconds,
@@ -328,12 +264,12 @@ public class LiveHost<S, A>(
     }
 
     /**
-     * The settling between two deadlines of an `advance`: long enough for what a timer fires to reach the store and
+     * The settling between two deadlines of an `advance`: long enough for what a timer fires to reach the app and
      * start its next sleep, short enough that `advance 1m` over a one-second countdown stays quick.
      */
     private suspend fun settleBetweenDeadlines() {
         settleLive(
-            state = { store.state },
+            fingerprint = driver::fingerprint,
             callLog = callLog,
             pending = { clock.activeSleeps },
             quietWindow = 30.milliseconds,
@@ -346,14 +282,13 @@ public class LiveHost<S, A>(
      * @param synthesizesAppearance `true` for launch seeding (before any view exists), `false` once the views are
      *   on screen and send their own appearance actions.
      */
-    public fun makeRunner(synthesizesAppearance: Boolean): ScriptRunner<S, A> = ScriptRunner(
-        store = store,
-        container = container,
+    public fun makeRunner(synthesizesAppearance: Boolean): ScriptRunner<A> = ScriptRunner(
+        driver = driver,
         callLog = callLog,
         faults = faults,
         pending = { clock.activeSleeps },
         environment = RunnerEnvironment(
-            // Synthesized appearance means no views show the store yet: there is no UI of it to wait for.
+            // Synthesized appearance means no views show the app yet: there is no UI of it to wait for.
             settle = { settle(waitingForUI = !synthesizesAppearance) },
             advance = { duration -> clock.advance(duration.toDuration(), between = { settleBetweenDeadlines() }) },
             synthesizesAppearance = synthesizesAppearance,
@@ -361,10 +296,57 @@ public class LiveHost<S, A>(
         mockMethods = mockMethods,
         device = device,
         deviceConfig = deviceConfig,
-        relaunch = ::relaunch,
     )
 }
 
-/** A scope whose job is a child of [parent]'s: cancelling it leaves [parent] running, cancelling [parent] ends it. */
-private fun childScope(parent: CoroutineScope): CoroutineScope =
-    CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext.job))
+/**
+ * A store app in the running app: [app] builds its clients once per host and a store at each launch, so
+ * `device relaunch` keeps what the clients stored.
+ */
+public fun <S, A> LiveHost(
+    container: AgentContainer<S, A>,
+    mockMethods: List<MockMethod>,
+    latency: MockLatency,
+    dispatcher: CoroutineDispatcher,
+    deviceConfig: AgentDeviceConfig<A>,
+    app: AppFactory<S, A>,
+): LiveHost<StoreDriver<S, A>, A> = LiveHost(mockMethods, latency, dispatcher, deviceConfig) { StoreDriver(container, it, app) }
+
+/** A store app in the running app, whose [makeStore] builds the whole app, again at each relaunch. */
+public fun <S, A> LiveHost(
+    container: AgentContainer<S, A>,
+    mockMethods: List<MockMethod>,
+    latency: MockLatency,
+    dispatcher: CoroutineDispatcher,
+    deviceConfig: AgentDeviceConfig<A>,
+    makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+): LiveHost<StoreDriver<S, A>, A> =
+    LiveHost(container, mockMethods, latency, dispatcher, deviceConfig, rebuilding(makeStore))
+
+/** A store app in the running app, without a device configuration: no `device` command. */
+public fun <S, A> LiveHost(
+    container: AgentContainer<S, A>,
+    mockMethods: List<MockMethod>,
+    latency: MockLatency,
+    dispatcher: CoroutineDispatcher,
+    makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+): LiveHost<StoreDriver<S, A>, A> =
+    LiveHost(container, mockMethods, latency, dispatcher, AgentDeviceConfig.none(), rebuilding(makeStore))
+
+/**
+ * An MVVM app in the running app: [coordinator] builds the coordinator on each launch's environment. As with
+ * [HeadlessHost], a lambda that returns an [AgentDriver] goes to the class's constructor instead.
+ */
+@OptIn(ExperimentalTypeInference::class)
+@OverloadResolutionByLambdaReturnType
+public fun <C : AgentCoordinator<C>> LiveHost(
+    mockMethods: List<MockMethod>,
+    latency: MockLatency,
+    dispatcher: CoroutineDispatcher,
+    deviceConfig: AgentDeviceConfig<AppIntent<C>> = AgentDeviceConfig.none(),
+    coordinator: (AgentEnvironment) -> C,
+): LiveHost<ViewModelDriver<C>, AppIntent<C>> =
+    LiveHost(mockMethods, latency, dispatcher, deviceConfig, makeDriver = { ViewModelDriver(it, coordinator) })
+
+/** A store app's store. `device relaunch` replaces it; the driver's `onRelaunch` hears of it. */
+public val <S, A> LiveHost<StoreDriver<S, A>, A>.store: AgentStore<S, A> get() = driver.store

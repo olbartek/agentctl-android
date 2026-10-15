@@ -26,8 +26,8 @@ dependencies {
 
 | Artifact | Who depends on it | What for |
 |---|---|---|
-| `agentctl-core` | the modules holding your screens | `AgentScreen`, `AgentCommand`, `SummaryItem`, `Store`, `AgentEnvironment`, `MockBackend` |
-| `agentctl-runtime` | your config module, which only your debug app (`debugImplementation`), your CLI and your tests depend on | `AppCtlConfig`, `ScriptRunner`, the deterministic headless host, the bridge's server |
+| `agentctl-core` | the modules holding your screens | `AgentScreen`, `AgentCommand`, `SummaryItem`, `Store`, `AgentEnvironment`, `MockBackend`, `AgentViewModel`, `AgentCoordinator`, `AgentTasks` |
+| `agentctl-runtime` | your config module, which only your debug app (`debugImplementation`), your CLI and your tests depend on | `AgentDriver` with `StoreDriver` and `ViewModelDriver`, `AppCtlConfig`, `ScriptRunner`, the deterministic headless host, the bridge's server |
 | `agentctl-cli` | your CLI's module | `AgentCtl.main(config, args)` |
 | `agentctl-bridge` | your app, as `debugImplementation` | `AgentLaunch`, the debug-only in-app bridge |
 | `agentctl-test-support` | your tests | the coverage guards |
@@ -232,11 +232,12 @@ One value describes your app to AgentCtl:
 - the prose the generated command reference is rendered from;
 - the functions that build your store.
 
-Abridged from
+Its type names the *driver* — how the engine reaches your app — and the action type: `StoreDriver<State, Action>` for
+a store. Abridged from
 [`TinyAppConfig.kt`](../../examples/tinyapp-config/src/main/kotlin/io/github/olbartek/agentctl/examples/tinyapp/TinyAppConfig.kt):
 
 ```kotlin
-val appCtl: AppCtlConfig<TinyRoot.State, TinyRoot.Action>
+val appCtl: AppCtlConfig<StoreDriver<TinyRoot.State, TinyRoot.Action>, TinyRoot.Action>
     get() = AppCtlConfig(
         name = "TinyApp",
         rootMarker = "settings.gradle.kts",   // what the CLI walks up the tree for to find the repo root
@@ -364,3 +365,113 @@ $ ./tinyctl run "retry"; echo "exit=$?"
   FAIL retry is disabled here (error=none)
 exit=1
 ```
+
+## MVVM apps, without a store
+
+The engine never sees your app's types: it talks to an `AgentDriver`, which answers a few questions — which screen is
+active, deliver this action, has anything changed (settling's fingerprint), relaunch, and dump the state. A store app
+uses `StoreDriver`; an app of view models under a coordinator uses `ViewModelDriver`. Scripts, scenarios, the step
+output and the generated docs are the same either way: [`examples/tinymvvm`](../../examples/tinymvvm) is TinyApp
+rebuilt as MVVM, and it runs TinyApp's scenario files byte for byte.
+
+A screen is an `AgentViewModel`: a view model (a Jetpack `ViewModel` here) whose agent surface is the `AgentScreen` you
+already know, computed from a value, `agentState`. Its commands are `ScreenIntent`s, functions of the view model on
+screen, and the screen is usually its companion object. Abridged from
+[`ItemsViewModel.kt`](../../examples/tinymvvm/src/main/kotlin/io/github/olbartek/agentctl/examples/tinymvvm/ItemsViewModel.kt):
+
+```kotlin
+class ItemsViewModel(private val environment: AgentEnvironment, private val client: ItemsClient) :
+    ViewModel(), AgentViewModel<ItemsViewModel.UiState, ItemsViewModel> {
+    data class UiState(val items: List<Item> = emptyList(), val isLoading: Boolean = false, val error: ItemsError? = null)
+
+    private val mutableState = MutableStateFlow(UiState())
+    val state: StateFlow<UiState> = mutableState.asStateFlow()     // what the Compose screen collects
+    private var loadJob: Job? = null
+
+    fun refresh() {
+        mutableState.update { it.copy(isLoading = true, error = null) }
+        loadJob?.cancel()
+        loadJob = environment.tasks.run {                             // not viewModelScope: see the rules below
+            try {
+                val items = client.fetch()
+                if (isActive) mutableState.update { it.copy(isLoading = false, items = items) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {                                // `mock items.fetch network`: state, not a crash
+                if (isActive) mutableState.update { it.copy(isLoading = false, error = ItemsError.of(error)) }
+            }
+        }
+    }
+
+    override val agentState: UiState get() = state.value
+    override val agentScreen get() = Companion
+
+    companion object : AgentScreen<UiState, ScreenIntent<ItemsViewModel>> {
+        override val screenName = "Items"
+        override val screenPaths = listOf("items")
+        override fun screenPath(state: UiState) = "items"
+        // summaryKeys, summary(state), errorCode(state) exactly as for a store screen
+        override val onAppear = ScreenIntent<ItemsViewModel> { it.onAppear() }
+        override val commands = listOf(
+            AgentCommand.action<UiState, ScreenIntent<ItemsViewModel>>("refresh", help = "Load the list again.", action = ScreenIntent { it.refresh() }),
+        )
+    }
+}
+```
+
+The coordinator is an `AgentCoordinator`: it owns the back stack (a list, as Navigation 3's `NavDisplay(backStack)`
+renders it), creates each pushed view model, and returns the screen on top — `items.activeScreen()`, or a pushed view
+model's with its own `back` appended as an `AppIntent` — and `cancelAllWork()`. The config names
+`ViewModelDriver<AppCoordinator>`, and its hosts take the coordinator to build, on the environment of each launch:
+
+```kotlin
+fun headless(): HeadlessHost<ViewModelDriver<AppCoordinator>, AppIntent<AppCoordinator>> =
+    HeadlessHost(mockMethods, device) { AppCoordinator(it) }
+```
+
+A store keeps a reducer deterministic for free; a view model keeps itself deterministic by following these rules,
+and settling relies on every one of them:
+
+- **View models run on the app's thread** (the main thread in the app, the host's dispatcher headlessly), and the
+  coordinator creates them.
+- **Every clock, id and client comes from the `AgentEnvironment` they are given**, never `System.currentTimeMillis()`,
+  `delay` on another dispatcher, `UUID.randomUUID()` or a singleton. The headless host pins them as it does for a store.
+- **Async work starts through `environment.tasks`** (`AgentTasks.run { … }`). That is how settling knows work is in
+  flight, and it runs on the host's dispatcher, virtual time headlessly. `viewModelScope` is neither: settling
+  cannot see its work, and on the JVM it runs on real threads. A failure the work does not catch is uncaught (the
+  scope is a supervisor's) and crashes the app, so catch it and make it state, as above.
+- **A child is created with its parent's environment**, so its clock and clients are the app's.
+- **A pop cancels the popped screen's work**, as a store cancels a stack element's effects: the coordinator calls the
+  view model's `cancelAllWork()`. (Its `onCleared()` calls it too, for a view model a `ViewModelStore` owns; the
+  coordinator creates its own directly, so for them the pop is what counts.)
+- **Stack ids are a counter, not random**: they appear in screen identity (`#3`), which must be the same every run.
+- **Appearing is an intent**: the screen's `onAppear` is what the runner sends headlessly, and what the screen's
+  `LaunchedEffect` calls in the app.
+
+In the app, `AgentLaunch(config, intent)` works as it does for a store; `launch.app` is the coordinator, and a
+`device relaunch` replaces it (`launch.apps`; see [the bridge guide](bridge.md)).
+
+### Moving a host to 0.7
+
+0.7 put the engine behind `AgentDriver`. A store host's scripts, scenarios and output are unchanged; its Kotlin
+changes as follows:
+
+- `AppCtlConfig<State, Action>`, `HeadlessHost<State, Action>` and `LiveHost<State, Action>` become
+  `…<StoreDriver<State, Action>, Action>`, and `ScriptRunner<State, Action>` becomes `ScriptRunner<Action>`. The
+  `HeadlessHost(container, mockMethods, …)` and `LiveHost(container, …)` calls are unchanged.
+- The test helpers: `AgentCoverage<Action>` and `AgentScenarioChecks<StoreDriver<State, Action>, Action>`. A test that
+  reads `host.store` imports `io.github.olbartek.agentctl.runtime.store`.
+- `AgentLaunch.store` and `stores` are now `launch.app` and `apps` (the old names still compile, with a deprecation
+  warning), and `AgentLaunch.isRequested(intent)` is also `AgentLaunchArguments.isRequested(intent)`.
+- A host that built a `ScriptRunner` itself passes `driver = host.driver` instead of the store and the container.
+- The store lives on the driver: `host.store` (the import above), `host.driver.state`, and `host.container` is
+  `host.driver.container`. `ScriptRunner.store` and `ScriptRunner.state` are gone, since a runner names only the
+  action type; keep the host and read `host.store`.
+- `host.environment` is now the host's own, which outlives relaunches; the current launch's (whose scope a relaunch
+  cancels, the old meaning) is `host.driver.environment`. Work started on `host.environment.scope` is no longer ended
+  by a relaunch.
+- `LiveHost.onRelaunch: (AgentStore) -> Unit` is `host.driver.onRelaunch: () -> Unit`; read the new store from
+  `host.store`.
+- Other type parameters: `AgentLaunch<State, Action>` is `AgentLaunch<StoreDriver<State, Action>, Action,
+  AgentStore<State, Action>>`, `AgentLaunchSession<Driver, Action>`, `BridgeRouter<Action>`, and `applySeed` and
+  `ScenarioRunner.run` are generic over the action only.

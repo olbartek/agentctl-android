@@ -3,6 +3,7 @@ package io.github.olbartek.agentctl.tests
 import io.github.olbartek.agentctl.cli.AgentCtl
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
+import io.github.olbartek.agentctl.runtime.StoreDriver
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
@@ -19,7 +20,7 @@ data class CliResult(val out: String, val err: String, val status: Int) {
 }
 
 /** Runs the CLI in-process against `config`, from the repository root. */
-fun <S, A> cli(vararg args: String, config: AppCtlConfig<S, A>, environment: Map<String, String> = emptyMap(), workingDirectory: File = repositoryRoot): CliResult {
+fun <S, A> cli(vararg args: String, config: AppCtlConfig<StoreDriver<S, A>, A>, environment: Map<String, String> = emptyMap(), workingDirectory: File = repositoryRoot): CliResult {
     val out = ByteArrayOutputStream()
     val err = ByteArrayOutputStream()
     val status = AgentCtl.run(

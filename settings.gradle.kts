@@ -31,6 +31,9 @@ include(":examples:tinyapp-config")
 include(":examples:tinyctl")
 // TinyApp as a real Android app, for the bridge end to end (`./tinyctl app launch`, `check --ui`).
 include(":examples:tinyapp-android")
+// TinyApp as MVVM (Jetpack ViewModels under a coordinator, no store), and its CLI: it runs TinyApp's scenarios.
+include(":examples:tinymvvm")
+include(":examples:tinymvvmctl")
 // AgentShop, the showcase (examples/agentshop): its logic, its AgentCtl config and tests, and its CLI `shopctl`,
 // run through examples/agentshop/appctl. The same app as agentctl-ios's Examples/AgentShop.
 include(":examples:agentshop:shop")

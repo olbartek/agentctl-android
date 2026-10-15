@@ -47,10 +47,10 @@ public class NoScenariosFound(
  *
  * @throws NoScenariosFound if `scenarios` contains no `*.appctl` files.
  */
-public class AgentCoverage<S, A>(
+public class AgentCoverage<A>(
     private val screens: List<ScreenDoc>,
     scenarios: File,
-    private val make: () -> ScriptRunner<S, A>,
+    private val make: () -> ScriptRunner<A>,
 ) {
     private val files: List<File> = ScenarioRunner.files(scenarios)
 

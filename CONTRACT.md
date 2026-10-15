@@ -629,6 +629,11 @@ regression, which defeats the purpose of having a shared, scriptable contract in
   builder functions in the reference implementation, whatever reads naturally in Kotlin for a port)
   is free to differ completely. Only the *runtime behaviour* they produce — resolution order,
   argument handling, gating, the exact failure text shapes in §1.3 — is specified here.
+- **The app's architecture.** A store of reducers, view models under a coordinator, or anything else
+  that can name its active screen, take a command, report whether it is still changing, relaunch and
+  dump its state: the engine drives each the same way, and a script's output does not depend on it.
+  (The reference implementation ships drivers for TCA and for MVVM-C, and its TinyMVVM example runs
+  TinyApp's scenarios with byte-identical output.)
 - **The UI framework**, if any. This contract describes driving an app's state and reading it back;
   it has nothing to say about how (or whether) that state is rendered.
 - **Whether an implementation has an in-app bridge at all.** A bridge is one way to deliver a script

@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 
 /** What this guards: the coverage guards, proved against the example app, the way a host wires them in. */
 class CoverageTest {
-    private fun coverage(): AgentCoverage<TinyRoot.State, TinyRoot.Action> =
+    private fun coverage(): AgentCoverage<TinyRoot.Action> =
         AgentCoverage(TinyRootAgent.registry, scenariosDirectory) { TinyAppConfig.headless().makeRunner() }
 
     @Test

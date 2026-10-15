@@ -49,9 +49,12 @@ public object StateDump {
      * The lines of [render] that changed from `before` to `after`, as `- old` / `+ new`, with unchanged lines as
      * context and long unchanged runs elided. Empty when nothing changed.
      */
-    public fun diff(before: Any?, after: Any?): String {
-        val old = render(before).split("\n")
-        val new = render(after).split("\n")
+    public fun diff(before: Any?, after: Any?): String = diffText(render(before), render(after))
+
+    /** [diff] of two texts already rendered: an MVVM app's state dumps. */
+    public fun diffText(before: String, after: String): String {
+        val old = before.split("\n")
+        val new = after.split("\n")
         if (old == new) return ""
         // Longest common subsequence of lines: small states, so the quadratic table is fine.
         val lengths = Array(old.size + 1) { IntArray(new.size + 1) }

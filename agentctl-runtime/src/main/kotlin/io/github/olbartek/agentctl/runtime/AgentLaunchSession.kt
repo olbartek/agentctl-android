@@ -60,20 +60,20 @@ public data class AgentLaunchOptions(
  * seed, then starts the server, so the bridge's first answer means the app is ready (CONTRACT.md §8.3).
  * `agentctl-bridge`'s `AgentLaunch` wraps it with the main thread and the activity's intent.
  */
-public class AgentLaunchSession<S, A>(
-    config: AppCtlConfig<S, A>,
+public class AgentLaunchSession<D : AgentDriver<A, *>, A>(
+    config: AppCtlConfig<D, A>,
     public val options: AgentLaunchOptions,
     /** The store's thread: `Dispatchers.Main.immediate` in an app. */
     dispatcher: CoroutineDispatcher,
     /** Where the outcome of the seed and the server goes: logcat in an app. */
     private val log: (String) -> Unit = ::println,
 ) {
-    public val host: LiveHost<S, A>
+    public val host: LiveHost<D, A>
     private val server: BridgeServer
     private val screensText: () -> String
 
     /** Made after the seed, so its runner drives the store the seed left (a seed's `device relaunch` replaces it). */
-    private lateinit var router: BridgeRouter<S, A>
+    private lateinit var router: BridgeRouter<A>
     private var started = false
 
     init {
@@ -113,7 +113,7 @@ public class AgentLaunchSession<S, A>(
          * way a script does (CONTRACT.md §5): it stops at its first failing step, and a launch that did not settle
          * fails it before its first command runs (§3.4). Returns that status and the block the app logs.
          */
-        public suspend fun <S, A> applySeed(seed: String, runner: ScriptRunner<S, A>): SeedOutcome {
+        public suspend fun <A> applySeed(seed: String, runner: ScriptRunner<A>): SeedOutcome {
             val launch = runner.launch()
             val steps = mutableListOf(launch.step)
             var status = launch.status

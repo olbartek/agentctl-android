@@ -44,10 +44,10 @@ class AppStore private constructor(activity: Activity) {
         launch.stop()
     }
 
-    val store: AgentStore<AppFeature.State, AppFeature.Action> get() = launch.store
+    val store: AgentStore<AppFeature.State, AppFeature.Action> get() = launch.app
 
     /** The store over time: `device relaunch` replaces it with a fresh one. */
-    val stores: StateFlow<AgentStore<AppFeature.State, AppFeature.Action>> get() = launch.stores
+    val stores: StateFlow<AgentStore<AppFeature.State, AppFeature.Action>> get() = launch.apps
 
     /** False while a launch seed is being applied. */
     val isReady: StateFlow<Boolean> get() = launch.isReady

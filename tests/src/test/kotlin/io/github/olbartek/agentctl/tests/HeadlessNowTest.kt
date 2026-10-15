@@ -13,6 +13,7 @@ import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.next
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.RunStatus
+import io.github.olbartek.agentctl.runtime.store
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals

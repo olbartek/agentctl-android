@@ -28,10 +28,10 @@ public data class BridgeResponse(
  * - `GET /screens`: every screen and its commands.
  * - `GET /snapshot`: the current screen's summary line.
  *
- * Call [handle] on the store's own thread.
+ * Call [handle] on the app's own thread.
  */
-public class BridgeRouter<S, A>(
-    private val runner: ScriptRunner<S, A>,
+public class BridgeRouter<A>(
+    private val runner: ScriptRunner<A>,
     private val screensText: () -> String,
 ) {
     public suspend fun handle(request: BridgeRequest): BridgeResponse {

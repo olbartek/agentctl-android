@@ -78,11 +78,13 @@ runs hundreds of times a day.
 
 - **JDK 17+ to run, Kotlin 2.4, kotlinx.coroutines 1.11.** The engine is plain Kotlin on the JVM. The bridge is an
   Android library: minSdk 28, compiled against SDK 36.
-- **An architecture AgentCtl can drive.**
-  - `agentctl-core` ships a small unidirectional store: `Store`, `Reducer`, `Effect` (run, cancellable, send,
-    cancel, map, scoped). It plays the part TCA plays in the Swift version, and TinyApp is built on it.
-  - An app on another architecture (a `ViewModel` exposing a `StateFlow`, say) implements `AgentStore` instead:
-    the states, `send`, and the number of effects in flight.
+- **The app is built on a store, or as MVVM.** The engine talks to an `AgentDriver`, never to your app's types, and
+  both drivers run the same scripts with the same output:
+  - `StoreDriver` drives a store. `agentctl-core` ships a small unidirectional one (`Store`, `Reducer`, `Effect`:
+    run, cancellable, send, cancel, map, scoped), which plays the part TCA plays in the Swift version; TinyApp is
+    built on it. Any other store implements `AgentStore`: the states, `send`, and the effects in flight.
+  - `ViewModelDriver` drives MVVM: Jetpack `ViewModel`s under a coordinator that owns the back stack (see
+    [MVVM](docs/guides/integration.md#mvvm-apps-without-a-store)).
 - **Screens are driven through state, not through the UI.** Nothing taps and nothing reads pixels; a headless run
   has no views at all. Rendering is verified separately, by screenshot tests (see
   [the ladder](docs/guides/verification-ladder.md)).
@@ -98,8 +100,9 @@ The whole integration, in five steps — each is a few lines of real code in
 1. **Add the dependency** — `com.github.olbartek.agentctl-android:<module>:0.6.0` from JitPack, and only the modules
    each Gradle module needs (`agentctl-core` for screens, `agentctl-runtime` for the config, `agentctl-cli` for your
    CLI, `agentctl-bridge` for the debug app, `agentctl-test-support` for tests).
-2. **Describe your screens** — beside each reducer, an `AgentScreen` object: its path, a `key=value` summary, an
-   error code and its commands; a container (`AgentContainer`) resolves which screen is active.
+2. **Describe your screens** — beside each reducer (or view model), an `AgentScreen` object: its path, a `key=value`
+   summary, an error code and its commands; a container (`AgentContainer`, or a coordinator) resolves which screen is
+   active.
 3. **Write your CLI** — one `AppCtlConfig` describing your app, and a `main` that runs it.
 4. **Copy the wrapper** — [`Templates/appctl`](Templates/appctl) rebuilds the CLI quietly before every call.
 5. **Run something** — `./appctl screens`, `./appctl run "…"`, `./appctl test`.
@@ -108,7 +111,7 @@ The whole integration, in five steps — each is a few lines of real code in
 
 | Guide | What it covers |
 |---|---|
-| [Integration](docs/guides/integration.md) | The five steps above in full: screens, commands (`action`, `parsing`, `text`, `onOff`, `choice`), gates, containers and inherited commands, mocked clients and `MockBackend.call`, the config, debug-only builds, the wrapper. |
+| [Integration](docs/guides/integration.md) | The five steps above in full: screens, commands (`action`, `parsing`, `text`, `onOff`, `choice`), gates, containers and inherited commands, mocked clients and `MockBackend.call`, the config, debug-only builds, the wrapper; MVVM apps, and moving a host to 0.7. |
 | [Commands](docs/guides/commands.md) | Every command your CLI gets (`run`, `test`, `docs`, `check`, `app …`), the exit codes, the runtime commands, and what a headless run pins to stay deterministic. |
 | [The device environment](docs/guides/device-environment.md) | `device …`: permissions and system prompts, links, pushes, background, foreground and relaunch, the network, location and biometry — one row per capability, with what your app wires and the real-OS `app` wrapper. |
 | [The verification ladder](docs/guides/verification-ladder.md) | `check`, from the Gradle build to the real app on an emulator, and verifying at the cheapest rung that proves a change. |
@@ -153,6 +156,10 @@ screens, one mocked client, five scenarios, its own `tinyctl` CLI and a committe
 [generated command reference](examples/tinyapp/agent-commands.md). Every snippet in
 [the integration guide](docs/guides/integration.md) is from it, and
 [`examples/tinyapp-android`](examples/tinyapp-android) runs it as an Android app with the bridge.
+
+[`examples/tinymvvm`](examples/tinymvvm) is TinyApp rebuilt as MVVM: Jetpack `ViewModel`s under a coordinator, no
+store. It runs TinyApp's scenario files unchanged and prints the same output byte for byte (`./tinymvvmctl test`).
+See [its README](examples/tinymvvm/README.md).
 
 [`examples/agentshop`](examples/agentshop) is the showcase: a real Compose app (sign-in, onboarding, a shop with a
 cart and checkout, and the simulated device: permissions, links, pushes, relaunch, offline, Face ID), the port of the

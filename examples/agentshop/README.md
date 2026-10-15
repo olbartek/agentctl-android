@@ -108,7 +108,7 @@ cd examples/agentshop
 ```
 
 `app test` runs all 123 scenarios in the app on an emulator: 121 pass, the 18 device scenarios among them (`device
-relaunch` there shows the new store through `AgentLaunch.stores`), and two are skipped (`# app-test: skip`) for the
+relaunch` there shows the new store through `AgentLaunch.apps`), and two are skipped (`# app-test: skip`) for the
 same reasons as on iOS: `auth-launch` expects the launch's `call=session.current`, which happens before `app run` starts, and
 `auth-otp-resend-countdown` expects `resendIn=20` after `advance 10s`, while the real clock also ticked during the
 steps before it (`resendIn=19`).

@@ -13,11 +13,11 @@ import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.appendingBackFallback
 import io.github.olbartek.agentctl.examples.agentshop.auth.AuthFlow
 import io.github.olbartek.agentctl.examples.agentshop.auth.AuthFlowAgent
+import io.github.olbartek.agentctl.examples.agentshop.auth.Login
 import io.github.olbartek.agentctl.examples.agentshop.clients.MockAccounts
 import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabs
 import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabsAgent
 import io.github.olbartek.agentctl.examples.agentshop.home.OrdersList
-import io.github.olbartek.agentctl.examples.agentshop.auth.Login
 import io.github.olbartek.agentctl.examples.agentshop.models.DeepLink
 import io.github.olbartek.agentctl.examples.agentshop.models.Outcome
 import io.github.olbartek.agentctl.examples.agentshop.models.Session
@@ -30,7 +30,7 @@ import java.net.URI
 /**
  * The root: launching, then auth, onboarding (once, for a new account) or home.
  *
- * This is the one type AgentCtl is generic over: `ScriptRunner<AppFeature.State, AppFeature.Action>` drives its store,
+ * This is the one type AgentCtl is generic over: `StoreDriver<AppFeature.State, AppFeature.Action>` drives its store,
  * and [AppFeatureAgent] resolves which screen an agent is looking at. A UI renders [State] by its case and sends
  * [Action]s: each case's screens are reached through [Action.Auth], [Action.Onboarding] and [Action.Home].
  */

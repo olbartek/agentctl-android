@@ -20,6 +20,7 @@ import io.github.olbartek.agentctl.runtime.LiveHost
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.RunnerEnvironment
 import io.github.olbartek.agentctl.runtime.ScriptRunner
+import io.github.olbartek.agentctl.runtime.store
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.ServerSocket
@@ -371,8 +372,7 @@ class BridgeServerTest {
     fun advanceIsRefusedWhereNoClockIsControlled() = runBlocking {
         val host = TinyAppConfig.headless()
         val runner = ScriptRunner(
-            store = host.store,
-            container = TinyRootAgent,
+            driver = host.driver,
             callLog = host.callLog,
             faults = host.faults,
             pending = { host.clock.activeSleeps },
@@ -444,7 +444,7 @@ class BridgeServerTest {
 
     /**
      * A seed's `device relaunch` replaces the live store: the bridge, made after the seed, drives the new one, and the
-     * host tells the app (`onRelaunch`, which `AgentLaunch.stores` follows) once.
+     * host tells the app (`onRelaunch`, which `AgentLaunch.apps` follows) once.
      */
     @Test
     fun aRelaunchInTheSeedLeavesTheBridgeOnTheNewStore() = runBlocking(dispatcher) {
@@ -464,7 +464,7 @@ class BridgeServerTest {
         val session = AgentLaunchSession(config, AgentLaunchOptions(port = 0, seed = "open 2; device relaunch", latency = MockLatency.ZERO), dispatcher) {}
         val first = session.host.store
         val relaunched = mutableListOf<Any>()
-        session.host.onRelaunch = { relaunched.add(it) }
+        session.host.driver.onRelaunch = { relaunched.add(session.host.store) }
         val port = session.start()!!
         try {
             assertEquals(listOf<Any>(session.host.store), relaunched)

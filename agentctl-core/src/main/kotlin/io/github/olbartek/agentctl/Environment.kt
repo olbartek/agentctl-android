@@ -31,6 +31,9 @@ public class AgentEnvironment(
      */
     public val device: AgentDevice = AgentDevice(),
 ) {
+    /** Where an MVVM app's view models start their work, on [scope], counted for settling ([AgentTasks]). */
+    public val tasks: AgentTasks = AgentTasks(scope)
+
     public companion object {
         /**
          * The system's own values, for a release build (or any build without AgentCtl's hosts): real time, random

@@ -1,9 +1,9 @@
 package io.github.olbartek.agentctl.examples.agentshop.ctl
 
 import io.github.olbartek.agentctl.cli.AgentCtl
+import io.github.olbartek.agentctl.examples.agentshop.app.AppFeature
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import io.github.olbartek.agentctl.runtime.ScriptRunner
-import io.github.olbartek.agentctl.examples.agentshop.app.AppFeature
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
@@ -16,7 +16,7 @@ val scenariosDirectory: File get() = File(exampleRoot, AgentShopConfig.appCtl.sc
 val scenarioFiles: List<File> get() = ScenarioRunner.files(scenariosDirectory)
 
 /** A fresh deterministic runner on AgentShop's headless wiring. */
-fun headlessRunner(): ScriptRunner<AppFeature.State, AppFeature.Action> = AgentShopConfig.headless().makeRunner()
+fun headlessRunner(): ScriptRunner<AppFeature.Action> = AgentShopConfig.headless().makeRunner()
 
 /** What one CLI invocation printed, and its exit code. */
 data class CliResult(val out: String, val err: String, val status: Int) {

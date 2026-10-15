@@ -6,8 +6,8 @@ import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.Effect
 import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.ScreenDoc
-import io.github.olbartek.agentctl.Store
 import io.github.olbartek.agentctl.StepFormatter
+import io.github.olbartek.agentctl.Store
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.every
 import io.github.olbartek.agentctl.next
@@ -15,6 +15,7 @@ import io.github.olbartek.agentctl.runtime.AgentLaunchSession
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.SettleResult
+import io.github.olbartek.agentctl.runtime.store
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

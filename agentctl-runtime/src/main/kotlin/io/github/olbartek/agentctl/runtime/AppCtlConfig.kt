@@ -78,10 +78,10 @@ public data class HelpExamples(
 
 /**
  * Everything AgentCtl needs to know about a host app: the facts the CLI would otherwise hard-code, the data the
- * docs are rendered from, and the functions that build the app's stores. The same value drives the CLI
+ * docs are rendered from, and the functions that build the app's hosts. The same value drives the CLI
  * (`AgentCtl.run(config, args)`) and the in-app bridge (`AgentLaunch(config)`).
  */
-public class AppCtlConfig<S, A>(
+public class AppCtlConfig<D : AgentDriver<A, *>, A>(
     /** The app's name, as it appears in the CLI's help. */
     public val name: String,
     /**
@@ -114,14 +114,14 @@ public class AppCtlConfig<S, A>(
     public val docsText: DocsText,
     public val screens: List<ScreenDoc>,
     /** A fresh deterministic store: `run`, `test`, `check` and the host's own tests. */
-    public val makeHeadless: () -> HeadlessHost<S, A>,
+    public val makeHeadless: () -> HeadlessHost<D, A>,
     /** The app's store behind its agent bridge: real clock, real mock latency, on `dispatcher`. */
-    public val makeLive: (latency: MockLatency, dispatcher: CoroutineDispatcher) -> LiveHost<S, A>,
+    public val makeLive: (latency: MockLatency, dispatcher: CoroutineDispatcher) -> LiveHost<D, A>,
     /** Called for `clear-session` before the app launches. */
     public val clearSession: () -> Unit = {},
 ) {
     /** A fresh deterministic headless runner. */
-    public fun makeRunner(): ScriptRunner<S, A> = makeHeadless().makeRunner()
+    public fun makeRunner(): ScriptRunner<A> = makeHeadless().makeRunner()
 
     /** The generated command reference, exactly as the CLI's `docs` writes it to [docsPath]. */
     public val docsMarkdown: String
