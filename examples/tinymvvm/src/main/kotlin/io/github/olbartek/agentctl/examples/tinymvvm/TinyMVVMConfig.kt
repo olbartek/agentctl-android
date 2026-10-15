@@ -95,12 +95,12 @@ object TinyMVVMConfig {
     fun headless(
         device: AgentDeviceConfig<AppIntent<AppCoordinator>> = this.device,
     ): HeadlessHost<ViewModelDriver<AppCoordinator>, AppIntent<AppCoordinator>> =
-        HeadlessHost(mockMethods, device, coordinator = { AppCoordinator(it) })
+        HeadlessHost(mockMethods, device) { AppCoordinator(it) }
 
     /** The app as it would run behind the bridge in a debug build: real time and real mock latency. */
     fun live(
         latency: MockLatency,
         dispatcher: CoroutineDispatcher,
     ): LiveHost<ViewModelDriver<AppCoordinator>, AppIntent<AppCoordinator>> =
-        LiveHost(mockMethods, latency, dispatcher, device, coordinator = { AppCoordinator(it) })
+        LiveHost(mockMethods, latency, dispatcher, device) { AppCoordinator(it) }
 }
