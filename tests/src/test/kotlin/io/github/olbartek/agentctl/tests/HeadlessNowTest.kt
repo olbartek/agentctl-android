@@ -1,6 +1,5 @@
 package io.github.olbartek.agentctl.tests
 
-import io.github.olbartek.agentctl.runtime.store
 import io.github.olbartek.agentctl.ActiveScreen
 import io.github.olbartek.agentctl.AgentContainer
 import io.github.olbartek.agentctl.AgentEnvironment
@@ -14,6 +13,7 @@ import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.next
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.RunStatus
+import io.github.olbartek.agentctl.runtime.store
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals

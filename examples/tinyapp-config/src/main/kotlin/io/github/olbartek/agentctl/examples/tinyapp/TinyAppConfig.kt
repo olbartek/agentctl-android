@@ -1,6 +1,5 @@
 package io.github.olbartek.agentctl.examples.tinyapp
 
-import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentPush
 import io.github.olbartek.agentctl.DocsText
@@ -13,6 +12,7 @@ import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.HelpExamples
 import io.github.olbartek.agentctl.runtime.LiveHost
+import io.github.olbartek.agentctl.runtime.StoreDriver
 import kotlinx.coroutines.CoroutineDispatcher
 
 /**

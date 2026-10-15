@@ -1,9 +1,9 @@
 package io.github.olbartek.agentctl.examples.agentshop.ctl
 
 import io.github.olbartek.agentctl.cli.AgentCtl
+import io.github.olbartek.agentctl.examples.agentshop.app.AppFeature
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import io.github.olbartek.agentctl.runtime.ScriptRunner
-import io.github.olbartek.agentctl.examples.agentshop.app.AppFeature
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream

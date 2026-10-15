@@ -1,6 +1,5 @@
 package io.github.olbartek.agentctl.tests
 
-import io.github.olbartek.agentctl.runtime.store
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.MockLatency
@@ -21,6 +20,7 @@ import io.github.olbartek.agentctl.runtime.LiveHost
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.RunnerEnvironment
 import io.github.olbartek.agentctl.runtime.ScriptRunner
+import io.github.olbartek.agentctl.runtime.store
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.ServerSocket
@@ -444,7 +444,7 @@ class BridgeServerTest {
 
     /**
      * A seed's `device relaunch` replaces the live store: the bridge, made after the seed, drives the new one, and the
-     * host tells the app (`onRelaunch`, which `AgentLaunch.stores` follows) once.
+     * host tells the app (`onRelaunch`, which `AgentLaunch.apps` follows) once.
      */
     @Test
     fun aRelaunchInTheSeedLeavesTheBridgeOnTheNewStore() = runBlocking(dispatcher) {

@@ -13,11 +13,11 @@ import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.appendingBackFallback
 import io.github.olbartek.agentctl.examples.agentshop.auth.AuthFlow
 import io.github.olbartek.agentctl.examples.agentshop.auth.AuthFlowAgent
+import io.github.olbartek.agentctl.examples.agentshop.auth.Login
 import io.github.olbartek.agentctl.examples.agentshop.clients.MockAccounts
 import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabs
 import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabsAgent
 import io.github.olbartek.agentctl.examples.agentshop.home.OrdersList
-import io.github.olbartek.agentctl.examples.agentshop.auth.Login
 import io.github.olbartek.agentctl.examples.agentshop.models.DeepLink
 import io.github.olbartek.agentctl.examples.agentshop.models.Outcome
 import io.github.olbartek.agentctl.examples.agentshop.models.Session

@@ -76,17 +76,28 @@ public interface AgentCoordinator<C : AgentCoordinator<C>> {
  * Where an app that starts its own coroutines — an MVVM app's view models — starts them, so the agent runtime sees
  * its work start and finish: settling waits for it, as it waits for a store's effects. Each [AgentEnvironment] has
  * one, on its scope (`environment.tasks`), and a view model launches its work there instead of in `viewModelScope`,
- * whose main dispatcher does not exist headlessly:
+ * which is neither counted nor on the host's dispatcher (headlessly, virtual time):
  *
  * ```kotlin
  * fun refresh() {
  *     loadJob?.cancel()
  *     loadJob = environment.tasks.run {
- *         val items = client.fetch()
- *         if (isActive) this@ItemsViewModel.items = items
+ *         try {
+ *             val items = client.fetch()
+ *             if (isActive) this@ItemsViewModel.items = items
+ *         } catch (error: CancellationException) {
+ *             throw error
+ *         } catch (error: Exception) {
+ *             if (isActive) this@ItemsViewModel.error = error   // a failure (`mock items.fetch network`) is state
+ *         }
  *     }
  * }
  * ```
+ *
+ * The scope is a supervisor's, so an exception [run]'s block lets out is uncaught: it crashes the app. In the running
+ * app the dispatcher is `Dispatchers.Main.immediate`, so a block started on the main thread runs up to its first
+ * suspension before [run] returns; headlessly it is always queued. A block should not depend on either, for example
+ * by reading the job it is being assigned to before it suspends.
  *
  * In a release build it is the same: a coroutine in the scope, plus one atomic count. A store app does not need it:
  * its effects are counted by the store.

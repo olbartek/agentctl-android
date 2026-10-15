@@ -1,6 +1,5 @@
 package io.github.olbartek.agentctl.tests
 
-import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.ActiveScreen
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentCommandError
@@ -9,6 +8,7 @@ import io.github.olbartek.agentctl.AgentContainer
 import io.github.olbartek.agentctl.AgentScreen
 import io.github.olbartek.agentctl.CommandDoc
 import io.github.olbartek.agentctl.MockMethod
+import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.ResolvedCommand
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.Store
@@ -19,7 +19,7 @@ import io.github.olbartek.agentctl.appendingBackFallback
 import io.github.olbartek.agentctl.next
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.HeadlessHost
-import io.github.olbartek.agentctl.Reducer
+import io.github.olbartek.agentctl.runtime.StoreDriver
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

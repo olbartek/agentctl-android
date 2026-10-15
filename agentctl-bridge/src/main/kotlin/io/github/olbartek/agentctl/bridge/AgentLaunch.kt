@@ -66,11 +66,11 @@ public class AgentLaunch<D : AgentDriver<A, App>, A, App>(config: AppCtlConfig<D
     public val apps: StateFlow<App> = currentApp.asStateFlow()
 
     /** The name [app] had before 0.7, when every app was a store. */
-    @Deprecated("Every app is not a store since 0.7: use app.", ReplaceWith("app"))
+    @Deprecated("Not every app is a store since 0.7: use app.", ReplaceWith("app"))
     public val store: App get() = app
 
     /** The name [apps] had before 0.7. */
-    @Deprecated("Every app is not a store since 0.7: use apps.", ReplaceWith("apps"))
+    @Deprecated("Not every app is a store since 0.7: use apps.", ReplaceWith("apps"))
     public val stores: StateFlow<App> get() = apps
 
     /**

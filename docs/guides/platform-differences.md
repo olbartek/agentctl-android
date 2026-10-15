@@ -53,8 +53,9 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   `environment.tasks`, on each launch's scope, where the reference's `\.agentTasks` runs work in its owner's
   dependencies: Kotlin view models are given their environment, so there is no owner to name. A relaunch also
   cancels that scope, after `cancelAllWork()`. Hosts for each architecture are functions named like the class
-  (`HeadlessHost(container, …)`, `HeadlessHost(mockMethods, …, coordinator = …)`), where the reference has
-  constrained initializers.
+  (`HeadlessHost(container, …)`, `HeadlessHost(mockMethods, …) { AppCoordinator(it) }`), where the reference has
+  constrained initializers. Since a `ScriptRunner` names only the action, it has no `store` or `state` (the
+  reference's has them when its driver is a `StoreDriver`); a test reads them from the host (`host.store`).
 - The real-OS `app` commands use `adb`: `app permission` takes an Android permission (`CAMERA` is
   `android.permission.CAMERA`) and its `reset` resets every permission of the app (`pm reset-permissions -p`); `app
   location` needs an emulator (exit 3 on a phone) and `app location clear` is a usage error (exit 2: an emulator

@@ -1,11 +1,11 @@
 package io.github.olbartek.agentctl.tests
 
-import io.github.olbartek.agentctl.runtime.store
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.examples.tinyapp.Items
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
 import io.github.olbartek.agentctl.examples.tinyapp.TinyRoot
 import io.github.olbartek.agentctl.runtime.SettleResult
+import io.github.olbartek.agentctl.runtime.store
 import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test

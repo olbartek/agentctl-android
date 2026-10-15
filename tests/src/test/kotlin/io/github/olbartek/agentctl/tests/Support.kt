@@ -1,9 +1,9 @@
 package io.github.olbartek.agentctl.tests
 
-import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.cli.AgentCtl
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
+import io.github.olbartek.agentctl.runtime.StoreDriver
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream

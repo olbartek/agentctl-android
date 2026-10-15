@@ -20,6 +20,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.Locale
 import java.util.UUID
+import kotlin.experimental.ExperimentalTypeInference
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -53,7 +54,7 @@ import kotlinx.coroutines.cancel
  * whatever else it uses.
  *
  * Built by name for each architecture: `HeadlessHost(container, mockMethods, deviceConfig, makeStore)` for a store,
- * `HeadlessHost(mockMethods, deviceConfig, coordinator = { … })` for MVVM.
+ * `HeadlessHost(mockMethods, deviceConfig) { AppCoordinator(it) }` for MVVM.
  */
 public class HeadlessHost<D : AgentDriver<A, *>, A>(
     public val mockMethods: List<MockMethod>,
@@ -169,9 +170,12 @@ public fun <S, A> HeadlessHost(
     HeadlessHost(container, mockMethods, AgentDeviceConfig.none(), rebuilding(makeStore))
 
 /**
- * An MVVM app, headlessly: [coordinator] builds the app's coordinator on each launch's environment ([ViewModelDriver]).
- * Pass it by name: `HeadlessHost(mockMethods, deviceConfig, coordinator = { AppCoordinator(it) })`.
+ * An MVVM app, headlessly: [coordinator] builds the app's coordinator on each launch's environment ([ViewModelDriver]):
+ * `HeadlessHost(mockMethods, deviceConfig) { AppCoordinator(it) }`. A lambda that returns an [AgentDriver] instead
+ * goes to the class's constructor, so a host's own driver is written the same way.
  */
+@OptIn(ExperimentalTypeInference::class)
+@OverloadResolutionByLambdaReturnType
 public fun <C : AgentCoordinator<C>> HeadlessHost(
     mockMethods: List<MockMethod>,
     deviceConfig: AgentDeviceConfig<AppIntent<C>> = AgentDeviceConfig.none(),
@@ -329,7 +333,12 @@ public fun <S, A> LiveHost(
 ): LiveHost<StoreDriver<S, A>, A> =
     LiveHost(container, mockMethods, latency, dispatcher, AgentDeviceConfig.none(), rebuilding(makeStore))
 
-/** An MVVM app in the running app: [coordinator] builds the coordinator on each launch's environment. */
+/**
+ * An MVVM app in the running app: [coordinator] builds the coordinator on each launch's environment. As with
+ * [HeadlessHost], a lambda that returns an [AgentDriver] goes to the class's constructor instead.
+ */
+@OptIn(ExperimentalTypeInference::class)
+@OverloadResolutionByLambdaReturnType
 public fun <C : AgentCoordinator<C>> LiveHost(
     mockMethods: List<MockMethod>,
     latency: MockLatency,

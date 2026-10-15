@@ -1,6 +1,5 @@
 package io.github.olbartek.agentctl.tests
 
-import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentContainer
 import io.github.olbartek.agentctl.AgentDeviceConfig
@@ -24,6 +23,7 @@ import io.github.olbartek.agentctl.next
 import io.github.olbartek.agentctl.runtime.AppFactory
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.RunStatus
+import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.testsupport.AgentCoverage
 import java.io.File
 import java.nio.file.Files

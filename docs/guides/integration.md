@@ -392,8 +392,14 @@ class ItemsViewModel(private val environment: AgentEnvironment, private val clie
         mutableState.update { it.copy(isLoading = true, error = null) }
         loadJob?.cancel()
         loadJob = environment.tasks.run {                             // not viewModelScope: see the rules below
-            val items = client.fetch()
-            if (isActive) mutableState.update { it.copy(isLoading = false, items = items) }
+            try {
+                val items = client.fetch()
+                if (isActive) mutableState.update { it.copy(isLoading = false, items = items) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {                                // `mock items.fetch network`: state, not a crash
+                if (isActive) mutableState.update { it.copy(isLoading = false, error = ItemsError.of(error)) }
+            }
         }
     }
 
@@ -420,7 +426,7 @@ model's with its own `back` appended as an `AppIntent` — and `cancelAllWork()`
 
 ```kotlin
 fun headless(): HeadlessHost<ViewModelDriver<AppCoordinator>, AppIntent<AppCoordinator>> =
-    HeadlessHost(mockMethods, device, coordinator = { AppCoordinator(it) })
+    HeadlessHost(mockMethods, device) { AppCoordinator(it) }
 ```
 
 A store keeps a reducer deterministic for free; a view model keeps itself deterministic by following these rules,
@@ -431,11 +437,13 @@ and settling relies on every one of them:
 - **Every clock, id and client comes from the `AgentEnvironment` they are given**, never `System.currentTimeMillis()`,
   `delay` on another dispatcher, `UUID.randomUUID()` or a singleton. The headless host pins them as it does for a store.
 - **Async work starts through `environment.tasks`** (`AgentTasks.run { … }`). That is how settling knows work is in
-  flight, and it runs on the host's dispatcher, virtual time headlessly. `viewModelScope` is neither: its
-  `Dispatchers.Main` does not exist on the JVM.
+  flight, and it runs on the host's dispatcher, virtual time headlessly. `viewModelScope` is neither: settling
+  cannot see its work, and on the JVM it runs on real threads. A failure the work does not catch is uncaught (the
+  scope is a supervisor's) and crashes the app, so catch it and make it state, as above.
 - **A child is created with its parent's environment**, so its clock and clients are the app's.
 - **A pop cancels the popped screen's work**, as a store cancels a stack element's effects: the coordinator calls the
-  view model's `cancelAllWork()` (and `onCleared()` does the same when Android clears it).
+  view model's `cancelAllWork()`. (Its `onCleared()` calls it too, for a view model a `ViewModelStore` owns; the
+  coordinator creates its own directly, so for them the pop is what counts.)
 - **Stack ids are a counter, not random**: they appear in screen identity (`#3`), which must be the same every run.
 - **Appearing is an intent**: the screen's `onAppear` is what the runner sends headlessly, and what the screen's
   `LaunchedEffect` calls in the app.
@@ -445,7 +453,8 @@ In the app, `AgentLaunch(config, intent)` works as it does for a store; `launch.
 
 ### Moving a host to 0.7
 
-0.7 put the engine behind `AgentDriver`. A store host changes a few type names and nothing else:
+0.7 put the engine behind `AgentDriver`. A store host's scripts, scenarios and output are unchanged; its Kotlin
+changes as follows:
 
 - `AppCtlConfig<State, Action>`, `HeadlessHost<State, Action>` and `LiveHost<State, Action>` become
   `…<StoreDriver<State, Action>, Action>`, and `ScriptRunner<State, Action>` becomes `ScriptRunner<Action>`. The
@@ -455,3 +464,14 @@ In the app, `AgentLaunch(config, intent)` works as it does for a store; `launch.
 - `AgentLaunch.store` and `stores` are now `launch.app` and `apps` (the old names still compile, with a deprecation
   warning), and `AgentLaunch.isRequested(intent)` is also `AgentLaunchArguments.isRequested(intent)`.
 - A host that built a `ScriptRunner` itself passes `driver = host.driver` instead of the store and the container.
+- The store lives on the driver: `host.store` (the import above), `host.driver.state`, and `host.container` is
+  `host.driver.container`. `ScriptRunner.store` and `ScriptRunner.state` are gone, since a runner names only the
+  action type; keep the host and read `host.store`.
+- `host.environment` is now the host's own, which outlives relaunches; the current launch's (whose scope a relaunch
+  cancels, the old meaning) is `host.driver.environment`. Work started on `host.environment.scope` is no longer ended
+  by a relaunch.
+- `LiveHost.onRelaunch: (AgentStore) -> Unit` is `host.driver.onRelaunch: () -> Unit`; read the new store from
+  `host.store`.
+- Other type parameters: `AgentLaunch<State, Action>` is `AgentLaunch<StoreDriver<State, Action>, Action,
+  AgentStore<State, Action>>`, `AgentLaunchSession<Driver, Action>`, `BridgeRouter<Action>`, and `applySeed` and
+  `ScenarioRunner.run` are generic over the action only.

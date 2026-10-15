@@ -1,6 +1,5 @@
 package io.github.olbartek.agentctl.cli
 
-import io.github.olbartek.agentctl.runtime.AgentDriver
 import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.CoreCliktCommand
@@ -20,6 +19,7 @@ import com.github.ajalt.clikt.parameters.types.double
 import com.github.ajalt.clikt.parameters.types.int
 import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.CLIName
+import io.github.olbartek.agentctl.runtime.AgentDriver
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
 import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.RunStatus
