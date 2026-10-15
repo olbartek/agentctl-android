@@ -468,6 +468,7 @@ exit=1
 | `check` | The verification ladder below; `--ui` adds its last two rungs. |
 | `app launch` / `app run` / `app state` / `app screens` | The same commands, against the real app on a device or emulator, through the in-app bridge. `app launch` picks a free port and records it in `<outputPath>/bridge.json`, which the others read. |
 | `app screenshot <png>` / `app record start <mp4>` / `app record stop` / `app statusbar clean\|reset` / `app info` | The device itself, for demos: a screenshot; a recording that runs across other commands until `stop` (only the recorder `start` began is stopped; a still ending is held until the stop); a 9:41 status bar with full Wi-Fi and battery (SystemUI's demo mode), or the device's own; the installed app's ID, version and build as one JSON line. Each acts on `--device`, else the last launch's device (`bridge.json`), else the config's, and never boots an emulator. |
+| `app permission grant\|revoke\|reset <service>` / `app openurl <url>` / `app location <lat>,<lon>` / `app appearance light\|dark` | The real OS, beside the script's simulated `device`: `pm grant\|revoke` (a revoke kills the app; `reset` resets all of its permissions), a link through `am start -a android.intent.action.VIEW`, the emulator's location (`adb emu geo fix`; a phone has none to set), dark mode (`cmd uimode night`). `app push` exists for parity and always fails: nothing delivers a push to one app on Android. Same device resolution as above. |
 | `app test [files…]` | The scenario files, in the real app on a device: one fresh launch each, one PASS/FAIL/SKIP line each. `--record <mp4>` records the run, `--step-delay <s>` sends a line at a time so the recording can be followed. |
 
 Exit codes are part of the contract:
@@ -479,12 +480,18 @@ Exit codes are part of the contract:
 | `2` | A usage or parse error, the CLI's own command line included. |
 | `3` | An internal or environment error: a scenario file that does not exist, no scenario files to run, no repo root, a build that failed. |
 
-Three runtime commands work on every screen:
+Three runtime commands work on every screen, and a fourth when the app configures a device:
 
 - `expect k=v [k=v …]`;
 - `advance <duration>`: the virtual clock headlessly; in the running app, the app's real-time clock jumped forward
   (see [the bridge](#the-in-app-bridge));
-- `mock <client.method> <error>`.
+- `mock <client.method> <error>`;
+- `device <subcommand>`: the simulated device of CONTRACT.md §2.4. An app opts into each part with an
+  `AgentDeviceConfig` (`AppCtlConfig.deviceConfig`, handed to its hosts too): `permission` and `prompt` (its fakes
+  call `environment.device.requestPermission(service)`, which shows a prompt the script answers, `prompt=` in the
+  step), `open-url`, `push <name> [tap]`, `background` / `foreground`, `relaunch`, `network` (every mocked call fails
+  with the configured error offline), `location` and `biometry`. An app that configures nothing has no `device`
+  command and prints exactly what 0.5 printed.
 
 Headless runs are deterministic by construction, so the same script always prints the same bytes. That makes step
 output usable as a committed fixture. `HeadlessHost` hands your store exactly this environment:
@@ -497,6 +504,7 @@ output usable as a committed fixture. `HeadlessHost` hands your store exactly th
 | `random` | SplitMix64, seed 0 |
 | `zone`, `locale` | UTC, `en_US_POSIX` |
 | `mocks` | a fresh call log and fault registry, zero latency |
+| `device` | a driven `AgentDevice`: online, no location, biometry enrolled, every permission not determined |
 
 **Nothing else is pinned.** An app that reads `System.currentTimeMillis()`, `Locale.getDefault()` or switches to
 `Dispatchers.IO` around the environment is not deterministic headlessly. If you need more, build it into your store
@@ -822,6 +830,11 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   host's `makeStore` on a copy of the environment with a fresh `scope` (cancelling the old one ends the old store's
   effects), where the reference rebuilds the store over the same dependencies; in the app it is the same process,
   and `AgentLaunch.stores` gives the root the new store.
+- The real-OS `app` commands use `adb`: `app permission` takes an Android permission (`CAMERA` is
+  `android.permission.CAMERA`) and its `reset` resets every permission of the app (`pm reset-permissions -p`); `app
+  location` needs an emulator (exit 3 on a phone) and `app location clear` is a usage error (exit 2: an emulator
+  keeps its last location); `app push` is always a usage error (exit 2), since nothing delivers a push to one app;
+  `app openurl` fails when no activity takes the link, which `am start` reports only in its output.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.

@@ -1,5 +1,7 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.DeviceLocation
+import io.github.olbartek.agentctl.runtime.RunStatus
 import java.io.File
 import java.io.IOException
 import java.time.Instant
@@ -11,6 +13,9 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * `app screenshot`, `app record start|stop`, `app statusbar clean|reset` and `app info`: the device itself, for demos
  * and screenshots. None of them needs the app's bridge.
+ *
+ * `app permission`, `app openurl`, `app push`, `app location` and `app appearance` drive the real OS, live only,
+ * beside the script's simulated `device` (CONTRACT.md §2.4).
  *
  * Each acts on `--device`, else the device the last launch recorded in `bridge.json` (when it was an Android one),
  * else the config's device, else the only connected one. None of them boots an emulator.
@@ -105,6 +110,91 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
             ?: throw AppCtlException("adb shell dumpsys package did not answer on ${target.label} [${target.serial}]")
         val (version, build) = AppInfo.versions(dump)
         return AppInfo(appId, build, target.serial, RecordState.PLATFORM, version).render()
+    }
+
+    // The real OS (live only; scripts simulate the device with `device`)
+
+    /** What `app permission` does, and how its line says it was done. */
+    enum class PermissionAction(val word: String, val done: String) {
+        GRANT("grant", "granted"),
+        REVOKE("revoke", "revoked"),
+        RESET("reset", "reset"),
+    }
+
+    /**
+     * `pm grant|revoke <pkg> <permission>`, or `pm reset-permissions -p <pkg>`, which resets every permission of the
+     * app. A service without a dot is `android.permission.<service>`. Revoking kills the app, as Android does.
+     */
+    fun permission(action: PermissionAction, service: String, device: String?): String {
+        val target = target(device)
+        val appId = cli.config.applicationId
+        val permission = if ('.' in service) service else "android.permission.$service"
+        val arguments = when (action) {
+            PermissionAction.RESET -> listOf("pm", "reset-permissions", "-p", appId)
+            else -> listOf("pm", action.word, appId, permission)
+        }
+        shell(target, arguments, "app-permission.log", named = 2)
+        return "permission $service: ${action.done} for $appId on ${target.label} [${target.serial}]"
+    }
+
+    /** `am start -W -a android.intent.action.VIEW -d <url> <pkg>`: the link, as the system opens it. */
+    fun openUrl(url: String, device: String?): String {
+        val target = target(device)
+        val appId = cli.config.applicationId
+        shell(
+            target,
+            listOf("am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", AppLauncher.shellQuoted(url), appId),
+            "app-openurl.log",
+            named = 2,
+            // `am start` exits 0 when no activity takes the link; it says so on its output instead.
+            failsOn = "Error:",
+        )
+        return "opened $url on ${target.label} [${target.serial}]"
+    }
+
+    /** Nothing delivers a push to one app on Android: always a usage error, before any device is asked. */
+    fun push(): String =
+        throw AppCtlException(
+            "app push is not available on Android: nothing delivers a push to one app; use device push in a script",
+            RunStatus.USAGE,
+        )
+
+    /** `emu geo fix <lon> <lat>` on an emulator. A phone has no command for it, and an emulator cannot clear it. */
+    fun location(value: String, device: String?): String {
+        if (value == "clear") {
+            throw AppCtlException(
+                "app location clear is not available on Android: an emulator keeps its last location; set another one",
+                RunStatus.USAGE,
+            )
+        }
+        DeviceLocation.parse(value)
+            ?: throw AppCtlException("app location needs <lat>,<lon> or clear, e.g. 52.2297,21.0122", RunStatus.USAGE)
+        val target = target(device)
+        if (!target.serial.startsWith("emulator-")) throw AppCtlException("app location needs an emulator")
+        val (latitude, longitude) = value.split(",")
+        val log = File(layout.logs, "app-location.log").apply { parentFile.mkdirs() }
+        val status = Shell.run(listOf(adb, "-s", target.serial, "emu", "geo", "fix", longitude, latitude), root, log, timeoutSeconds = 60)
+        if (status != 0) throw AppCtlException("adb emu geo fix failed; log: ${log.path}")
+        return "location set to $value on ${target.label} [${target.serial}]"
+    }
+
+    /** `cmd uimode night yes|no`. */
+    fun appearance(dark: Boolean, device: String?): String {
+        val target = target(device)
+        val mode = if (dark) "dark" else "light"
+        shell(target, listOf("cmd", "uimode", "night", if (dark) "yes" else "no"), "app-appearance.log", named = 2)
+        return "appearance $mode on ${target.label} [${target.serial}]"
+    }
+
+    /**
+     * `adb shell <arguments>` on [target], failing with the first [named] words of the command and the log; also when
+     * a line of its output starts with [failsOn].
+     */
+    private fun shell(target: Device, arguments: List<String>, logName: String, named: Int, failsOn: String? = null) {
+        val log = File(layout.logs, logName).apply { parentFile.mkdirs() }
+        val status = Shell.run(listOf(adb, "-s", target.serial, "shell") + arguments, root, log, timeoutSeconds = 60)
+        val said = failsOn != null && log.readLines().any { it.startsWith(failsOn) }
+        if (status != 0 || said) throw AppCtlException("adb shell ${arguments.take(named).joinToString(" ")} failed; log: ${log.path}")
     }
 
     /** `--device`, else the last launch's device when it was an Android one, else the config's, else the only one. */

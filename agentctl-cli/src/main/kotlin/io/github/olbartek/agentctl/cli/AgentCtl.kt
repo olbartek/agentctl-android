@@ -14,6 +14,7 @@ import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.clikt.parameters.types.double
 import com.github.ajalt.clikt.parameters.types.int
 import io.github.olbartek.agentctl.BridgeDefaults
@@ -98,6 +99,11 @@ public object AgentCtl {
                 AppRecordGroup().subcommands(AppRecordStartCommand(cli), AppRecordStopCommand(cli)),
                 AppStatusbarGroup().subcommands(AppStatusbarCommand(cli, clean = true), AppStatusbarCommand(cli, clean = false)),
                 AppInfoCommand(cli),
+                AppPermissionCommand(cli),
+                AppOpenUrlCommand(cli),
+                AppPushCommand(cli),
+                AppLocationCommand(cli),
+                AppAppearanceCommand(cli),
             ),
         )
 
@@ -375,6 +381,73 @@ public object AgentCtl {
         private val device by deviceOption(cli)
 
         override fun execute(): Int = cli.appInfo(device)
+    }
+
+    // The real OS: live only, beside the script's simulated `device` (CONTRACT.md §2.4)
+
+    private class AppPermissionCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "permission",
+        "Grant, revoke or reset a real permission of the app on the device (pm grant|revoke|reset-permissions).",
+        "<service> is an Android permission; without a dot it is android.permission.<service>. Android kills the app " +
+            "when a permission is revoked, and reset resets every permission of the app. A script simulates " +
+            "permissions with `device permission` instead, in the app's own process, which never kills it.\n" +
+            "Example: ${cli.config.help.invocation} app permission grant CAMERA",
+    ) {
+        private val action by argument(help = "grant, revoke or reset.")
+            .choice(DeviceCommands.PermissionAction.entries.associateBy { it.word })
+        private val service by argument(help = "The permission, e.g. CAMERA or android.permission.POST_NOTIFICATIONS.")
+        private val device by deviceOption(cli)
+
+        override fun execute(): Int = cli.appPermission(action, service, device)
+    }
+
+    private class AppOpenUrlCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "openurl",
+        "Open a URL on the device, as the system would (am start -a android.intent.action.VIEW).",
+        "Example: ${cli.config.help.invocation} app openurl \"myapp://item/2\"",
+    ) {
+        private val url by argument(help = "The URL.")
+        private val device by deviceOption(cli)
+
+        override fun execute(): Int = cli.appOpenUrl(url, device)
+    }
+
+    private class AppPushCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "push",
+        "Send the app a push notification (not available on Android).",
+        "Nothing delivers a push to one app on Android, so this always fails (exit 2). A script delivers a push " +
+            "with `device push` instead.",
+    ) {
+        @Suppress("unused")
+        private val file by argument(help = "The payload's .json file.")
+
+        @Suppress("unused")
+        private val device by deviceOption(cli)
+
+        override fun execute(): Int = cli.appPush()
+    }
+
+    private class AppLocationCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "location",
+        "Set the emulator's location (adb emu geo fix).",
+        "An emulator only; it cannot clear its location, so clear fails (exit 2).\n" +
+            "Example: ${cli.config.help.invocation} app location 52.2297,21.0122",
+    ) {
+        private val location by argument(help = "<lat>,<lon>, or clear.")
+        private val device by deviceOption(cli)
+
+        override fun execute(): Int = cli.appLocation(location, device)
+    }
+
+    private class AppAppearanceCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+        "appearance",
+        "Switch the device to light or dark mode (cmd uimode night).",
+        "Example: ${cli.config.help.invocation} app appearance dark",
+    ) {
+        private val mode by argument(help = "light or dark.").choice("light", "dark")
+        private val device by deviceOption(cli)
+
+        override fun execute(): Int = cli.appAppearance(mode == "dark", device)
     }
 
     private class AppGetCommand<S, A>(private val cli: Cli<S, A>, name: String, private val path: String) : Subcommand(
