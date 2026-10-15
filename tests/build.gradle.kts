@@ -9,6 +9,8 @@ dependencies {
     testImplementation(project(":agentctl-cli"))
     testImplementation(project(":agentctl-test-support"))
     testImplementation(project(":examples:tinyapp-config"))
+    // TinyApp as MVVM: the same scripts must print the same bytes on both drivers (DriverParityTest).
+    testImplementation(project(":examples:tinymvvm"))
 }
 
 tasks.test {
@@ -17,4 +19,5 @@ tasks.test {
     inputs.file(rootProject.file("CONTRACT.md"))
     inputs.dir(rootProject.file("examples/tinyapp/scenarios"))
     inputs.file(rootProject.file("examples/tinyapp/agent-commands.md"))
+    inputs.file(rootProject.file("examples/tinymvvm/agent-commands.md"))
 }

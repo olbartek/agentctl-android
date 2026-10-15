@@ -14,6 +14,8 @@ androidx-activity = "1.13.0"
 androidx-test-runner = "1.7.0"
 androidx-test-rules = "1.7.0"
 androidx-test-ext-junit = "1.3.0"
+# TinyMVVM (examples/tinymvvm): Jetpack ViewModel, whose JVM artifact runs headlessly.
+androidx-lifecycle = "2.10.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -24,6 +26,7 @@ junit = { module = "junit:junit", version.ref = "junit" }
 kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 # The AgentShop app: Compose (versions from the BOM) and its instrumented UI tests. agentctl-bridge compiles against
 # compose-runtime only, to ask whether the UI is idle; it never brings Compose in.
+androidx-lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-runtime = { module = "androidx.compose.runtime:runtime" }
 compose-ui = { module = "androidx.compose.ui:ui" }
