@@ -28,9 +28,39 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.job
 
 /**
+ * How a host builds an app in two stages, so that `device relaunch` starts the app's state over while what its clients
+ * stored stays (CONTRACT.md §2.4), as the reference's hosts rebuild the store over the same dependencies.
+ *
+ * [prepare] runs once per host, on an environment whose `scope` is the host's: build the clients there, and anything
+ * they keep (a session store, a cart on disk). It returns the function that builds the store on the scope it is given,
+ * once at launch and again at each relaunch; the store runs its effects in that scope, which a relaunch cancels.
+ *
+ * ```kotlin
+ * HeadlessHost(MyAppAgent, mockMethods, deviceConfig, AppFactory { environment ->
+ *     val clients = MyClients.mocked(environment.mocks, SessionStorage.inMemory())
+ *     return@AppFactory { scope -> MyApp.store(environment, clients, scope) }
+ * })
+ * ```
+ *
+ * A host given a plain `makeStore` instead runs all of it again at each relaunch, clients included.
+ */
+public fun interface AppFactory<S, A> {
+    /** Builds what outlives a relaunch, and returns how to build a store on a scope. */
+    public fun prepare(environment: AgentEnvironment): (CoroutineScope) -> AgentStore<S, A>
+}
+
+/** This environment with another [scope]: what each store of a host is built on. */
+internal fun AgentEnvironment.withScope(scope: CoroutineScope): AgentEnvironment =
+    AgentEnvironment(scope, clock, mocks, uuids, random, zone, locale, device)
+
+/** A [makeStore] as an [AppFactory]: everything is built again at each launch. */
+internal fun <S, A> rebuilding(makeStore: (AgentEnvironment) -> AgentStore<S, A>): AppFactory<S, A> =
+    AppFactory { environment -> { scope -> makeStore(environment.withScope(scope)) } }
+
+/**
  * A real store running in the CLI's process with the deterministic environment CONTRACT.md §6 requires.
  *
- * It builds exactly this [AgentEnvironment] and hands it to the host's `makeStore`:
+ * It builds exactly this [AgentEnvironment] and hands it to the host's `makeStore` (or its [AppFactory]):
  *
  * | Field | Headless value |
  * |---|---|
@@ -52,15 +82,26 @@ public class HeadlessHost<S, A>(
     public val container: AgentContainer<S, A>,
     public val mockMethods: List<MockMethod>,
     /** What of the device scripts can drive, and the actions its events become (`device`). */
-    public val deviceConfig: AgentDeviceConfig<A> = AgentDeviceConfig.none(),
-    private val makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+    public val deviceConfig: AgentDeviceConfig<A>,
+    app: AppFactory<S, A>,
 ) {
+    /**
+     * A host whose [makeStore] builds the whole app. `device relaunch` runs it again, so whatever it builds starts over,
+     * clients included; an app whose clients keep something across a relaunch uses an [AppFactory].
+     */
+    public constructor(
+        container: AgentContainer<S, A>,
+        mockMethods: List<MockMethod>,
+        deviceConfig: AgentDeviceConfig<A>,
+        makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+    ) : this(container, mockMethods, deviceConfig, rebuilding(makeStore))
+
     /** A host without a device configuration: no `device` command. */
     public constructor(
         container: AgentContainer<S, A>,
         mockMethods: List<MockMethod>,
         makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-    ) : this(container, mockMethods, AgentDeviceConfig.none(), makeStore)
+    ) : this(container, mockMethods, AgentDeviceConfig.none(), rebuilding(makeStore))
 
     public val dispatcher: VirtualTimeDispatcher = VirtualTimeDispatcher()
 
@@ -86,19 +127,8 @@ public class HeadlessHost<S, A>(
     private val uuids = IncrementingUuids()
     private val random = SplitMix64Random(RANDOM_SEED)
 
-    /**
-     * What the current store was built on. `device relaunch` builds the next store on a copy whose only difference is
-     * a fresh [AgentEnvironment.scope], so the old store's effects end with it while everything else carries over.
-     */
-    public var environment: AgentEnvironment = makeEnvironment()
-        private set
-
-    /** The app's store. `device relaunch` replaces it with a fresh one. */
-    public var store: AgentStore<S, A> = makeStore(environment)
-        private set
-
-    private fun makeEnvironment(): AgentEnvironment = AgentEnvironment(
-        scope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job)),
+    private val hostEnvironment = AgentEnvironment(
+        scope = scope,
         clock = clock,
         mocks = mocks,
         uuids = uuids,
@@ -108,11 +138,24 @@ public class HeadlessHost<S, A>(
         device = device,
     )
 
+    private val makeStore: (CoroutineScope) -> AgentStore<S, A> = app.prepare(hostEnvironment)
+
+    /**
+     * What the current store was built on. `device relaunch` builds the next store on a copy whose only difference is
+     * a fresh [AgentEnvironment.scope], so the old store's effects end with it while everything else carries over.
+     */
+    public var environment: AgentEnvironment = hostEnvironment.withScope(childScope(scope))
+        private set
+
+    /** The app's store. `device relaunch` replaces it with a fresh one. */
+    public var store: AgentStore<S, A> = makeStore(environment.scope)
+        private set
+
     /** Cancels the store's effects and builds a fresh store from its initial state: `device relaunch`. */
     private fun relaunch(): AgentStore<S, A> {
         environment.scope.cancel()
-        environment = makeEnvironment()
-        store = makeStore(environment)
+        environment = hostEnvironment.withScope(childScope(scope))
+        store = makeStore(environment.scope)
         return store
     }
 
@@ -178,9 +221,22 @@ public class LiveHost<S, A>(
     public val latency: MockLatency,
     public val dispatcher: CoroutineDispatcher,
     /** What of the device scripts can drive, and the actions its events become (`device`). */
-    public val deviceConfig: AgentDeviceConfig<A> = AgentDeviceConfig.none(),
-    private val makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+    public val deviceConfig: AgentDeviceConfig<A>,
+    app: AppFactory<S, A>,
 ) {
+    /**
+     * A host whose [makeStore] builds the whole app. `device relaunch` runs it again, so whatever it builds starts over,
+     * clients included; an app whose clients keep something across a relaunch uses an [AppFactory].
+     */
+    public constructor(
+        container: AgentContainer<S, A>,
+        mockMethods: List<MockMethod>,
+        latency: MockLatency,
+        dispatcher: CoroutineDispatcher,
+        deviceConfig: AgentDeviceConfig<A>,
+        makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+    ) : this(container, mockMethods, latency, dispatcher, deviceConfig, rebuilding(makeStore))
+
     /** A host without a device configuration: no `device` command. */
     public constructor(
         container: AgentContainer<S, A>,
@@ -188,7 +244,7 @@ public class LiveHost<S, A>(
         latency: MockLatency,
         dispatcher: CoroutineDispatcher,
         makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-    ) : this(container, mockMethods, latency, dispatcher, AgentDeviceConfig.none(), makeStore)
+    ) : this(container, mockMethods, latency, dispatcher, AgentDeviceConfig.none(), rebuilding(makeStore))
 
     /** The host's scope. Each store runs its effects in a child of it, which `device relaunch` cancels. */
     public val scope: CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -202,19 +258,8 @@ public class LiveHost<S, A>(
 
     private val mocks = MockBackend(callLog, faults, latency, clock, Random.Default, device)
 
-    /** What the current store was built on; `device relaunch` gives the next store a fresh [AgentEnvironment.scope]. */
-    public var environment: AgentEnvironment = makeEnvironment()
-        private set
-
-    /** The app's store. `device relaunch` replaces it; [onRelaunch] hears of it, so the app shows the new one. */
-    public var store: AgentStore<S, A> = makeStore(environment)
-        private set
-
-    /** Called on [dispatcher] with the new store after `device relaunch`: `agentctl-bridge`'s `AgentLaunch` shows it. */
-    public var onRelaunch: ((AgentStore<S, A>) -> Unit)? = null
-
-    private fun makeEnvironment(): AgentEnvironment = AgentEnvironment(
-        scope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job)),
+    private val hostEnvironment = AgentEnvironment(
+        scope = scope,
         clock = clock,
         mocks = mocks,
         uuids = { UUID.randomUUID() },
@@ -224,6 +269,19 @@ public class LiveHost<S, A>(
         device = device,
     )
 
+    private val makeStore: (CoroutineScope) -> AgentStore<S, A> = app.prepare(hostEnvironment)
+
+    /** What the current store was built on; `device relaunch` gives the next store a fresh [AgentEnvironment.scope]. */
+    public var environment: AgentEnvironment = hostEnvironment.withScope(childScope(scope))
+        private set
+
+    /** The app's store. `device relaunch` replaces it; [onRelaunch] hears of it, so the app shows the new one. */
+    public var store: AgentStore<S, A> = makeStore(environment.scope)
+        private set
+
+    /** Called on [dispatcher] with the new store after `device relaunch`: `agentctl-bridge`'s `AgentLaunch` shows it. */
+    public var onRelaunch: ((AgentStore<S, A>) -> Unit)? = null
+
     /**
      * Cancels the store's effects and builds a fresh store from its initial state, over the same clock, mocks and
      * device: `device relaunch`. The app's root shows it once [onRelaunch] has passed it on, and its views send their
@@ -231,8 +289,8 @@ public class LiveHost<S, A>(
      */
     private fun relaunch(): AgentStore<S, A> {
         environment.scope.cancel()
-        environment = makeEnvironment()
-        store = makeStore(environment)
+        environment = hostEnvironment.withScope(childScope(scope))
+        store = makeStore(environment.scope)
         onRelaunch?.invoke(store)
         return store
     }
@@ -306,3 +364,7 @@ public class LiveHost<S, A>(
         relaunch = ::relaunch,
     )
 }
+
+/** A scope whose job is a child of [parent]'s: cancelling it leaves [parent] running, cancelling [parent] ends it. */
+private fun childScope(parent: CoroutineScope): CoroutineScope =
+    CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext.job))

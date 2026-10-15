@@ -20,6 +20,7 @@ import io.github.olbartek.agentctl.Store
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
 import io.github.olbartek.agentctl.next
+import io.github.olbartek.agentctl.runtime.AppFactory
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.testsupport.AgentCoverage
@@ -139,6 +140,66 @@ object Gadget {
         listOf(MockMethod("gadget.fetch", listOf("offline", "boom"))),
         device,
     ) { environment -> Store(State(), reducer(environment), environment.scope) }
+}
+
+/** A notebook whose client keeps the last note written: what a relaunch keeps, or not, depending on the host. */
+object Notebook {
+    data class State(val note: String = "none")
+
+    sealed interface Action {
+        data object OnAppear : Action
+        data class Write(val text: String) : Action
+    }
+
+    /** The app's client: what it stores outlives the store. */
+    class Notes {
+        var last: String? = null
+    }
+
+    fun store(notes: Notes, scope: kotlinx.coroutines.CoroutineScope) = Store(
+        State(),
+        Reducer<State, Action> { state, action ->
+            when (action) {
+                Action.OnAppear -> next(state.copy(note = notes.last ?: "none"))
+                is Action.Write -> {
+                    notes.last = action.text
+                    next(state.copy(note = action.text))
+                }
+            }
+        },
+        scope,
+    )
+
+    object Screen : AgentScreen<State, Action>, AgentContainer<State, Action> {
+        override val screenPaths: List<String> = listOf("notebook")
+
+        override fun screenPath(state: State): String = "notebook"
+
+        override val summaryKeys: List<String> = listOf("note")
+
+        override fun summary(state: State): List<SummaryItem> = listOf(SummaryItem("note", state.note))
+
+        override val onAppear: Action = Action.OnAppear
+
+        override val commands: List<AgentCommand<State, Action>> =
+            listOf(AgentCommand.text("write", "Write a note.") { Action.Write(it) })
+
+        override val registry: List<ScreenDoc> get() = screenDocs
+    }
+
+    private val relaunch = AgentDeviceConfig<Action>(relaunch = true)
+
+    /** Builds its client once per host: a relaunch keeps it. */
+    fun preparedHost() = HeadlessHost(
+        Screen, emptyList(), relaunch,
+        AppFactory { _ ->
+            val notes = Notes()
+            return@AppFactory { scope -> store(notes, scope) }
+        },
+    )
+
+    /** Builds its client inside `makeStore`: a relaunch builds a new one. */
+    fun rebuildingHost() = HeadlessHost(Screen, emptyList(), relaunch) { environment -> store(Notes(), environment.scope) }
 }
 
 /** What this guards: the `device` runtime command (CONTRACT.md §2.4). Its texts are agentctl-ios's, byte for byte. */
@@ -273,6 +334,16 @@ class DeviceTest {
         val (other, otherStatus) = run("device open-url https://example.com")
         assertEquals(RunStatus.FAILED, otherStatus)
         assertTrue(other.endsWith("  FAIL device open-url: the app does not handle https://example.com"), other)
+        // Parsed as strictly as the reference's Foundation: RFC 3986's characters only, `%` before two hex digits,
+        // brackets only around an IP literal.
+        for (url in listOf("gadget://x/é", "gadget://x/2?x=[1]", "gadget://x/%zz", "gadget://x/２", "gadget://[x/1")) {
+            val (refused, refusedStatus) = run("device open-url $url")
+            assertEquals(RunStatus.USAGE, refusedStatus, "$url: $refused")
+        }
+        for (url in listOf("gadget://[::1]:8080/a", "gadget://x/a%20b?q=1#f", "gadget:x")) {
+            val (opened, openedStatus) = run("device open-url $url; expect link=$url")
+            assertEquals(RunStatus.OK, openedStatus, "$url: $opened")
+        }
         val (unknown, unknownStatus) = run("device push pong")
         assertEquals(RunStatus.FAILED, unknownStatus)
         assertTrue(unknown.endsWith("  FAIL unknown push 'pong'; pushes: ping"), unknown)
@@ -328,6 +399,17 @@ class DeviceTest {
                 "camera; expect camera=granted",
         )
         assertEquals(RunStatus.OK, status, text)
+    }
+
+    /** CONTRACT.md §2.4: what the app's clients stored stays. An [AppFactory] builds them once per host. */
+    @Test
+    fun relaunchKeepsWhatAPreparedAppsClientsStored() = runBlocking {
+        for ((host, after) in listOf(Notebook.preparedHost() to "hi", Notebook.rebuildingHost() to "none")) {
+            val runner = host.makeRunner()
+            runner.launch()
+            val result = runner.run("write hi; device relaunch; expect note=$after")
+            assertEquals(RunStatus.OK, result.status, StepFormatter.text(result.steps))
+        }
     }
 
     @Test

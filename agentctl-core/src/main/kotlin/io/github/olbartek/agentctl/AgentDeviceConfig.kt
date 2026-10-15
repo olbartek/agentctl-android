@@ -4,6 +4,7 @@ import java.net.URI
 
 /** A push notification `device push <name> [tap]` delivers. */
 public class AgentPush<A>(
+    /** What `device push` calls it, e.g. `order-shipped`. */
     public val name: String,
     /** One line for the docs, e.g. `Order #1002 has shipped.` */
     public val help: String,
@@ -72,8 +73,11 @@ public class AgentDeviceConfig<A>(
 public data class DeviceSurface(
     /** The subcommands this app has, in the fixed order. */
     val subcommands: List<Subcommand>,
+    /** The permission services `device permission` takes. */
     val services: List<String>,
+    /** The pushes `device push` delivers. */
     val pushes: List<Push>,
+    /** The error code mocked calls fail with offline, or `null` without `device network`. */
     val offlineErrorCode: String?,
 ) {
     /** In the contract's fixed order (CONTRACT.md §2.4). */
@@ -100,7 +104,12 @@ public data class DeviceSurface(
     }
 
     /** A push's name and its line in the docs. */
-    public data class Push(val name: String, val help: String)
+    public data class Push(
+        /** What `device push` calls it. */
+        val name: String,
+        /** Its line in the docs. */
+        val help: String,
+    )
 
     /** Whether `device` is a runtime command here. */
     val exists: Boolean get() = subcommands.isNotEmpty()

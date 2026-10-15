@@ -414,13 +414,29 @@ public class ScriptRunner<S, A>(
 
         private val URL_SCHEME = Regex("[A-Za-z][A-Za-z0-9+.-]*")
 
+        /** RFC 3986's characters: unreserved, reserved and `%`. Anything else, non-ASCII included, is refused. */
+        private val URL_CHARACTERS = Regex("[A-Za-z0-9\\-._~:/?#\\[\\]@!$&'()*+,;=%]*")
+        private val PERCENT = Regex("%(?![0-9A-Fa-f]{2})")
+
         /**
          * An absolute URL: a scheme (`[A-Za-z][A-Za-z0-9+.-]*`), a colon, then no whitespace, parsed strictly (nothing
-         * percent-encoded on the way), so both ports accept and reject the same texts.
+         * percent-encoded on the way), so both ports accept and reject the same texts: only RFC 3986's characters, a
+         * `%` only before two hex digits, and `[` `]` only around an authority's IP literal, as Foundation's strict
+         * parse requires. One difference is left: a scheme and a colon alone (`myapp:`) cannot be a [URI], and is
+         * refused here where the reference accepts it.
          */
         internal fun parseUrl(text: String): URI? {
             val colon = text.indexOf(':')
             if (colon < 0 || text.any { it.isWhitespace() } || !URL_SCHEME.matches(text.substring(0, colon))) return null
+            if (!URL_CHARACTERS.matches(text) || PERCENT.containsMatchIn(text)) return null
+            if ('[' in text || ']' in text) {
+                val rest = text.substring(colon + 1)
+                if (!rest.startsWith("//")) return null
+                val authority = rest.substring(2).takeWhile { it !in "/?#" }
+                if (text.count { it == '[' || it == ']' } != authority.count { it == '[' || it == ']' }) return null
+                val host = authority.substringAfterLast('@')
+                if (!Regex("\\[[^\\[\\]]+](:[0-9]*)?").matches(host)) return null
+            }
             return try {
                 URI(text)
             } catch (_: URISyntaxException) {

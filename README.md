@@ -826,10 +826,12 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   its configuration is `AppCtlConfig.deviceConfig`, since `device` there already names the `adb` device. Its
   requests are `suspend` functions and its updates `Flow`s, where the reference's are `async` and `AsyncStream`s; a
   cancelled request throws `CancellationException` rather than returning. A link reaches `openUrl` as a
-  `java.net.URI`, where the reference's `openURL` gets a `URL`. `device relaunch` builds the next store with the
-  host's `makeStore` on a copy of the environment with a fresh `scope` (cancelling the old one ends the old store's
-  effects), where the reference rebuilds the store over the same dependencies; in the app it is the same process,
-  and `AgentLaunch.stores` gives the root the new store.
+  `java.net.URI`, where the reference's `openURL` gets a `URL`; both parse strictly to RFC 3986, except that a scheme
+  and a colon alone (`myapp:`) is no `URI` and is a usage error here. `device relaunch` builds the next store on a
+  fresh `scope` (cancelling the old one ends the old store's effects), where the reference rebuilds the store over
+  the same dependencies. A host built with an `AppFactory` keeps what `prepare` built (the clients, and what they
+  stored) as the reference does; one built with a plain `makeStore` runs all of it again. In the app it is the same
+  process, and `AgentLaunch.stores` gives the root the new store.
 - The real-OS `app` commands use `adb`: `app permission` takes an Android permission (`CAMERA` is
   `android.permission.CAMERA`) and its `reset` resets every permission of the app (`pm reset-permissions -p`); `app
   location` needs an emulator (exit 3 on a phone) and `app location clear` is a usage error (exit 2: an emulator

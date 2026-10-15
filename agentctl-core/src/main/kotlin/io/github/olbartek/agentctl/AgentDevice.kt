@@ -15,9 +15,16 @@ public enum class PermissionStatus(
     /** How scripts and steps spell it, e.g. `not-determined`. */
     public val rawValue: String,
 ) {
+    /** Never asked: a request shows the prompt. */
     NOT_DETERMINED("not-determined"),
+
+    /** Allowed. */
     GRANTED("granted"),
+
+    /** Refused. */
     DENIED("denied"),
+
+    /** Allowed in part, e.g. some photos or an approximate location. */
     LIMITED("limited"),
     ;
 
@@ -29,7 +36,10 @@ public enum class PermissionStatus(
 
 /** What a biometric authentication (a fingerprint, face unlock) came to. */
 public enum class BiometryResult {
+    /** The user was recognised. */
     SUCCESS,
+
+    /** The user was not recognised, or the prompt was withdrawn. */
     FAILURE,
 
     /** No biometry is enrolled, so no prompt was shown. */
@@ -41,12 +51,20 @@ public enum class DevicePhase(
     /** How scripts spell it: `foreground` or `background`. */
     public val rawValue: String,
 ) {
+    /** In front: screen commands work. */
     FOREGROUND("foreground"),
+
+    /** Behind something else: screen commands fail until `device foreground`. */
     BACKGROUND("background"),
 }
 
 /** A position on Earth, in degrees. */
-public data class DeviceLocation(val latitude: Double, val longitude: Double) {
+public data class DeviceLocation(
+    /** Degrees north, from -90 to 90. */
+    val latitude: Double,
+    /** Degrees east, from -180 to 180. */
+    val longitude: Double,
+) {
     public companion object {
         private val DECIMAL = Regex("-?[0-9]+(\\.[0-9]+)?")
 

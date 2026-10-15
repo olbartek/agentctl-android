@@ -1,18 +1,22 @@
 package io.github.olbartek.agentctl.tests
 
+import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.ScreensRenderer
 import io.github.olbartek.agentctl.StepFormatter
+import io.github.olbartek.agentctl.examples.tinyapp.TinyApp
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
 import io.github.olbartek.agentctl.examples.tinyapp.TinyRootAgent
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.AgentLaunchSession
+import io.github.olbartek.agentctl.runtime.AppCtlConfig
 import io.github.olbartek.agentctl.runtime.BridgeRequest
 import io.github.olbartek.agentctl.runtime.BridgeResponse
 import io.github.olbartek.agentctl.runtime.BridgeRouter
 import io.github.olbartek.agentctl.runtime.BridgeServer
 import io.github.olbartek.agentctl.runtime.HttpParser
+import io.github.olbartek.agentctl.runtime.LiveHost
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.RunnerEnvironment
 import io.github.olbartek.agentctl.runtime.ScriptRunner
@@ -433,6 +437,41 @@ class BridgeServerTest {
             assertEquals("AgentCtlBridge: listening on 127.0.0.1:$port", logs.last())
             val snapshot = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { request("GET", "/snapshot", port) }
             assertTrue("screen=items/2" in snapshot.body, snapshot.body)
+        } finally {
+            session.stop()
+        }
+    }
+
+    /**
+     * A seed's `device relaunch` replaces the live store: the bridge, made after the seed, drives the new one, and the
+     * host tells the app (`onRelaunch`, which `AgentLaunch.stores` follows) once.
+     */
+    @Test
+    fun aRelaunchInTheSeedLeavesTheBridgeOnTheNewStore() = runBlocking(dispatcher) {
+        val base = TinyAppConfig.appCtl
+        val config = AppCtlConfig(
+            name = base.name,
+            applicationId = base.applicationId,
+            mockMethods = base.mockMethods,
+            deviceConfig = AgentDeviceConfig(relaunch = true),
+            docsText = base.docsText,
+            screens = base.screens,
+            makeHeadless = base.makeHeadless,
+            makeLive = { latency, dispatcher ->
+                LiveHost(TinyRootAgent, base.mockMethods, latency, dispatcher, AgentDeviceConfig(relaunch = true), TinyApp::store)
+            },
+        )
+        val session = AgentLaunchSession(config, AgentLaunchOptions(port = 0, seed = "open 2; device relaunch", latency = MockLatency.ZERO), dispatcher) {}
+        val first = session.host.store
+        val relaunched = mutableListOf<Any>()
+        session.host.onRelaunch = { relaunched.add(it) }
+        val port = session.start()!!
+        try {
+            assertEquals(listOf<Any>(session.host.store), relaunched)
+            assertTrue(first !== session.host.store)
+            val run = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { request("POST", "/run", port, "open 3") }
+            assertTrue("screen=items/3" in run.body, run.body)
+            assertEquals("items/3", TinyRootAgent.activeScreen(session.host.store.state).path)
         } finally {
             session.stop()
         }
