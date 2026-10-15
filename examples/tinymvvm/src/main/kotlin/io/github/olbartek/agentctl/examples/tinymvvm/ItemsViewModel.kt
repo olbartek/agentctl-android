@@ -4,9 +4,9 @@ import androidx.lifecycle.ViewModel
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.AgentScreen
+import io.github.olbartek.agentctl.AgentScreenIntent
 import io.github.olbartek.agentctl.AgentViewModel
 import io.github.olbartek.agentctl.CommandGate
-import io.github.olbartek.agentctl.ScreenIntent
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.invalidArgument
 import kotlin.coroutines.cancellation.CancellationException
@@ -86,10 +86,10 @@ class ItemsViewModel(
 
     override val agentState: UiState get() = state.value
 
-    override val agentScreen: AgentScreen<UiState, ScreenIntent<ItemsViewModel>> get() = Companion
+    override val agentScreen: AgentScreen<UiState, AgentScreenIntent<ItemsViewModel>> get() = Companion
 
     /** The list's agent surface: TinyApp's, over the view model's state. */
-    companion object : AgentScreen<UiState, ScreenIntent<ItemsViewModel>> {
+    companion object : AgentScreen<UiState, AgentScreenIntent<ItemsViewModel>> {
         override val screenName: String = "Items"
 
         override val screenPaths = listOf("items")
@@ -103,9 +103,9 @@ class ItemsViewModel(
         override fun errorCode(state: UiState) = state.error?.code
 
         /** Headlessly there is no view to call it, so the runtime sends it when the screen becomes active. */
-        override val onAppear: ScreenIntent<ItemsViewModel> = ScreenIntent { it.onAppear() }
+        override val onAppear: AgentScreenIntent<ItemsViewModel> = AgentScreenIntent { it.onAppear() }
 
-        override val commands: List<AgentCommand<UiState, ScreenIntent<ItemsViewModel>>> = listOf(
+        override val commands: List<AgentCommand<UiState, AgentScreenIntent<ItemsViewModel>>> = listOf(
             AgentCommand.parsing(
                 "open",
                 argument = "<id>",
@@ -113,13 +113,13 @@ class ItemsViewModel(
                 gate = CommandGate("items=0") { it.items.isNotEmpty() },
             ) { text ->
                 val id = text.toIntOrNull() ?: invalidArgument("expected an item id such as 2")
-                ScreenIntent { it.openTapped(id) }
+                AgentScreenIntent { it.openTapped(id) }
             },
-            AgentCommand.action("refresh", help = "Load the list again.", action = ScreenIntent { it.refresh() }),
+            AgentCommand.action("refresh", help = "Load the list again.", action = AgentScreenIntent { it.refresh() }),
             AgentCommand.action(
                 "retry",
                 help = "Load the list again after a failure.",
-                action = ScreenIntent { it.retry() },
+                action = AgentScreenIntent { it.retry() },
                 gate = CommandGate("error=none") { it.error != null },
             ),
         )

@@ -5,8 +5,8 @@ import io.github.olbartek.agentctl.AgentCoordinator
 import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentEnvironment
+import io.github.olbartek.agentctl.AgentIntent
 import io.github.olbartek.agentctl.AgentStore
-import io.github.olbartek.agentctl.AppIntent
 import io.github.olbartek.agentctl.CountingClock
 import io.github.olbartek.agentctl.IncrementingUuids
 import io.github.olbartek.agentctl.MockBackend
@@ -31,9 +31,9 @@ import kotlinx.coroutines.cancel
 
 /**
  * An app running in the CLI's process with the deterministic environment CONTRACT.md §6 requires, through its
- * [AgentDriver] ([StoreDriver] or [ViewModelDriver]).
+ * [AgentDriver] ([AgentStoreDriver] or [AgentViewModelDriver]).
  *
- * It builds exactly this [AgentEnvironment] and hands it to the host's `makeDriver` (or `makeStore`, [AppFactory] or
+ * It builds exactly this [AgentEnvironment] and hands it to the host's `makeDriver` (or `makeStore`, [AgentAppFactory] or
  * `coordinator`):
  *
  * | Field | Headless value |
@@ -147,30 +147,30 @@ public fun <S, A> HeadlessHost(
     container: AgentContainer<S, A>,
     mockMethods: List<MockMethod>,
     deviceConfig: AgentDeviceConfig<A>,
-    app: AppFactory<S, A>,
-): HeadlessHost<StoreDriver<S, A>, A> = HeadlessHost(mockMethods, deviceConfig) { StoreDriver(container, it, app) }
+    app: AgentAppFactory<S, A>,
+): HeadlessHost<AgentStoreDriver<S, A>, A> = HeadlessHost(mockMethods, deviceConfig) { AgentStoreDriver(container, it, app) }
 
 /**
  * A store app, headlessly, whose [makeStore] builds the whole app. `device relaunch` runs it again, so whatever it
- * builds starts over, clients included; an app whose clients keep something across a relaunch uses an [AppFactory].
+ * builds starts over, clients included; an app whose clients keep something across a relaunch uses an [AgentAppFactory].
  */
 public fun <S, A> HeadlessHost(
     container: AgentContainer<S, A>,
     mockMethods: List<MockMethod>,
     deviceConfig: AgentDeviceConfig<A>,
     makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-): HeadlessHost<StoreDriver<S, A>, A> = HeadlessHost(container, mockMethods, deviceConfig, rebuilding(makeStore))
+): HeadlessHost<AgentStoreDriver<S, A>, A> = HeadlessHost(container, mockMethods, deviceConfig, rebuilding(makeStore))
 
 /** A store app, headlessly, without a device configuration: no `device` command. */
 public fun <S, A> HeadlessHost(
     container: AgentContainer<S, A>,
     mockMethods: List<MockMethod>,
     makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-): HeadlessHost<StoreDriver<S, A>, A> =
+): HeadlessHost<AgentStoreDriver<S, A>, A> =
     HeadlessHost(container, mockMethods, AgentDeviceConfig.none(), rebuilding(makeStore))
 
 /**
- * An MVVM app, headlessly: [coordinator] builds the app's coordinator on each launch's environment ([ViewModelDriver]):
+ * An MVVM app, headlessly: [coordinator] builds the app's coordinator on each launch's environment ([AgentViewModelDriver]):
  * `HeadlessHost(mockMethods, deviceConfig) { AppCoordinator(it) }`. A lambda that returns an [AgentDriver] instead
  * goes to the class's constructor, so a host's own driver is written the same way.
  */
@@ -178,13 +178,13 @@ public fun <S, A> HeadlessHost(
 @OverloadResolutionByLambdaReturnType
 public fun <C : AgentCoordinator<C>> HeadlessHost(
     mockMethods: List<MockMethod>,
-    deviceConfig: AgentDeviceConfig<AppIntent<C>> = AgentDeviceConfig.none(),
+    deviceConfig: AgentDeviceConfig<AgentIntent<C>> = AgentDeviceConfig.none(),
     coordinator: (AgentEnvironment) -> C,
-): HeadlessHost<ViewModelDriver<C>, AppIntent<C>> =
-    HeadlessHost(mockMethods, deviceConfig, makeDriver = { ViewModelDriver(it, coordinator) })
+): HeadlessHost<AgentViewModelDriver<C>, AgentIntent<C>> =
+    HeadlessHost(mockMethods, deviceConfig, makeDriver = { AgentViewModelDriver(it, coordinator) })
 
 /** A store app's store. `device relaunch` replaces it. */
-public val <S, A> HeadlessHost<StoreDriver<S, A>, A>.store: AgentStore<S, A> get() = driver.store
+public val <S, A> HeadlessHost<AgentStoreDriver<S, A>, A>.store: AgentStore<S, A> get() = driver.store
 
 /**
  * The app as the in-app bridge runs it in debug builds: real time and real mock latency, plus the hooks the agent
@@ -309,8 +309,8 @@ public fun <S, A> LiveHost(
     latency: MockLatency,
     dispatcher: CoroutineDispatcher,
     deviceConfig: AgentDeviceConfig<A>,
-    app: AppFactory<S, A>,
-): LiveHost<StoreDriver<S, A>, A> = LiveHost(mockMethods, latency, dispatcher, deviceConfig) { StoreDriver(container, it, app) }
+    app: AgentAppFactory<S, A>,
+): LiveHost<AgentStoreDriver<S, A>, A> = LiveHost(mockMethods, latency, dispatcher, deviceConfig) { AgentStoreDriver(container, it, app) }
 
 /** A store app in the running app, whose [makeStore] builds the whole app, again at each relaunch. */
 public fun <S, A> LiveHost(
@@ -320,7 +320,7 @@ public fun <S, A> LiveHost(
     dispatcher: CoroutineDispatcher,
     deviceConfig: AgentDeviceConfig<A>,
     makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-): LiveHost<StoreDriver<S, A>, A> =
+): LiveHost<AgentStoreDriver<S, A>, A> =
     LiveHost(container, mockMethods, latency, dispatcher, deviceConfig, rebuilding(makeStore))
 
 /** A store app in the running app, without a device configuration: no `device` command. */
@@ -330,7 +330,7 @@ public fun <S, A> LiveHost(
     latency: MockLatency,
     dispatcher: CoroutineDispatcher,
     makeStore: (AgentEnvironment) -> AgentStore<S, A>,
-): LiveHost<StoreDriver<S, A>, A> =
+): LiveHost<AgentStoreDriver<S, A>, A> =
     LiveHost(container, mockMethods, latency, dispatcher, AgentDeviceConfig.none(), rebuilding(makeStore))
 
 /**
@@ -343,10 +343,10 @@ public fun <C : AgentCoordinator<C>> LiveHost(
     mockMethods: List<MockMethod>,
     latency: MockLatency,
     dispatcher: CoroutineDispatcher,
-    deviceConfig: AgentDeviceConfig<AppIntent<C>> = AgentDeviceConfig.none(),
+    deviceConfig: AgentDeviceConfig<AgentIntent<C>> = AgentDeviceConfig.none(),
     coordinator: (AgentEnvironment) -> C,
-): LiveHost<ViewModelDriver<C>, AppIntent<C>> =
-    LiveHost(mockMethods, latency, dispatcher, deviceConfig, makeDriver = { ViewModelDriver(it, coordinator) })
+): LiveHost<AgentViewModelDriver<C>, AgentIntent<C>> =
+    LiveHost(mockMethods, latency, dispatcher, deviceConfig, makeDriver = { AgentViewModelDriver(it, coordinator) })
 
 /** A store app's store. `device relaunch` replaces it; the driver's `onRelaunch` hears of it. */
-public val <S, A> LiveHost<StoreDriver<S, A>, A>.store: AgentStore<S, A> get() = driver.store
+public val <S, A> LiveHost<AgentStoreDriver<S, A>, A>.store: AgentStore<S, A> get() = driver.store

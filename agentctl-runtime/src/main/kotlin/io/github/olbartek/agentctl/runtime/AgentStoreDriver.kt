@@ -16,37 +16,37 @@ import kotlinx.coroutines.cancel
  * once at launch and again at each relaunch; the store runs its effects in that scope, which a relaunch cancels.
  *
  * ```kotlin
- * HeadlessHost(MyAppAgent, mockMethods, deviceConfig, AppFactory { environment ->
+ * HeadlessHost(MyAppAgent, mockMethods, deviceConfig, AgentAppFactory { environment ->
  *     val clients = MyClients.mocked(environment.mocks, SessionStorage.inMemory())
- *     return@AppFactory { scope -> MyApp.store(environment, clients, scope) }
+ *     return@AgentAppFactory { scope -> MyApp.store(environment, clients, scope) }
  * })
  * ```
  *
  * A host given a plain `makeStore` instead runs all of it again at each relaunch, clients included.
  */
-public fun interface AppFactory<S, A> {
+public fun interface AgentAppFactory<S, A> {
     /** Builds what outlives a relaunch, and returns how to build a store on a scope. */
     public fun prepare(environment: AgentEnvironment): (CoroutineScope) -> AgentStore<S, A>
 }
 
-/** A `makeStore` as an [AppFactory]: everything is built again at each launch. */
-internal fun <S, A> rebuilding(makeStore: (AgentEnvironment) -> AgentStore<S, A>): AppFactory<S, A> =
-    AppFactory { environment -> { scope -> makeStore(environment.withScope(scope)) } }
+/** A `makeStore` as an [AgentAppFactory]: everything is built again at each launch. */
+internal fun <S, A> rebuilding(makeStore: (AgentEnvironment) -> AgentStore<S, A>): AgentAppFactory<S, A> =
+    AgentAppFactory { environment -> { scope -> makeStore(environment.withScope(scope)) } }
 
 /**
  * The [AgentDriver] of an app on a store: an [AgentStore] whose root an [AgentContainer] describes.
  *
  * Settling compares the root state and the effects in flight; `state` and `--diff` render the root state
  * ([StateDump]); a relaunch cancels the store's scope, which ends its effects, and builds a fresh store from the
- * initial state with the [AppFactory].
+ * initial state with the [AgentAppFactory].
  *
  * @param hostEnvironment the host's environment, whose `scope` outlives every launch.
  */
-public class StoreDriver<S, A>(
+public class AgentStoreDriver<S, A>(
     /** The root's agent surface: the active screen and its commands, read from the state. */
     public val container: AgentContainer<S, A>,
     private val hostEnvironment: AgentEnvironment,
-    app: AppFactory<S, A>,
+    app: AgentAppFactory<S, A>,
 ) : AgentDriver<A, AgentStore<S, A>> {
     private val hostScope = hostEnvironment.scope
     private val makeStore: (CoroutineScope) -> AgentStore<S, A> = app.prepare(hostEnvironment)

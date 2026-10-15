@@ -80,10 +80,10 @@ runs hundreds of times a day.
   Android library: minSdk 28, compiled against SDK 36.
 - **The app is built on a store, or as MVVM.** The engine talks to an `AgentDriver`, never to your app's types, and
   both drivers run the same scripts with the same output:
-  - `StoreDriver` drives a store. `agentctl-core` ships a small unidirectional one (`Store`, `Reducer`, `Effect`:
+  - `AgentStoreDriver` drives a store. `agentctl-core` ships a small unidirectional one (`Store`, `Reducer`, `Effect`:
     run, cancellable, send, cancel, map, scoped), which plays the part TCA plays in the Swift version; TinyApp is
     built on it. Any other store implements `AgentStore`: the states, `send`, and the effects in flight.
-  - `ViewModelDriver` drives MVVM: Jetpack `ViewModel`s under a coordinator that owns the back stack (see
+  - `AgentViewModelDriver` drives MVVM: Jetpack `ViewModel`s under a coordinator that owns the back stack (see
     [MVVM](docs/guides/integration.md#mvvm-apps-without-a-store)).
 - **Screens are driven through state, not through the UI.** Nothing taps and nothing reads pixels; a headless run
   has no views at all. Rendering is verified separately, by screenshot tests (see
@@ -146,7 +146,7 @@ It also counts script columns in grapheme clusters, as Swift does.
 
 Where Android differs from iOS, this port adapts the reference rather than copying it: L3's Roborazzi or Paparazzi
 tasks, `adb` for the device commands, Compose's idleness for live settling, `AgentEnvironment.device` and
-`AppFactory` for the simulated device, and a few Kotlin-forced API shapes.
+`AgentAppFactory` for the simulated device, and a few Kotlin-forced API shapes.
 [The list, one difference per item](docs/guides/platform-differences.md).
 
 ## The example apps

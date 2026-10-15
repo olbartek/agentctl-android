@@ -18,7 +18,7 @@ public object AgentRegistry {
      */
     public fun runtimeCommands(
         mockExample: String = DEFAULT_MOCK_EXAMPLE,
-        device: DeviceSurface = DeviceSurface.NONE,
+        device: AgentDevice.Surface = AgentDevice.Surface.NONE,
     ): List<CommandDoc> = listOf(
         CommandDoc(
             name = "expect",
@@ -43,7 +43,7 @@ public object AgentRegistry {
     ) + device.commandDocs
 
     /** Every command name across `screens`, including the runtime commands (`device` when the app has it). */
-    public fun allCommandNames(screens: List<ScreenDoc>, device: DeviceSurface = DeviceSurface.NONE): Set<String> =
+    public fun allCommandNames(screens: List<ScreenDoc>, device: AgentDevice.Surface = AgentDevice.Surface.NONE): Set<String> =
         (screens.flatMap { screen -> screen.commands.map { it.name } } + runtimeCommands(device = device).map { it.name }).toSet()
 }
 
@@ -55,7 +55,7 @@ public object ScreensRenderer {
     public fun render(
         screens: List<ScreenDoc>,
         mockExample: String = AgentRegistry.DEFAULT_MOCK_EXAMPLE,
-        device: DeviceSurface = DeviceSurface.NONE,
+        device: AgentDevice.Surface = AgentDevice.Surface.NONE,
     ): String {
         val lines = mutableListOf<String>()
         for (screen in screens) {

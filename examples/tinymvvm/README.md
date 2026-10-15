@@ -15,10 +15,10 @@ app is built.
 
 | File | What it shows |
 |---|---|
-| [`ItemsViewModel.kt`](src/main/kotlin/io/github/olbartek/agentctl/examples/tinymvvm/ItemsViewModel.kt) | A screen as an `AgentViewModel`: a `ViewModel` with a `StateFlow`, `agentState`, summary, error, gated commands as `ScreenIntent`s, `onAppear`, work through `environment.tasks` |
+| [`ItemsViewModel.kt`](src/main/kotlin/io/github/olbartek/agentctl/examples/tinymvvm/ItemsViewModel.kt) | A screen as an `AgentViewModel`: a `ViewModel` with a `StateFlow`, `agentState`, summary, error, gated commands as `AgentScreenIntent`s, `onAppear`, work through `environment.tasks` |
 | [`ItemDetailViewModel.kt`](src/main/kotlin/io/github/olbartek/agentctl/examples/tinymvvm/ItemDetailViewModel.kt) | A cooldown on the injected clock, and work cancelled on pop |
 | [`AppCoordinator.kt`](src/main/kotlin/io/github/olbartek/agentctl/examples/tinymvvm/AppCoordinator.kt) | The `AgentCoordinator`: the back stack, the active screen, `back`, the registry, `cancelAllWork` |
-| [`TinyMVVMConfig.kt`](src/main/kotlin/io/github/olbartek/agentctl/examples/tinymvvm/TinyMVVMConfig.kt) | `AppCtlConfig<ViewModelDriver<AppCoordinator>, AppIntent<AppCoordinator>>`, its headless and live hosts, device links and pushes |
+| [`TinyMVVMConfig.kt`](src/main/kotlin/io/github/olbartek/agentctl/examples/tinymvvm/TinyMVVMConfig.kt) | `AppCtlConfig<AgentViewModelDriver<AppCoordinator>, AgentIntent<AppCoordinator>>`, its headless and live hosts, device links and pushes |
 
 TinyMVVM has no Android app: it runs headlessly only. An app would render `coordinator.backStack` (Navigation 3's
 `NavDisplay`, or a `NavHost`) and collect each view model's `state`. The rules a view model follows to stay

@@ -10,14 +10,18 @@ bridge. (Driving the real OS cannot do this: `pm revoke` kills the app, nothing 
 bridge cannot answer a system dialog. The `app` wrappers in the last column do drive the real device, for demos and
 real-OS checks.)
 
+The device's types are nested in `AgentDevice` (`AgentDevice.PermissionStatus`, `.BiometryResult`, `.Phase`,
+`.Location`, `.Push`, `.Surface`), so they never clash with an app's own `PermissionStatus` or `Location`, whether
+either is imported by name or with `*`.
+
 | Capability | Script command | What your app wires | What a step shows | Real OS (live only) |
 |---|---|---|---|---|
 | Permissions | `device permission <service> <not-determined\|granted\|denied\|limited>` | `permissions = listOf("notifications", …)`; fakes call `device.permission(service)` / `device.requestPermission(service)` (suspend) | what your screen's summary shows | `app permission grant\|revoke\|reset <permission>` |
 | System prompts | `device prompt <allow\|deny\|limited>` | nothing more: a request while `not-determined` shows the prompt | `prompt=<service>` until answered; `expect prompt=…` | — |
 | Deep and app links | `device open-url <url>` | `openUrl = { uri -> … }` returns the root action, or `null` for a link you don't handle | the screen the link opens | `app openurl <url>` (the app declares an intent filter for the scheme) |
-| Push notifications | `device push <name> [tap]` | `pushes = listOf(AgentPush(name, help, received, opened))` | what receiving or tapping it does | — (`app push` exits 2 on Android) |
+| Push notifications | `device push <name> [tap]` | `pushes = listOf(AgentDevice.Push(name, help, received, opened))` | what receiving or tapping it does | — (`app push` exits 2 on Android) |
 | Background / foreground | `device background`, `device foreground` | `scenePhase = { phase -> … }` returns the root action | screen commands fail while in the background | — |
-| Relaunch | `device relaunch` | `relaunch = true`; build the hosts with an `AppFactory` so the clients survive | the fresh launch; what your clients stored, the device and the clock survive | `app launch --no-build` (the real process) |
+| Relaunch | `device relaunch` | `relaunch = true`; build the hosts with an `AgentAppFactory` so the clients survive | the fresh launch; what your clients stored, the device and the clock survive | `app launch --no-build` (the real process) |
 | Network | `device network <online\|offline>` | `offlineErrorCode = "network"`; observers collect `device.onlineUpdates()` | offline, every mocked call fails with that code | — |
 | Location | `device location <lat>,<lon>\|none` | `location = true`; fakes read `device.location` / `device.locationUpdates()` | what your screen does with it | `app location <lat>,<lon>` (an emulator only) |
 | Biometry | `device biometry <enrolled\|unenrolled\|match\|fail>` | `biometry = true`; fakes call `device.authenticateBiometry()` (suspend) | `prompt=biometry` until `match` or `fail` | — |
@@ -34,9 +38,9 @@ AgentDeviceConfig(
     permissions = listOf("notifications", "location"),
     openUrl = AppFeature::actionOpening,
     pushes = listOf(
-        AgentPush("order-shipped", help = "Order #1002 has shipped.", received = AppFeature.Action.OrderPushReceived,
+        AgentDevice.Push("order-shipped", help = "Order #1002 has shipped.", received = AppFeature.Action.OrderPushReceived,
             opened = AppFeature.Action.DeepLinkOpened(DeepLink.Order(1002))),
-        AgentPush("promo", help = "A new promo code: SAVE10.", opened = AppFeature.Action.DeepLinkOpened(DeepLink.Shop)),
+        AgentDevice.Push("promo", help = "A new promo code: SAVE10.", opened = AppFeature.Action.DeepLinkOpened(DeepLink.Shop)),
     ),
     scenePhase = { AppFeature.Action.ScenePhaseChanged(it) },
     relaunch = true,

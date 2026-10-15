@@ -11,8 +11,8 @@ import kotlinx.coroutines.job
  * `advance`, `mock`, `device`, the step output, sessions — is the engine's own and never sees the app's types
  * (CONTRACT.md holds for every driver).
  *
- * Two drivers ship: [StoreDriver] for an app on a store (AgentCtl's [io.github.olbartek.agentctl.Store], or any
- * [io.github.olbartek.agentctl.AgentStore]), and [ViewModelDriver] for MVVM: view models under an
+ * Two drivers ship: [AgentStoreDriver] for an app on a store (AgentCtl's [io.github.olbartek.agentctl.Store], or any
+ * [io.github.olbartek.agentctl.AgentStore]), and [AgentViewModelDriver] for MVVM: view models under an
  * [io.github.olbartek.agentctl.AgentCoordinator].
  *
  * @param A what a command, an appearance or a device event turns into. A value: commands produce it before it is

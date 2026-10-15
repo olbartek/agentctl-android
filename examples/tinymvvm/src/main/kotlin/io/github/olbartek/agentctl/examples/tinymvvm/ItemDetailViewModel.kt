@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.AgentScreen
+import io.github.olbartek.agentctl.AgentScreenIntent
 import io.github.olbartek.agentctl.AgentViewModel
-import io.github.olbartek.agentctl.ScreenIntent
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.every
 import kotlin.time.Duration.Companion.seconds
@@ -73,10 +73,10 @@ class ItemDetailViewModel(
 
     override val agentState: UiState get() = state.value
 
-    override val agentScreen: AgentScreen<UiState, ScreenIntent<ItemDetailViewModel>> get() = Companion
+    override val agentScreen: AgentScreen<UiState, AgentScreenIntent<ItemDetailViewModel>> get() = Companion
 
     /** The detail screen's agent surface: TinyApp's, over the view model's state. */
-    companion object : AgentScreen<UiState, ScreenIntent<ItemDetailViewModel>> {
+    companion object : AgentScreen<UiState, AgentScreenIntent<ItemDetailViewModel>> {
         /** The countdown a `save` starts, in seconds. */
         const val COOLDOWN_SECONDS = 3
 
@@ -96,12 +96,12 @@ class ItemDetailViewModel(
 
         override fun errorCode(state: UiState) = state.error?.code
 
-        override val commands: List<AgentCommand<UiState, ScreenIntent<ItemDetailViewModel>>> = listOf(
+        override val commands: List<AgentCommand<UiState, AgentScreenIntent<ItemDetailViewModel>>> = listOf(
             AgentCommand.action(
                 "save",
                 help = "Save this item. A save starts a $COOLDOWN_SECONDS-second cooldown; saving again " +
                     "before it runs out reports error=cooldown.",
-                action = ScreenIntent { it.saveTapped() },
+                action = AgentScreenIntent { it.saveTapped() },
             ),
         )
     }
