@@ -16,10 +16,15 @@ sealed interface DeepLink {
             val path = (url.path ?: "").split("/").filter { it.isNotEmpty() }
             return when {
                 host == "shop" && path.isEmpty() -> Shop
-                host == "product" && path.size == 1 -> path[0].toIntOrNull()?.let(::Product)
-                host == "order" && path.size == 1 -> path[0].toIntOrNull()?.let(::Order)
+                host == "product" && path.size == 1 -> number(path[0])?.let(::Product)
+                host == "order" && path.size == 1 -> number(path[0])?.let(::Order)
                 else -> null
             }
         }
+
+        private val ASCII_INTEGER = Regex("[+-]?[0-9]+")
+
+        /** Swift's `Int(_:)`: ASCII digits only, where `toIntOrNull` also reads any Unicode digit. */
+        private fun number(text: String): Int? = if (ASCII_INTEGER.matches(text)) text.toIntOrNull() else null
     }
 }

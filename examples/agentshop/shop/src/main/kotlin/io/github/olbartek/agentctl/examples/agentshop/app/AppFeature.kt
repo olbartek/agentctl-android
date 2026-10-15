@@ -25,6 +25,7 @@ import io.github.olbartek.agentctl.examples.agentshop.models.attempt
 import io.github.olbartek.agentctl.examples.agentshop.onboarding.OnboardingFlow
 import io.github.olbartek.agentctl.examples.agentshop.onboarding.OnboardingFlowAgent
 import io.github.olbartek.agentctl.next
+import java.net.URI
 
 /**
  * The root: launching, then auth, onboarding (once, for a new account) or home.
@@ -179,6 +180,12 @@ object AppFeature {
             next(after, Effect.merge(childResult.effect, parentResult.effect, cancel))
         }
     }
+
+    /**
+     * What opening [url] does: one of AgentShop's links ([DeepLink]), or `null` for any other URL. The app's
+     * `agentshop://` intent filter and the agent's `device open-url` both go through it.
+     */
+    fun actionOpening(url: URI): Action? = DeepLink.of(url)?.let { Action.DeepLinkOpened(it) }
 }
 
 object AppFeatureAgent : AgentContainer<AppFeature.State, AppFeature.Action> {

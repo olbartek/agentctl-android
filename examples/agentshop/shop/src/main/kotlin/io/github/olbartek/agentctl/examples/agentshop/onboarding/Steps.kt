@@ -179,7 +179,7 @@ object AddressForm {
         data object UseLocationTapped : Action
 
         /** Where the device is, or why it could not say. */
-        data class Located(val location: DeviceLocation?, val error: Error?) : Action
+        data class Located(val result: Outcome<DeviceLocation, Error>) : Action
 
         sealed interface Delegate : Action {
             /** `address` is `null` when skipped. */
@@ -194,20 +194,18 @@ object AddressForm {
                 Effect.run { send ->
                     val status = locationClient.requestAuthorization()
                     if (status != PermissionStatus.GRANTED && status != PermissionStatus.LIMITED) {
-                        send(Action.Located(null, Error.LOCATION_DENIED))
+                        send(Action.Located(Outcome.Failure(Error.LOCATION_DENIED)))
                         return@run
                     }
                     val location = locationClient.current()
-                    send(if (location == null) Action.Located(null, Error.LOCATION_UNAVAILABLE) else Action.Located(location, null))
+                    send(Action.Located(if (location == null) Outcome.Failure(Error.LOCATION_UNAVAILABLE) else Outcome.Success(location)))
                 },
             )
-            is Action.Located -> {
-                val location = action.location
-                if (location == null) {
-                    next(state.copy(error = action.error))
-                } else {
+            is Action.Located -> when (val result = action.result) {
+                is Outcome.Failure -> next(state.copy(error = result.error))
+                is Outcome.Success -> {
                     // A location fills the street, city and zip only: the name stays the shopper's.
-                    val place = knownPlaces[location]
+                    val place = knownPlaces[result.value]
                     if (place == null) {
                         next(state.copy(error = Error.ADDRESS_NOT_FOUND))
                     } else {

@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.examples.agentshop.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,18 +20,28 @@ import io.github.olbartek.agentctl.examples.agentshop.app.design.AgentShopTheme
 import io.github.olbartek.agentctl.examples.agentshop.app.design.LoadingView
 import io.github.olbartek.agentctl.examples.agentshop.app.design.Palette
 import io.github.olbartek.agentctl.examples.agentshop.app.design.UiTesting
+import java.net.URI
+import java.net.URISyntaxException
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * AgentShop's one activity: [RootView] over the store [AppStore] keeps — behind the agent bridge in a debug build, and
- * built directly in a release build — with a splash while a launch seed is applied.
+ * built directly in a release build — with a splash while a launch seed is applied. It also opens AgentShop's
+ * `agentshop://` links (`app openurl`, a tapped link), as `device open-url` does in a script.
  */
 class MainActivity : ComponentActivity() {
+    private lateinit var app: AppStore
+
     @OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         UiTesting.isOn = intent.getBooleanExtra(UiTesting.EXTRA, false)
-        val app = AppStore.get(this, isFreshLaunch = savedInstanceState == null)
+        app = AppStore.get(this, isFreshLaunch = savedInstanceState == null)
+        // Not again when the activity is only recreated (a rotation): the link was opened the first time.
+        if (savedInstanceState == null) open(intent)
         setContent {
             AgentShopTheme {
                 // Test tags are resource-ids too, for uiautomator and screenshot tools.
@@ -49,5 +60,35 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** A link while the app is in front (`singleTop`). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        open(intent)
+    }
+
+    /**
+     * Sends the action [AppFeature.actionOpening] maps the intent's link to, once the store is ready (after a launch
+     * seed), to the store shown then. A link the app does not handle does nothing.
+     */
+    private fun open(intent: Intent?) {
+        val link = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return
+        val url = try {
+            URI(link)
+        } catch (_: URISyntaxException) {
+            return
+        }
+        val action = AppFeature.actionOpening(url) ?: return
+        val app = app
+        // The process's scope, like the store's: a link is not dropped by a configuration change mid-seed.
+        linkScope.launch {
+            app.isReady.first { it }
+            app.stores.value.send(action)
+        }
+    }
+
+    private companion object {
+        val linkScope = MainScope()
     }
 }

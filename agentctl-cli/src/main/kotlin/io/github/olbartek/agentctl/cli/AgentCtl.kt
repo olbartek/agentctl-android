@@ -404,7 +404,8 @@ public object AgentCtl {
     private class AppOpenUrlCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
         "openurl",
         "Open a URL on the device, as the system would (am start -a android.intent.action.VIEW).",
-        "Example: ${cli.config.help.invocation} app openurl \"myapp://item/2\"",
+        "The app must declare an intent filter for the URL's scheme; Android opens it with no prompt. A script opens " +
+            "links with `device open-url` instead.\nExample: ${cli.config.help.invocation} app openurl \"myapp://item/2\"",
     ) {
         private val url by argument(help = "The URL.")
         private val device by deviceOption(cli)

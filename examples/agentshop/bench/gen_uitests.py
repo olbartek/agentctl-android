@@ -23,8 +23,8 @@ How a scenario becomes a UI test:
 5. `mock <method> <code>` becomes a `mock-fault` launch extra `<method>#<n>=<code>`: n is the index of the call
    the fault hits, counted from the headless run's `calls`.
 
-A scenario that uses `advance`, `login-as` or `reset` cannot be replayed through the UI and is skipped (it stays a
-headless scenario). Anything else that has no UI mapping is an error, so the mapping never silently drifts.
+A scenario that uses `advance`, `login-as`, `reset` or `device` cannot be replayed through the UI and is skipped (it
+stays a headless and bridge scenario: `device` simulates the device inside the app, which a UI test cannot reach). Anything else that has no UI mapping is an error, so the mapping never silently drifts.
 """
 
 from __future__ import annotations

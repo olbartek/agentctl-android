@@ -66,7 +66,7 @@ object AgentShopConfig {
     val device: AgentDeviceConfig<AppFeature.Action>
         get() = AgentDeviceConfig(
             permissions = listOf("notifications", "location"),
-            openUrl = { url -> DeepLink.of(url)?.let { AppFeature.Action.DeepLinkOpened(it) } },
+            openUrl = AppFeature::actionOpening,
             pushes = listOf(
                 AgentPush(
                     "order-shipped",
