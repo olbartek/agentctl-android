@@ -106,10 +106,13 @@ public class MockBackend(
     public val latency: MockLatency,
     public val clock: AgentClock,
     public val random: Random,
+    /** The simulated device: while it is offline, every call fails with its [AgentDevice.offlineErrorCode]. */
+    public val device: AgentDevice = AgentDevice(),
 ) {
     /**
-     * Records the call, waits the [latency] (never touching the clock when it is zero), throws a fault registered
-     * in [faults] if there is one, and otherwise runs `body`.
+     * Records the call, waits the [latency] (never touching the clock when it is zero), fails with the device's
+     * offline error code while [AgentDevice.isOnline] is false (leaving any armed fault for the next call), throws a
+     * fault registered in [faults] if there is one, and otherwise runs `body`.
      *
      * @param name `"<client>.<method>"`, e.g. `items.fetch`.
      * @param error turns a fault code (e.g. `network`) into the client's own exception.
@@ -119,6 +122,7 @@ public class MockBackend(
         try {
             val delay = latency.sample(random)
             if (delay > Duration.ZERO) clock.sleep(delay)
+            device.offlineErrorCode?.let { code -> if (!device.isOnline) throw error(code) }
             faults.take(name)?.let { throw error(it) }
             return body()
         } finally {

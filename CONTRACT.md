@@ -1,4 +1,4 @@
-Contract version: 1
+Contract version: 2
 
 # The AgentCtl contract
 
@@ -9,8 +9,8 @@ reproduce so that the same script produces the same steps everywhere. A Swift im
 Kotlin implementation are two ports of this contract, not two designs.
 
 **Scope.** This contract defines the *engine*: how a script is parsed, how a line is dispatched to
-whatever commands the host app declares, how the three runtime commands (`expect`, `advance`,
-`mock`) behave, how one step is rendered as text, and the exit codes and determinism guarantees
+whatever commands the host app declares, how the runtime commands (`expect`, `advance`, `mock`,
+and `device` for an app that simulates its device) behave, how one step is rendered as text, and the exit codes and determinism guarantees
 that make a script's output reproducible. For an implementation that can also run scripts inside
 the real app, §8 specifies the in-app bridge's wire protocol. The contract does **not** define
 which screens, commands, summary keys or mock methods any particular app has — that vocabulary
@@ -20,7 +20,8 @@ belongs to the app that embeds AgentCtl (declared however the host language expr
 **The examples** use the vocabulary of TinyApp, the example app in this repository
 ([`Examples/TinyApp`](Examples/TinyApp)): a list screen, `items`, with the commands `open <id>`,
 `refresh` and `retry`; a detail screen, `items/<id>`, with `save` (which starts a three-second
-cooldown) and its container's `back`; and one mockable method, `items.fetch`. They show the
+cooldown) and its container's `back`; one mockable method, `items.fetch`; and, for `device`, links
+`tinyapp://items/<id>` and one push, `item-updated`. They show the
 mechanism, never something a port must literally have. Every output shown is real: it is what the
 reference implementation — the Swift package in this repository — prints for the command shown,
 run from the repository root, with the exit code appended by `echo "exit=$?"` where it matters.
@@ -113,11 +114,12 @@ Where this text and the reference implementation disagree, one of them has a bug
       screen=items/2 title="Second item" saved=false cooldown=0
     > frobnicate
       screen=items/2 title="Second item" saved=false cooldown=0
-      FAIL unknown command 'frobnicate' on items/2. Valid here: save, back, expect, advance, mock
+      FAIL unknown command 'frobnicate' on items/2. Valid here: save, back, expect, advance, mock, device
     ```
     The listed commands are exactly what would currently resolve on that screen, in the same
     leaf-first order — here the detail screen's own `save`, then its container's `back` — with the
-    three runtime commands (`expect`, `advance`, `mock`) always appended last.
+    runtime commands always appended last: `expect, advance, mock`, then `device` when the app has
+    it (§2.4). An app without `device` ends the list at `mock`.
   - **Disabled (gated)** — `retry` is offered only while the list reports an error:
     ```
     $ swift run tinyctl run retry
@@ -176,7 +178,8 @@ lines before it have run, and it is reported on its own step.
 
 ## 2. Runtime commands
 
-Three commands work identically on every screen; the app never sees them as its own actions.
+Three commands work identically on every screen; the app never sees them as its own actions. A
+fourth, `device` (§2.4), exists only in an app that simulates its device.
 
 ### 2.1 `expect k=v [k=v …]`
 
@@ -256,6 +259,143 @@ class of error as an unknown screen command, §1.3).
 alongside whatever mock backends the app itself runs in that process, so there is no clock
 dependency to fail on.
 
+### 2.4 `device <subcommand> [arguments]`
+
+Simulates the device around the app: permissions and the system prompts that ask for them, links,
+push notifications, the app going to the background and being relaunched, the network, the location
+and biometry. The device is simulated **in the app's process** — the app's permission, connectivity,
+location and biometry clients read it in place of the system's — so the same line does the same thing
+headlessly and in the running app, and nothing it does can terminate the app.
+
+**It exists only where the app opts in.** An app declares which parts of its device a script may drive
+(its permission services, a link handler, its pushes, a scene-phase handler, relaunch, a network
+simulation with the error code calls fail with offline, location, biometry). Each of those enables
+subcommands; an app that declares none has no `device` command at all — it is an unknown command
+there (§1.3) — and prints exactly what it printed before `device` existed.
+
+The argument is split into whitespace-separated tokens as `mock`'s is (§1.2; quote a token that holds
+spaces or `;`). The first token is the subcommand. The subcommands, in their **fixed order**, and what
+enables them:
+
+| Subcommand | Enabled by |
+|---|---|
+| `permission <service> <not-determined\|granted\|denied\|limited>`, `prompt <allow\|deny\|limited>` | at least one permission service |
+| `open-url <url>` | a link handler |
+| `push <name> [tap]` | at least one push |
+| `background`, `foreground` | a scene-phase handler |
+| `relaunch` | relaunch |
+| `network <online\|offline>` | a network simulation |
+| `location <lat>,<lon>`, `location none` | location |
+| `biometry <enrolled\|unenrolled\|match\|fail>` | biometry |
+
+Every `available:` list below is the app's enabled subcommands in this order, comma-space separated.
+A successful `device` line settles and prints one step, like a command; a failed one prints the state
+and a `FAIL` line (§3.3) and changes nothing.
+
+| Case | Exit | Message |
+|---|---|---|
+| no subcommand | 2 | `usage: device <subcommand>; available: <subcommands>` |
+| an unknown first token | 2 | `unknown device command '<token>'; available: <subcommands>` |
+| a subcommand the app did not enable | 2 | `device <subcommand> is not configured by this app; available: <subcommands>` |
+| a wrong argument shape | 2 | `usage: ` and the subcommand's usage line below |
+
+Usage lines: `device permission <service> <not-determined|granted|denied|limited>; services: <s1>, <s2>`,
+`device prompt <allow|deny|limited>`, `device open-url <url>`, `device push <name> [tap]; pushes: <p1>, <p2>`,
+`device background` (likewise `foreground`, `relaunch`: any argument is a wrong shape),
+`device network <online|offline>`, `device location <lat>,<lon> or none, e.g. 52.2297,21.0122`,
+`device biometry <enrolled|unenrolled|match|fail>`.
+
+```
+$ swift run tinyctl run 'device warp'; echo "exit=$?"
+> (launch)
+  screen=items items=3 loading=false calls=items.fetch
+> device warp
+  screen=items items=3 loading=false
+  FAIL unknown device command 'warp'; available: open-url, push
+exit=2
+```
+
+**Permissions and prompts.** Each permission service — app vocabulary, like mock methods; `biometry`
+is reserved — has a status, initially `not-determined`.
+
+- `device permission <service> <status>` sets it, as a change in Settings would. An undeclared service
+  fails with exit 1, `unknown permission '<service>'; services: <s1>, <s2>`; so does a service whose
+  prompt is pending: `device permission: a prompt for <service> is pending; answer it with device prompt allow|deny|limited`.
+- When the app *asks for* a status, it gets the current one. When it *requests* a permission whose
+  status is `not-determined`, a **system prompt** opens and the request waits; otherwise the request
+  returns the current status at once, with no prompt. Prompts queue, oldest first; a request whose
+  work is cancelled withdraws its prompt.
+- While a prompt is pending, the state line carries **`prompt=<service>`** for the oldest one (§3.1).
+  A pending prompt does not hold settling: it is a dialog waiting for the user, not work in flight.
+- `device prompt allow|deny|limited` answers the oldest prompt: the status becomes `granted`, `denied`
+  or `limited`, and the request resumes with it. With no prompt pending it fails with exit 1,
+  `device prompt: no prompt is pending`; when the oldest is the biometric one,
+  `device prompt: the pending prompt is biometry; answer it with device biometry match|fail`.
+
+**`device open-url <url>`.** The token must be an absolute URL — a scheme matching
+`[A-Za-z][A-Za-z0-9+.-]*`, a colon, at least one character after it, and no whitespace anywhere,
+parsed strictly: only ASCII, `[` and `]` only around an IP literal host, `%` only before two hex
+digits, nothing percent-encoded on the way (`gadget://[::1]:8080/a`, `gadget://x/a%20b?q=1#f` and
+`gadget:x` are links; `gadget:`, `gadget://x/é`, `gadget://x/%zz` and `gadget://x/2?x=[1]` are
+not) — else the usage error. The app's link handler turns it into what the app
+does; a link it does not handle fails with exit 1, `device open-url: the app does not handle <url>`.
+
+**`device push <name> [tap]`.** Each push the app declares has a name, a line of help, what the app does
+when it arrives while the app is in front (possibly nothing), and what it does when the user taps it.
+Without `tap`, the push arrives; with `tap`, it is tapped. A second token other than `tap` is the usage
+error; an undeclared name fails with exit 1, `unknown push '<name>'; pushes: <p1>, <p2>`.
+
+```
+$ swift run tinyctl run 'device open-url tinyapp://items/2; back; device push item-updated; device push item-updated tap; device open-url https://example.com'; echo "exit=$?"
+> (launch)
+  screen=items items=3 loading=false calls=items.fetch
+> device open-url tinyapp://items/2
+  screen=items/2 title="Second item" saved=false cooldown=0
+> back
+  screen=items items=3 loading=false calls=items.fetch
+> device push item-updated
+  screen=items items=3 loading=false calls=items.fetch
+> device push item-updated tap
+  screen=items/2 title="Second item" saved=false cooldown=0
+> device open-url https://example.com
+  screen=items/2 title="Second item" saved=false cooldown=0
+  FAIL device open-url: the app does not handle https://example.com
+exit=1
+```
+
+**`device background` / `device foreground`.** The app starts in the foreground. Each tells the app it
+entered that phase (entering the phase it is in is allowed, and tells it again). **While in the
+background, a screen command fails** with exit 1:
+`<command> is unavailable: the app is in the background (device foreground first)`. Runtime commands
+still run.
+
+**`device relaunch`.** The app is quit and launched again: its state starts over from a fresh launch,
+its in-flight work (timers included) and pending prompts are gone, and it is in the foreground. What
+outlives a relaunch is what outlives one in reality: what the app's clients stored (its backends, its
+saved session), the device itself (permissions, network, location, biometry) and the clock, which keeps
+its time. The runtime settles the new launch as it settles `(launch)` (§3.4) and prints it as this
+line's step; `calls=` are the calls since the relaunch began. In the running app the reference rebuilds
+the app's store in the same process; a tool that kills the real process is a different thing (the
+reference CLI's `app launch --no-build`).
+
+**`device network online|offline`.** The device starts online. Offline, **every mocked call fails** with
+the error code the app declared for it, after its latency and before its body; it is still logged
+(`calls=`), and a fault `mock` armed (§2.3) is left for the first call back online.
+
+**`device location <lat>,<lon>` / `device location none`.** The device starts with no location. Each
+coordinate is an optional `-`, digits, and an optional `.` and digits; latitude within [-90, 90],
+longitude within [-180, 180], no spaces; anything else is the usage error. Permission to read the
+location is a separate service the app declares.
+
+**`device biometry enrolled|unenrolled|match|fail`.** Biometry starts enrolled. `enrolled` and
+`unenrolled` set enrollment. When the app asks to authenticate: unenrolled, it is told at once that
+biometry is unavailable; enrolled, a biometric prompt opens (`prompt=biometry`) and the request waits.
+`match` and `fail` answer it. With no biometric prompt as the oldest pending one, they fail with exit 1,
+`device biometry: no biometric prompt is pending`.
+
+Setting a status, the network, the location or enrollment to the value it already has is allowed.
+`device` lines are replayed like any other in a session, and a launch seed (§8.3) may contain them.
+
 ## 3. Step output format
 
 After every command the runtime waits for the app to settle (§6) and prints exactly one step: an
@@ -290,7 +430,9 @@ The state line's fields appear in this exact order, space-separated:
    (e.g. the save cooldown's countdown), not a general count of in-flight work. Counting only clock
    waits (and not, say, an in-progress navigation effect) is what lets `pending` mean "advance
    would still do something here."
-6. `settled=false` — present **only if** the runtime hit its real-time ceiling waiting for the app
+6. `prompt=<service>` — present **only if** the app is waiting on a system prompt (§2.4): a
+   permission's service, or `biometry`, for the oldest one pending. Omitted when there is none.
+7. `settled=false` — present **only if** the runtime hit its real-time ceiling waiting for the app
    to go quiet before the fields above were read (§6). A step carrying `settled=false` is also a
    failed step (§5): the printed state may not be final, so it must not be trusted or asserted on.
    This holds for every step, the `(launch)` step included (§3.4).
@@ -312,7 +454,7 @@ line per line of the failure message — for `expect`, one per unmet pair:
 ```
 > frobnicate
   screen=items items=3 loading=false
-  FAIL unknown command 'frobnicate' on items. Valid here: open <id>, refresh, retry, expect, advance, mock
+  FAIL unknown command 'frobnicate' on items. Valid here: open <id>, refresh, retry, expect, advance, mock, device
 ```
 
 ```
@@ -348,18 +490,19 @@ above is normative byte for byte; see §7.
 ## 4. `expect` semantics
 
 `expect k=v [k=v …]` checks each pair against the snapshot produced by the step that just ran: the
-active screen's path, its full summary, the calls made during that step, its error code, and its
-pending count. Every pair must match for the `expect` to pass; on failure, one message per unmet
+active screen's path, its full summary, the calls made during that step, its error code, its
+pending count, and the system prompt it is waiting on. Every pair must match for the `expect` to pass; on failure, one message per unmet
 pair is printed (as `FAIL` lines, §3.3), and the pairs that *did* match produce no output of their
 own.
 
 | Key | What it checks | Match rule |
 |---|---|---|
 | `screen` | the active screen's path | exact string equality |
-| any summary key | that key's current value | exact string equality against the printed (unquoted) value; asserting a key the current screen doesn't have is itself a failure, not a "no match": `unknown key 'foo' on items; available: screen, call, error, pending, items, loading` |
+| any summary key | that key's current value | exact string equality against the printed (unquoted) value; asserting a key the current screen doesn't have is itself a failure, not a "no match": `unknown key 'foo' on items; available: screen, call, error, pending, prompt, items, loading` |
 | `call` | whether a method was called during the step just run | membership, not equality — `expect call=items.fetch` passes if that name appears anywhere in the step's call list; repeat the key to require several, each of which must appear (`expect call=items.fetch call=items.save` fails with `expected call=items.save, got calls=items.fetch`) |
 | `error` | the screen's current error code | exact string equality; the literal value `none` means "no error is set" — this is the only place `none` is meaningful; it is never printed on the state line itself (§3.1) |
 | `pending` | the number of timers currently suspended | exact equality against the integer, compared as text, e.g. `pending=0` |
+| `prompt` | the system prompt the app is waiting on (§2.4) | exact string equality; `none` means no prompt is pending, as for `error` |
 
 A failed match prints `expected <key>=<value>, got <key>=<actual>`, except for `call`, which prints
 `expected call=<value>, got calls=<c1>,<c2>,…` (or `got calls=none` when nothing was called).
@@ -391,8 +534,8 @@ $ swift run tinyctl run 'mock items.fetch network; refresh; expect error=network
 | Code | Meaning |
 |---|---|
 | 0 | Every line in the script ran and every `expect` passed. |
-| 1 | A command or an `expect` failed. This covers: an unmet `expect` pair (including an unknown key); an unresolvable command name; a gated command that is currently disabled; a command argument that is missing, unexpected, invalid, or inapplicable right now; a `mock` naming an unknown method or an error code not valid for that method; and any step that did not settle within its time limit (`settled=false`), the `(launch)` step included. |
-| 2 | A usage or parse error: an unterminated quote (§1.4); `expect` with no argument or a malformed `key=value` token; `advance` with a missing, unparseable or unrepresentable duration, one that would take the virtual clock past its limit (§2.2), or one issued where there is no clock the runtime controls; `mock` with a wrong number of tokens. In every case here, the *shape* of the line itself was wrong, before anything was resolved against the app's current state. The same code covers a tool's own malformed command line — a missing argument, an unknown option or subcommand — whatever code its argument parser would use by default. |
+| 1 | A command or an `expect` failed. This covers: an unmet `expect` pair (including an unknown key); an unresolvable command name; a gated command that is currently disabled; a command argument that is missing, unexpected, invalid, or inapplicable right now; a `mock` naming an unknown method or an error code not valid for that method; a `device` line naming an undeclared service or push, a link the app does not handle, or answering a prompt that is not pending (§2.4); a screen command while the app is in the background; and any step that did not settle within its time limit (`settled=false`), the `(launch)` step included. |
+| 2 | A usage or parse error: an unterminated quote (§1.4); `expect` with no argument or a malformed `key=value` token; `advance` with a missing, unparseable or unrepresentable duration, one that would take the virtual clock past its limit (§2.2), or one issued where there is no clock the runtime controls; `mock` with a wrong number of tokens; `device` with no subcommand, an unknown or unconfigured one, or a wrongly shaped argument (§2.4). In every case here, the *shape* of the line itself was wrong, before anything was resolved against the app's current state. The same code covers a tool's own malformed command line — a missing argument, an unknown option or subcommand — whatever code its argument parser would use by default. |
 | 3 | An internal or environment error: a failure outside the script engine itself. A script or scenario file that does not exist or cannot be read; no scenario files where a tool was told to look for them; no repository root to resolve paths against; a host process that could not be built or started; and similar environment problems. Not something a script's own lines can trigger. |
 
 A script stops at its first failing line; exit code 0 requires every line to have run.
@@ -622,8 +765,8 @@ Connection: close
 **The JSON form** of `POST /run` is an array with one object per step. Each has `command`
 (string), `screen` (string), `summary` (an object of string values — which loses the order of
 §3.1, see Open Questions), `calls` (array of strings), `error` (string, or `null`), `pending`
-(integer), `settled` (boolean), `ok` (boolean), and `message` (string; present only when the step
-has one, such as a `FAIL` reason). The array has no place for a failure that belongs to no step, so
+(integer), `prompt` (string; present only while a prompt is pending, §2.4), `settled` (boolean),
+`ok` (boolean), and `message` (string; present only when the step has one, such as a `FAIL` reason). The array has no place for a failure that belongs to no step, so
 when the script did not parse, the body is instead the object above: the message under `error`,
 and the steps — none — under `steps`.
 
@@ -649,6 +792,10 @@ and the steps — none — under `steps`.
   does not send them — except during a launch seed (§8.3), when there are no views yet.
 - **State carries over.** Each `POST /run` continues from the app's current state; nothing is reset
   between requests.
+- **`device` is simulated in the app, as headlessly.** The bridge's runtime changes the same in-process
+  device the app's clients read, so no line touches the real OS: no real permission changes and no
+  real dialog appears. `device relaunch` replaces the app's store in place, and the app's views show the
+  new one and send their own appearance.
 
 ### 8.6 Launch state
 
@@ -750,6 +897,6 @@ choice:
    format (§3.1) treats as meaningful. Is that an intentional simplification for JSON consumers, or
    an oversight that a port's own machine-readable form should avoid repeating?
 6. **Literal composition of the "valid here" list.** §1.3's unknown-command message always appends
-   exactly `expect, advance, mock` after the screen's own commands. Is a port required to reproduce
+   exactly `expect, advance, mock` (and `device`, where the app has it) after the screen's own commands. Is a port required to reproduce
    that exact tail, or is the actual requirement just "list the commands that would currently
    resolve, including the runtime ones," with the reference's specific wording being incidental?

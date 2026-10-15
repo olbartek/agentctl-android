@@ -17,6 +17,9 @@ class AppStore private constructor(activity: Activity) {
     val store: AgentStore<AppFeature.State, AppFeature.Action> =
         AgentShop.store(AgentEnvironment.system(MainScope()), SessionStorage.file(File(activity.filesDir, "session.properties")))
 
+    /** The one store: a release build has no `device relaunch`. */
+    val stores: StateFlow<AgentStore<AppFeature.State, AppFeature.Action>> = MutableStateFlow(store)
+
     val isReady: StateFlow<Boolean> = MutableStateFlow(true)
 
     companion object {

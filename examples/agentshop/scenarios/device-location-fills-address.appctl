@@ -1,0 +1,18 @@
+# "Use my location" during onboarding asks for the location permission, then fills the address from where the
+# device is.
+device location 37.3349,-122.009
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+expect screen=onboarding/address street="" canContinue=false
+use-location
+expect prompt=location
+device prompt allow
+expect street="1 Apple Park Way" city=Cupertino zip=95014 prompt=none error=none
+name "Nina Novak"
+continue
+expect screen=onboarding/notifications

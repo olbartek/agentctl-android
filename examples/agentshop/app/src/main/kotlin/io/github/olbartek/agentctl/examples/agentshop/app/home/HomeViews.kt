@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,6 +32,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -45,8 +48,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import io.github.olbartek.agentctl.examples.agentshop.app.design.ErrorView
 import io.github.olbartek.agentctl.examples.agentshop.app.design.EmptyStateView
+import io.github.olbartek.agentctl.examples.agentshop.app.design.ErrorView
 import io.github.olbartek.agentctl.examples.agentshop.app.design.IconAction
 import io.github.olbartek.agentctl.examples.agentshop.app.design.InlineError
 import io.github.olbartek.agentctl.examples.agentshop.app.design.LoadingView
@@ -58,6 +61,7 @@ import io.github.olbartek.agentctl.examples.agentshop.app.design.StackHost
 import io.github.olbartek.agentctl.examples.agentshop.app.design.Typography
 import io.github.olbartek.agentctl.examples.agentshop.app.design.capitalized
 import io.github.olbartek.agentctl.examples.agentshop.app.design.message
+import io.github.olbartek.agentctl.examples.agentshop.app.design.onOffValue
 import io.github.olbartek.agentctl.examples.agentshop.app.design.screenTag
 import io.github.olbartek.agentctl.examples.agentshop.app.design.summaryValue
 import io.github.olbartek.agentctl.examples.agentshop.app.shop.CartView
@@ -265,8 +269,26 @@ private fun LabeledRow(label: String, value: String, valueModifier: Modifier = M
     }
 }
 
+/** The reference's `Toggle`: a label and a switch on one row, `on`/`off` for UI tests. */
+@Composable
+private fun SwitchRow(label: String, isOn: Boolean, testTag: String, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .testTag(testTag)
+            .toggleable(value = isOn, role = Role.Switch, onValueChange = onChange)
+            .onOffValue(isOn)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = Typography.body.copy(color = Palette.textBlack), modifier = Modifier.weight(1f))
+        Switch(checked = isOn, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = Palette.brand))
+    }
+}
+
 @Composable
 fun ProfileView(state: Profile.State, send: (Profile.Action) -> Unit) {
+    LaunchedEffect(Unit) { send(Profile.Action.OnAppear) }
     Column(Modifier.fillMaxSize().screenTag(ProfileAgent.screenPath(state)).background(Palette.surfaceTint)) {
         NavBar("Profile")
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -274,6 +296,21 @@ fun ProfileView(state: Profile.State, send: (Profile.Action) -> Unit) {
                 LabeledRow("Name", state.user.name, Modifier.summaryValue("Profile.name", state.user.name))
                 Rule()
                 LabeledRow("Email", state.user.email, Modifier.summaryValue("Profile.email", state.user.email))
+            }
+            Section {
+                SwitchRow("Order updates", state.orderUpdates, "Profile.order-updates") { send(Profile.Action.OrderUpdatesToggled(it)) }
+                Rule()
+                SwitchRow("Sign in with Face ID", state.faceID, "Profile.face-id") { send(Profile.Action.FaceIDToggled(it)) }
+            }
+            state.error?.let { error ->
+                InlineError(
+                    when (error) {
+                        Profile.Error.NOTIFICATIONS_DENIED -> "Notifications are off for AgentShop. Turn them on in Settings."
+                        Profile.Error.BIOMETRY_FAILED -> "Face ID didn't recognize you."
+                        Profile.Error.BIOMETRY_UNAVAILABLE -> "Face ID isn't set up on this device."
+                    },
+                    code = error.code,
+                )
             }
             Section {
                 Text(

@@ -1,0 +1,11 @@
+# A permission changed in Settings: denied there, no prompt appears; granted there, order updates turn on at once.
+device permission notifications denied
+login-as bob
+tab profile
+order-updates on
+expect orderUpdates=off error=notificationsDenied prompt=none
+device permission notifications granted
+order-updates on
+expect orderUpdates=on error=none prompt=none
+order-updates off
+expect orderUpdates=off

@@ -10,6 +10,7 @@ import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.appending
 import io.github.olbartek.agentctl.examples.agentshop.clients.AccountClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.LocationClient
 import io.github.olbartek.agentctl.examples.agentshop.models.Coded
 import io.github.olbartek.agentctl.examples.agentshop.models.Session
 import io.github.olbartek.agentctl.next
@@ -51,7 +52,8 @@ object OnboardingFlow {
         }
     }
 
-    fun reducer(accountClient: AccountClient): Reducer<State, Action> {
+    fun reducer(accountClient: AccountClient, locationClient: LocationClient = LocationClient()): Reducer<State, Action> {
+        val addressForm = AddressForm.reducer(locationClient)
         val notifications = Notifications.reducer(accountClient)
         return Reducer { state, action ->
             // The step's own reducer first, then the flow's.
@@ -60,7 +62,7 @@ object OnboardingFlow {
                     .let { Next(state.copy(welcome = it.state), it.effect.map { a -> Action.Welcome(a) }) }
                 is Action.Interests -> Interests.reducer.reduce(state.interests, action.action)
                     .let { Next(state.copy(interests = it.state), it.effect.map { a -> Action.Interests(a) }) }
-                is Action.Address -> AddressForm.reducer.reduce(state.address, action.action)
+                is Action.Address -> addressForm.reduce(state.address, action.action)
                     .let { Next(state.copy(address = it.state), it.effect.map { a -> Action.Address(a) }) }
                 is Action.Notifications -> notifications.reduce(state.notifications, action.action)
                     .let { Next(state.copy(notifications = it.state), it.effect.map { a -> Action.Notifications(a) }) }

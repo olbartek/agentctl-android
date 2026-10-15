@@ -1,0 +1,6 @@
+# A push notification: received while the app is in front, `item-updated` reloads the list; tapped, it opens the
+# item it is about, on top of whatever is shown.
+device push item-updated
+expect screen=items items=3 call=items.fetch
+device push item-updated tap
+expect screen=items/2 title="Second item"

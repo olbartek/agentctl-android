@@ -7,15 +7,15 @@
 > submit
   screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.login,session.save,account.fetchProfile,catalog.fetchProducts
 > tab profile
-  screen=home/profile name=Alice email=alice@example.com alert=none
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=none
 > logout
-  screen=home/profile name=Alice email=alice@example.com alert=logout
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=logout
 > expect alert=logout
-  screen=home/profile name=Alice email=alice@example.com alert=logout
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=logout
 > dismiss
-  screen=home/profile name=Alice email=alice@example.com alert=none
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=none
 > expect screen=home/profile alert=none
-  screen=home/profile name=Alice email=alice@example.com alert=none
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=none
 > tab shop
   screen=home/shop products=12 filter=all query="" sort=featured loading=false
 > expect screen=home/shop

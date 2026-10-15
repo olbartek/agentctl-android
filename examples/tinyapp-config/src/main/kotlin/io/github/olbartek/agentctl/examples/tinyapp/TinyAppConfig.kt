@@ -1,5 +1,7 @@
 package io.github.olbartek.agentctl.examples.tinyapp
 
+import io.github.olbartek.agentctl.AgentDeviceConfig
+import io.github.olbartek.agentctl.AgentPush
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
@@ -30,6 +32,33 @@ object TinyAppConfig {
 
     /** Every method `mock <method> <error>` accepts. The runner does not know the app's clients, so the config tells it. */
     val mockMethods: List<MockMethod> get() = ItemsClient.mockMethods
+
+    /**
+     * What of the device scripts can drive: links that open an item, and one push. TinyApp has no permission,
+     * lifecycle, network, location or biometry of its own; AgentShop shows those.
+     */
+    val device: AgentDeviceConfig<TinyRoot.Action>
+        get() = AgentDeviceConfig(
+            // `tinyapp://items/<id>` opens that item, on top of whatever is shown, as tapping it in the list would.
+            openUrl = { url ->
+                val path = url.path?.split("/")?.filter { it.isNotEmpty() }
+                // ASCII digits only, as Swift's `Int(_:)` reads them; `toIntOrNull` alone takes any Unicode digit.
+                val id = path?.singleOrNull()?.takeIf { it.matches(Regex("[+-]?[0-9]+")) }?.toIntOrNull()
+                if (url.scheme == "tinyapp" && url.host == "items" && id != null) {
+                    TinyRoot.Action.Items(Items.Action.OpenTapped(id))
+                } else {
+                    null
+                }
+            },
+            pushes = listOf(
+                AgentPush(
+                    "item-updated",
+                    help = "Item 2 was updated.",
+                    received = TinyRoot.Action.Items(Items.Action.Refresh),
+                    opened = TinyRoot.Action.Items(Items.Action.OpenTapped(2)),
+                ),
+            ),
+        )
 
     /** The prose around the generated command reference. Everything else in that document comes from the registry. */
     val docsText = DocsText(
@@ -94,6 +123,7 @@ object TinyAppConfig {
                 appScripts = listOf("open 2; expect saved=false", "save"),
             ),
             mockMethods = mockMethods,
+            deviceConfig = device,
             docsText = docsText,
             screens = screens,
             makeHeadless = { headless() },
@@ -103,9 +133,10 @@ object TinyAppConfig {
         )
 
     /** A deterministic store: a virtual clock, a fixed date, and everything else [HeadlessHost] pins. */
-    fun headless(): HeadlessHost<TinyRoot.State, TinyRoot.Action> = HeadlessHost(TinyRootAgent, mockMethods, TinyApp::store)
+    fun headless(device: AgentDeviceConfig<TinyRoot.Action> = this.device): HeadlessHost<TinyRoot.State, TinyRoot.Action> =
+        HeadlessHost(TinyRootAgent, mockMethods, device, TinyApp::store)
 
     /** The store the app would run in a debug build behind the bridge: real time and real mock latency. */
     fun live(latency: MockLatency, dispatcher: CoroutineDispatcher): LiveHost<TinyRoot.State, TinyRoot.Action> =
-        LiveHost(TinyRootAgent, mockMethods, latency, dispatcher, TinyApp::store)
+        LiveHost(TinyRootAgent, mockMethods, latency, dispatcher, device, TinyApp::store)
 }

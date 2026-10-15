@@ -1,0 +1,3 @@
+# Signed out, a link is ignored: the login screen stays as it was.
+device open-url agentshop://order/1003
+expect screen=auth/login email="" error=none

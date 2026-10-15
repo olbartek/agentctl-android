@@ -1,0 +1,9 @@
+# The order-shipped push: in front, it loads the orders again; tapped, it opens order 1002.
+login-as alice
+tab orders
+expect screen=home/orders orders=3
+device push order-shipped
+expect screen=home/orders call=orders.fetchOrders
+tab shop
+device push order-shipped tap
+expect screen=home/orders/1002 status=shipped

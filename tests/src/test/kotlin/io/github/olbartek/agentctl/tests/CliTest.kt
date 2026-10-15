@@ -79,7 +79,7 @@ class CliTest {
         assertEquals("FAIL nonexistent\n  cannot read /nonexistent.appctl\n0 passed, 1 failed\n", missing.out)
         val all = tinyctl("test")
         assertEquals(0, all.status, all.combined)
-        assertTrue(all.out.endsWith("3 passed, 0 failed\n"), all.out)
+        assertTrue(all.out.endsWith("5 passed, 0 failed\n"), all.out)
     }
 
     @Test

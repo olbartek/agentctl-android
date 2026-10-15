@@ -468,6 +468,7 @@ exit=1
 | `check` | The verification ladder below; `--ui` adds its last two rungs. |
 | `app launch` / `app run` / `app state` / `app screens` | The same commands, against the real app on a device or emulator, through the in-app bridge. `app launch` picks a free port and records it in `<outputPath>/bridge.json`, which the others read. |
 | `app screenshot <png>` / `app record start <mp4>` / `app record stop` / `app statusbar clean\|reset` / `app info` | The device itself, for demos: a screenshot; a recording that runs across other commands until `stop` (only the recorder `start` began is stopped; a still ending is held until the stop); a 9:41 status bar with full Wi-Fi and battery (SystemUI's demo mode), or the device's own; the installed app's ID, version and build as one JSON line. Each acts on `--device`, else the last launch's device (`bridge.json`), else the config's, and never boots an emulator. |
+| `app permission grant\|revoke\|reset <service>` / `app openurl <url>` / `app location <lat>,<lon>` / `app appearance light\|dark` | The real OS, beside the script's simulated `device`: `pm grant\|revoke` (a revoke kills the app; `reset` resets all of its permissions), a link through `am start -a android.intent.action.VIEW`, the emulator's location (`adb emu geo fix`; a phone has none to set), dark mode (`cmd uimode night`). `app push` exists for parity and always fails: nothing delivers a push to one app on Android. Same device resolution as above. |
 | `app test [files…]` | The scenario files, in the real app on a device: one fresh launch each, one PASS/FAIL/SKIP line each. `--record <mp4>` records the run, `--step-delay <s>` sends a line at a time so the recording can be followed. |
 
 Exit codes are part of the contract:
@@ -479,12 +480,14 @@ Exit codes are part of the contract:
 | `2` | A usage or parse error, the CLI's own command line included. |
 | `3` | An internal or environment error: a scenario file that does not exist, no scenario files to run, no repo root, a build that failed. |
 
-Three runtime commands work on every screen:
+Three runtime commands work on every screen, and a fourth when the app configures a device:
 
 - `expect k=v [k=v …]`;
 - `advance <duration>`: the virtual clock headlessly; in the running app, the app's real-time clock jumped forward
   (see [the bridge](#the-in-app-bridge));
-- `mock <client.method> <error>`.
+- `mock <client.method> <error>`;
+- `device <subcommand>`: the simulated device (permissions and their prompts, links, pushes, background, relaunch,
+  network, location, biometry), when the app configures one; see [the device environment](#the-device-environment).
 
 Headless runs are deterministic by construction, so the same script always prints the same bytes. That makes step
 output usable as a committed fixture. `HeadlessHost` hands your store exactly this environment:
@@ -497,10 +500,78 @@ output usable as a committed fixture. `HeadlessHost` hands your store exactly th
 | `random` | SplitMix64, seed 0 |
 | `zone`, `locale` | UTC, `en_US_POSIX` |
 | `mocks` | a fresh call log and fault registry, zero latency |
+| `device` | a driven `AgentDevice`: online, no location, biometry enrolled, every permission not determined |
 
 **Nothing else is pinned.** An app that reads `System.currentTimeMillis()`, `Locale.getDefault()` or switches to
 `Dispatchers.IO` around the environment is not deterministic headlessly. If you need more, build it into your store
 from the environment inside the `makeStore` function you give `HeadlessHost`.
+
+## The device environment
+
+Mobile apps react to the device as much as to taps: a permission the user denied, a system prompt waiting for an
+answer, a deep link, a push, the app going to the background, the network dropping, a location fix, biometric
+unlock. A script drives all of these with one runtime command, `device`, the same headlessly and in the running app.
+The device is **simulated in the app's process**: your permission, connectivity, location and biometry clients read
+AgentCtl's `AgentDevice` (`environment.device`) in their mock implementations, as your backends route through
+`environment.mocks.call`. So no line touches the real OS: no real dialog, and nothing that kills the app or its
+bridge. (Driving the real OS cannot do this: `pm revoke` kills the app, nothing delivers a push to one app, and the
+bridge cannot answer a system dialog. The `app` wrappers in the last column do drive the real device, for demos and
+real-OS checks.)
+
+| Capability | Script command | What your app wires | What a step shows | Real OS (live only) |
+|---|---|---|---|---|
+| Permissions | `device permission <service> <not-determined\|granted\|denied\|limited>` | `permissions = listOf("notifications", …)`; fakes call `device.permission(service)` / `device.requestPermission(service)` (suspend) | what your screen's summary shows | `app permission grant\|revoke\|reset <permission>` |
+| System prompts | `device prompt <allow\|deny\|limited>` | nothing more: a request while `not-determined` shows the prompt | `prompt=<service>` until answered; `expect prompt=…` | — |
+| Deep and app links | `device open-url <url>` | `openUrl = { uri -> … }` returns the root action, or `null` for a link you don't handle | the screen the link opens | `app openurl <url>` (the app declares an intent filter for the scheme) |
+| Push notifications | `device push <name> [tap]` | `pushes = listOf(AgentPush(name, help, received, opened))` | what receiving or tapping it does | — (`app push` exits 2 on Android) |
+| Background / foreground | `device background`, `device foreground` | `scenePhase = { phase -> … }` returns the root action | screen commands fail while in the background | — |
+| Relaunch | `device relaunch` | `relaunch = true`; build the hosts with an `AppFactory` so the clients survive | the fresh launch; what your clients stored, the device and the clock survive | `app launch --no-build` (the real process) |
+| Network | `device network <online\|offline>` | `offlineErrorCode = "network"`; observers collect `device.onlineUpdates()` | offline, every mocked call fails with that code | — |
+| Location | `device location <lat>,<lon>\|none` | `location = true`; fakes read `device.location` / `device.locationUpdates()` | what your screen does with it | `app location <lat>,<lon>` (an emulator only) |
+| Biometry | `device biometry <enrolled\|unenrolled\|match\|fail>` | `biometry = true`; fakes call `device.authenticateBiometry()` (suspend) | `prompt=biometry` until `match` or `fail` | — |
+| Appearance | — | — | — | `app appearance light\|dark` |
+
+Every capability is opt-in: an app's `AgentDeviceConfig` (in `AppCtlConfig(deviceConfig = …)` and both hosts)
+enables the subcommands it lists, and an app that enables none has no `device` command and prints exactly what it did
+before. From AgentShop's
+[`AgentShopConfig.kt`](examples/agentshop/ctl/src/main/kotlin/io/github/olbartek/agentctl/examples/agentshop/ctl/AgentShopConfig.kt)
+and [`DeviceClients.kt`](examples/agentshop/shop/src/main/kotlin/io/github/olbartek/agentctl/examples/agentshop/clients/DeviceClients.kt):
+
+```kotlin
+AgentDeviceConfig(
+    permissions = listOf("notifications", "location"),
+    openUrl = AppFeature::actionOpening,
+    pushes = listOf(
+        AgentPush("order-shipped", help = "Order #1002 has shipped.", received = AppFeature.Action.OrderPushReceived,
+            opened = AppFeature.Action.DeepLinkOpened(DeepLink.Order(1002))),
+        AgentPush("promo", help = "A new promo code: SAVE10.", opened = AppFeature.Action.DeepLinkOpened(DeepLink.Shop)),
+    ),
+    scenePhase = { AppFeature.Action.ScenePhaseChanged(it) },
+    relaunch = true,
+    offlineErrorCode = "network",
+    location = true,
+    biometry = true,
+)
+
+// The notifications client's mock: the request waits for `device prompt allow|deny` while not-determined.
+fun live(device: AgentDevice): NotificationsClient =
+    NotificationsClient(requestAuthorization = { device.requestPermission("notifications") })
+```
+
+A refused permission, from AgentShop:
+
+```
+$ ./appctl run "login-as alice; tab profile; order-updates on; device prompt deny"
+…
+> order-updates on
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=none prompt=notifications
+> device prompt deny
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=none error=notificationsDenied
+```
+
+Outside a host (a preview, a release build) the device is *undriven*: online, every request granted at once, so
+nothing waits for a prompt no one can answer. The exact grammar, messages and exit codes are
+[CONTRACT.md §2.4](CONTRACT.md#24-device-subcommand-arguments).
 
 ## The verification ladder
 
@@ -566,6 +637,7 @@ fun everyCommandIsUsedByAScenario() {
 - `unusedCommands()`: a command no scenario ever sends.
 - `undocumentedSummaryKeys()`: a key a run emits that the screen's `summaryKeys` does not list.
 - `unvisitedScreens()`: a documented screen path no scenario reaches. An `<id>` segment matches any concrete one.
+- `unusedDeviceCommands()`: a `device` subcommand, or a push, the app configures and no scenario sends.
 
 The constructor throws `NoScenariosFound` when the directory holds no `*.appctl` files; otherwise all three guards
 would pass having examined nothing.
@@ -761,7 +833,7 @@ The wire protocol (routes, the `X-Appctl-Exit` header, the JSON form) is
 implementation. It specifies:
 
 - the script language and command resolution;
-- the three runtime commands;
+- the runtime commands (`expect`, `advance`, `mock`, and `device` when the app configures one);
 - the exact step output and the exit codes;
 - the determinism requirements;
 - the bridge protocol.
@@ -813,6 +885,21 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   test's source file (`#filePath`). Its checks block (`runBlocking`) where the reference's are `async`, need no
   serialized suite (the reference turns a process-wide executor on for each run), and compare the final state dumps
   as they are, since pushed screens take their ids from the state, not from a per-process counter.
+- The simulated device (§2.4) is `AgentEnvironment.device`, where the reference's is the `\.agentDevice` dependency;
+  its configuration is `AppCtlConfig.deviceConfig`, since `device` there already names the `adb` device. Its
+  requests are `suspend` functions and its updates `Flow`s, where the reference's are `async` and `AsyncStream`s; a
+  cancelled request throws `CancellationException` rather than returning. A link reaches `openUrl` as a
+  `java.net.URI`, where the reference's `openURL` gets a `URL`; both parse it as strictly (CONTRACT.md §2.4).
+  `device relaunch` builds the next store on a
+  fresh `scope` (cancelling the old one ends the old store's effects), where the reference rebuilds the store over
+  the same dependencies. A host built with an `AppFactory` keeps what `prepare` built (the clients, and what they
+  stored) as the reference does; one built with a plain `makeStore` runs all of it again. In the app it is the same
+  process, and `AgentLaunch.stores` gives the root the new store.
+- The real-OS `app` commands use `adb`: `app permission` takes an Android permission (`CAMERA` is
+  `android.permission.CAMERA`) and its `reset` resets every permission of the app (`pm reset-permissions -p`); `app
+  location` needs an emulator (exit 3 on a phone) and `app location clear` is a usage error (exit 2: an emulator
+  keeps its last location); `app push` is always a usage error (exit 2), since nothing delivers a push to one app;
+  `app openurl` fails when no activity takes the link, which `am start` reports only in its output.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.
@@ -825,8 +912,8 @@ screens, one mocked client, three scenarios, its own `tinyctl` CLI and a committ
 [`examples/tinyapp-android`](examples/tinyapp-android) runs it as an Android app with the bridge.
 
 [`examples/agentshop`](examples/agentshop) is the showcase: a real Compose app (sign-in, onboarding, a shop with a
-cart and checkout), the port of the iOS one, with 105 scenarios that print the same bytes on both ports, UI tests
-generated from them, and the benchmark behind [the numbers above](#how-much-faster). See
+cart and checkout, and the simulated device: permissions, links, pushes, relaunch, offline, Face ID), the port of the
+iOS one, with 123 scenarios that print the same bytes on both ports, UI tests generated from them, and the benchmark behind [the numbers above](#how-much-faster). See
 [its README](examples/agentshop/README.md) and [the app, screen by screen](examples/agentshop/docs/APP.md).
 
 ## Building this repository

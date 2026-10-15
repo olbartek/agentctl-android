@@ -20,7 +20,7 @@ class CoverageTest {
     @Test
     fun everyCommandIsUsedByAScenario() {
         assertEquals(emptyList(), coverage().unusedCommands())
-        assertEquals(3, coverage().scenarioCount)
+        assertEquals(5, coverage().scenarioCount)
     }
 
     @Test

@@ -1,6 +1,8 @@
 package io.github.olbartek.agentctl.examples.agentshop.ctl
 
+import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentEnvironment
+import io.github.olbartek.agentctl.AgentPush
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
@@ -15,8 +17,10 @@ import io.github.olbartek.agentctl.examples.agentshop.clients.CatalogClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.MockAccounts
 import io.github.olbartek.agentctl.examples.agentshop.clients.OrdersClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.SessionStorage
+import io.github.olbartek.agentctl.examples.agentshop.models.DeepLink
 import io.github.olbartek.agentctl.examples.agentshop.models.ScheduledFaults
 import io.github.olbartek.agentctl.runtime.AppCheck
+import io.github.olbartek.agentctl.runtime.AppFactory
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
 import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.HeadlessHost
@@ -54,6 +58,31 @@ object AgentShopConfig {
         get() = AuthClient.mockMethods + AccountClient.mockMethods + CatalogClient.mockMethods + CartClient.mockMethods +
             OrdersClient.mockMethods
 
+    /**
+     * What of the device scripts can drive (`device …`): the notifications and location permissions, links, two
+     * pushes, the scene phase, relaunch, the network (offline, every call fails with `network`), the location and
+     * Face ID.
+     */
+    val device: AgentDeviceConfig<AppFeature.Action>
+        get() = AgentDeviceConfig(
+            permissions = listOf("notifications", "location"),
+            openUrl = AppFeature::actionOpening,
+            pushes = listOf(
+                AgentPush(
+                    "order-shipped",
+                    help = "Order #1002 has shipped.",
+                    received = AppFeature.Action.OrderPushReceived,
+                    opened = AppFeature.Action.DeepLinkOpened(DeepLink.Order(1002)),
+                ),
+                AgentPush("promo", help = "A new promo code: SAVE10.", opened = AppFeature.Action.DeepLinkOpened(DeepLink.Shop)),
+            ),
+            scenePhase = { AppFeature.Action.ScenePhaseChanged(it) },
+            relaunch = true,
+            offlineErrorCode = "network",
+            location = true,
+            biometry = true,
+        )
+
     /** The host-written prose in `agent-commands.md`. */
     val docsText: DocsText = DocsText(
         title = "Agent commands",
@@ -66,6 +95,7 @@ object AgentShopConfig {
             "$INVOCATION run \"mock orders.fetchOrders network; login-as alice; retry\"",
             "$INVOCATION run --session .appctl/s.session \"register\"   # keep going from the same state next time",
             "$INVOCATION app launch --no-build --seed \"login-as bob; tab profile\"   # the real app, already there",
+            "$INVOCATION run \"login-as alice; tab profile; order-updates on; device prompt deny\"   # a refused permission",
         ),
         invocation = INVOCATION,
         // A real step from `./appctl run "…; submit"` on the login screen, so the syntax section shows AgentShop's own
@@ -127,6 +157,7 @@ object AgentShopConfig {
         appCheck = AppCheck(seed = "login-as alice", scenario = "shop-order-cancel", expectScreen = "home/orders"),
         help = help,
         mockMethods = mockMethods,
+        deviceConfig = device,
         docsText = docsText,
         screens = screens,
         makeHeadless = { headless() },
@@ -138,9 +169,11 @@ object AgentShopConfig {
      * A deterministic store: fresh in-memory backends and session, and the headless host's pinned environment. The
      * auth server measures codes' age on the host's virtual clock, so `advance 5m` expires them.
      */
-    fun headless(): HeadlessHost<AppFeature.State, AppFeature.Action> = HeadlessHost(AppFeatureAgent, mockMethods) { environment ->
-        AgentShop.store(environment, SessionStorage.inMemory(), uptime = virtualUptime(environment))
-    }
+    fun headless(): HeadlessHost<AppFeature.State, AppFeature.Action> =
+        HeadlessHost(AppFeatureAgent, mockMethods, device, AppFactory { environment ->
+            // Once per host: `device relaunch` builds the next store on the same session storage and backends.
+            AgentShop.prepare(environment, SessionStorage.inMemory(), uptime = virtualUptime(environment))
+        })
 
     /**
      * The store the debug app runs behind its bridge: real time, real mock latency, the app's session storage and
@@ -151,9 +184,10 @@ object AgentShopConfig {
         dispatcher: CoroutineDispatcher,
         sessionStorage: SessionStorage,
         scheduledFaults: ScheduledFaults = ScheduledFaults(),
-    ): LiveHost<AppFeature.State, AppFeature.Action> = LiveHost(AppFeatureAgent, mockMethods, latency, dispatcher) { environment ->
-        AgentShop.store(environment, sessionStorage, scheduledFaults)
-    }
+    ): LiveHost<AppFeature.State, AppFeature.Action> =
+        LiveHost(AppFeatureAgent, mockMethods, latency, dispatcher, device, AppFactory { environment ->
+            AgentShop.prepare(environment, sessionStorage, scheduledFaults)
+        })
 
     /** The headless host's virtual time, which only `advance` moves. */
     private fun virtualUptime(environment: AgentEnvironment): () -> Duration {

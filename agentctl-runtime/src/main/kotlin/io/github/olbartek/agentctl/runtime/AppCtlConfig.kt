@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.runtime
 
+import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.CLIName
 import io.github.olbartek.agentctl.DocsRenderer
 import io.github.olbartek.agentctl.DocsText
@@ -104,6 +105,12 @@ public class AppCtlConfig<S, A>(
     public val appCheck: AppCheck = AppCheck(),
     public val help: HelpExamples = HelpExamples(),
     public val mockMethods: List<MockMethod>,
+    /**
+     * What of the simulated device scripts can drive (`device`), for `screens`, the docs and the coverage guards.
+     * Hand the same value to the hosts [makeHeadless] and [makeLive] build, as with [mockMethods]. (Named so beside
+     * [device], the `adb` device; the reference calls it `device`.)
+     */
+    public val deviceConfig: AgentDeviceConfig<A> = AgentDeviceConfig.none(),
     public val docsText: DocsText,
     public val screens: List<ScreenDoc>,
     /** A fresh deterministic store: `run`, `test`, `check` and the host's own tests. */
@@ -118,7 +125,7 @@ public class AppCtlConfig<S, A>(
 
     /** The generated command reference, exactly as the CLI's `docs` writes it to [docsPath]. */
     public val docsMarkdown: String
-        get() = DocsRenderer.render(screens, mockMethods, docsText)
+        get() = DocsRenderer.render(screens, mockMethods, docsText, deviceConfig.surface)
 
     /** Runs each scenario file against its own fresh runner. */
     public suspend fun runScenarios(files: List<java.io.File>): List<ScenarioResult> =

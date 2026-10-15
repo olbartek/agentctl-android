@@ -3,6 +3,10 @@ package io.github.olbartek.agentctl.examples.agentshop.app
 import io.github.olbartek.agentctl.AgentClock
 import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.Store
+import io.github.olbartek.agentctl.examples.agentshop.clients.BiometricsClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.FaceIDVault
+import io.github.olbartek.agentctl.examples.agentshop.clients.LocationClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.NotificationsClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.AccountBackend
 import io.github.olbartek.agentctl.examples.agentshop.clients.AccountClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.AuthBackend
@@ -18,6 +22,7 @@ import io.github.olbartek.agentctl.examples.agentshop.models.ShopCalls
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.toKotlinDuration
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * Everything AgentShop's reducers take from the outside world: the Kotlin counterpart of the reference's TCA
@@ -35,6 +40,11 @@ class ShopDependencies(
     val accountClient: AccountClient = AccountClient(),
     val catalogClient: CatalogClient = CatalogClient(),
     val cartClient: CartClient = CartClient(),
+    val notificationsClient: NotificationsClient = NotificationsClient(),
+    val locationClient: LocationClient = LocationClient(),
+    val biometricsClient: BiometricsClient = BiometricsClient(),
+    /** The account that signs in with Face ID: it outlives a log-out and a relaunch. */
+    val faceIDVault: FaceIDVault = FaceIDVault(),
 ) {
     companion object {
         /**
@@ -62,6 +72,9 @@ class ShopDependencies(
                 accountClient = AccountClient.live(calls, sessionStorage, AccountBackend()),
                 catalogClient = CatalogClient.live(calls),
                 cartClient = CartClient.live(calls),
+                notificationsClient = NotificationsClient.live(environment.device),
+                locationClient = LocationClient.live(environment.device),
+                biometricsClient = BiometricsClient.live(environment.device),
             )
         }
 
@@ -81,10 +94,22 @@ object AgentShop {
         sessionStorage: SessionStorage,
         scheduledFaults: ScheduledFaults = ScheduledFaults(),
         uptime: () -> Duration = ShopDependencies.uptime(environment.clock),
-    ): Store<AppFeature.State, AppFeature.Action> = store(
-        environment,
-        ShopDependencies.mocked(environment, sessionStorage, scheduledFaults, uptime),
-    )
+    ): Store<AppFeature.State, AppFeature.Action> = prepare(environment, sessionStorage, scheduledFaults, uptime)(environment.scope)
+
+    /**
+     * The mocked clients and backends, built once, and what builds a store on them in a scope: the store at launch, and
+     * a fresh one at each `device relaunch`, which keeps the clients (the saved session, the orders placed, the Face ID
+     * account) as a relaunched app keeps what it stored.
+     */
+    fun prepare(
+        environment: AgentEnvironment,
+        sessionStorage: SessionStorage,
+        scheduledFaults: ScheduledFaults = ScheduledFaults(),
+        uptime: () -> Duration = ShopDependencies.uptime(environment.clock),
+    ): (CoroutineScope) -> Store<AppFeature.State, AppFeature.Action> {
+        val dependencies = ShopDependencies.mocked(environment, sessionStorage, scheduledFaults, uptime)
+        return { scope -> Store(initialState = AppFeature.State.Launching, reducer = AppFeature.reducer(dependencies), scope = scope) }
+    }
 
     /** The store with explicit dependencies, for tests that stub a client. It starts on the launching screen. */
     fun store(environment: AgentEnvironment, dependencies: ShopDependencies): Store<AppFeature.State, AppFeature.Action> =

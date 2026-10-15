@@ -1,8 +1,13 @@
 package io.github.olbartek.agentctl.examples.agentshop.home
 
+import io.github.olbartek.agentctl.BiometryResult
+import io.github.olbartek.agentctl.PermissionStatus
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.examples.agentshop.TestStore
 import io.github.olbartek.agentctl.examples.agentshop.clients.AccountClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.BiometricsClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.FaceIDVault
+import io.github.olbartek.agentctl.examples.agentshop.clients.NotificationsClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.CartClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.Catalog
 import io.github.olbartek.agentctl.examples.agentshop.clients.CatalogClient
@@ -129,7 +134,7 @@ class ProfileTest {
 
     @Test
     fun confirmingTheAlertLogsOut() {
-        val store = TestStore(Profile.State(alice), reducer = Profile.reducer)
+        val store = TestStore(Profile.State(alice), reducer = Profile.reducer())
         store.send(Profile.Action.LogoutTapped)
         assertEquals(Profile.Alert.CONFIRM_LOGOUT, store.state.alert)
         store.send(Profile.Action.ConfirmLogoutTapped)
@@ -139,7 +144,7 @@ class ProfileTest {
 
     @Test
     fun dismissingTheAlertKeepsTheUserSignedIn() {
-        val store = TestStore(Profile.State(alice, Profile.Alert.CONFIRM_LOGOUT), reducer = Profile.reducer)
+        val store = TestStore(Profile.State(alice, alert = Profile.Alert.CONFIRM_LOGOUT), reducer = Profile.reducer())
         store.send(Profile.Action.AlertDismissed)
         assertNull(store.state.alert)
         assertFalse(store.received.any { it is Profile.Action.Delegate })
@@ -148,11 +153,54 @@ class ProfileTest {
     @Test
     fun agentCommandsFollowTheAlert() {
         val closed = ProfileAgent.activeScreen(Profile.State(alice))
+        assertEquals(
+            listOf(
+                SummaryItem("name", alice.name), SummaryItem("email", alice.email), SummaryItem("orderUpdates", "off"),
+                SummaryItem("faceID", "off"), SummaryItem("alert", "none"),
+            ),
+            closed.summary,
+        )
         assertEquals("alert=none", closed.command("confirm")?.disabledReason)
         assertEquals("alert=none", closed.command("dismiss")?.disabledReason)
-        val open = ProfileAgent.activeScreen(Profile.State(alice, Profile.Alert.CONFIRM_LOGOUT))
+        val open = ProfileAgent.activeScreen(Profile.State(alice, alert = Profile.Alert.CONFIRM_LOGOUT))
         assertNull(open.command("confirm")?.disabledReason)
         assertTrue(SummaryItem("alert", "logout") in open.summary)
+    }
+
+    @Test
+    fun orderUpdatesNeedTheNotificationsPermission() {
+        var answer = PermissionStatus.DENIED
+        val store = TestStore(Profile.State(alice), reducer = Profile.reducer(NotificationsClient(requestAuthorization = { answer })))
+        store.send(Profile.Action.OrderUpdatesToggled(true))
+        assertEquals(Profile.Error.NOTIFICATIONS_DENIED, store.state.error)
+        assertFalse(store.state.orderUpdates)
+        answer = PermissionStatus.GRANTED
+        store.send(Profile.Action.OrderUpdatesToggled(true))
+        assertNull(store.state.error)
+        assertTrue(store.state.orderUpdates)
+        store.send(Profile.Action.OrderUpdatesToggled(false))
+        assertFalse(store.state.orderUpdates)
+    }
+
+    @Test
+    fun faceIDKeepsTheSessionForTheLoginScreen() {
+        val session = MockAccounts.session(alice)
+        val vault = FaceIDVault()
+        var result = BiometryResult.FAILURE
+        val store = TestStore(
+            Profile.State(alice, session = session),
+            reducer = Profile.reducer(biometricsClient = BiometricsClient(authenticate = { result }), faceIDVault = vault),
+        )
+        store.send(Profile.Action.FaceIDToggled(true))
+        assertEquals(Profile.Error.BIOMETRY_FAILED, store.state.error)
+        result = BiometryResult.SUCCESS
+        store.send(Profile.Action.FaceIDToggled(true))
+        assertNull(store.state.error)
+        assertTrue(store.state.faceID)
+        assertEquals(session, vault.session)
+        store.send(Profile.Action.FaceIDToggled(false))
+        assertFalse(store.state.faceID)
+        assertNull(vault.session)
     }
 }
 

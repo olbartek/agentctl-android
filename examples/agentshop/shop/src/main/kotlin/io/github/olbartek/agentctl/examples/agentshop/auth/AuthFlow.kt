@@ -11,6 +11,7 @@ import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.appending
 import io.github.olbartek.agentctl.examples.agentshop.clients.AuthClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.BiometricsClient
 import io.github.olbartek.agentctl.examples.agentshop.models.Session
 import io.github.olbartek.agentctl.examples.agentshop.navigation.Stack
 import io.github.olbartek.agentctl.next
@@ -56,8 +57,8 @@ object AuthFlow {
         }
     }
 
-    fun reducer(authClient: AuthClient, clock: AgentClock): Reducer<State, Action> {
-        val login = io.github.olbartek.agentctl.examples.agentshop.auth.Login.reducer(authClient)
+    fun reducer(authClient: AuthClient, clock: AgentClock, biometricsClient: BiometricsClient = BiometricsClient()): Reducer<State, Action> {
+        val login = io.github.olbartek.agentctl.examples.agentshop.auth.Login.reducer(authClient, biometricsClient)
         val otpLogin = OTPLogin.reducer(authClient, clock)
         val register = Register.reducer(authClient)
         val verifyEmail = VerifyEmail.reducer(authClient, clock)

@@ -1,0 +1,10 @@
+# With no Face ID enrolled, no prompt appears: it is unavailable.
+device biometry unenrolled
+login-as alice
+tab profile
+face-id on
+expect faceID=off error=biometryUnavailable prompt=none
+device biometry enrolled
+face-id on
+device biometry match
+expect faceID=on error=none

@@ -39,7 +39,7 @@
 > expect screen=home/shop products=12 call=account.completeOnboarding
   screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
 > tab profile
-  screen=home/profile name="Carol Smith" email=carol@example.com alert=none
+  screen=home/profile name="Carol Smith" email=carol@example.com orderUpdates=off faceID=off alert=none
 > expect name="Carol Smith" email=carol@example.com
-  screen=home/profile name="Carol Smith" email=carol@example.com alert=none
+  screen=home/profile name="Carol Smith" email=carol@example.com orderUpdates=off faceID=off alert=none
 exit=0

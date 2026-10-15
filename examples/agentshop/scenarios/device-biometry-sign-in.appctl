@@ -1,0 +1,17 @@
+# Face ID sign-in: turned on in the profile by passing Face ID once, then offered on the login screen after
+# logging out.
+login-as alice
+tab profile
+face-id on
+expect prompt=biometry faceID=off
+device biometry match
+expect faceID=on prompt=none
+logout
+confirm
+expect screen=auth/login
+face-id
+expect prompt=biometry
+device biometry match
+expect screen=home/shop prompt=none
+tab profile
+expect email=alice@example.com faceID=on

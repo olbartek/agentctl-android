@@ -85,7 +85,7 @@ internal class Cli<S, A>(
     }
 
     fun screens(): Int {
-        io.print(ScreensRenderer.render(config.screens, config.docsText.mockExample))
+        io.print(ScreensRenderer.render(config.screens, config.docsText.mockExample, config.deviceConfig.surface))
         return 0
     }
 
@@ -190,6 +190,17 @@ internal class Cli<S, A>(
     fun appStatusbar(clean: Boolean, device: String?): Int = onDevice { it.statusbar(clean, device) }
 
     fun appInfo(device: String?): Int = onDevice { it.info(device) }
+
+    fun appPermission(action: DeviceCommands.PermissionAction, service: String, device: String?): Int =
+        onDevice { it.permission(action, service, device) }
+
+    fun appOpenUrl(url: String, device: String?): Int = onDevice { it.openUrl(url, device) }
+
+    fun appPush(): Int = onDevice { it.push() }
+
+    fun appLocation(value: String, device: String?): Int = onDevice { it.location(value, device) }
+
+    fun appAppearance(dark: Boolean, device: String?): Int = onDevice { it.appearance(dark, device) }
 
     /** A device command: what it prints on success, or its error with its exit code (3 unless the name was ambiguous). */
     private fun onDevice(body: (DeviceCommands) -> String): Int {

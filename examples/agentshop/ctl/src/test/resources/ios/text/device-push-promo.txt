@@ -1,0 +1,15 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> login-as alice
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=session.save,account.fetchProfile,catalog.fetchProducts
+> tab cart
+  screen=home/cart lines=none items=0 subtotal=$0.00 discount=$0.00 total=$0.00 promo=none canCheckout=false
+> device push promo
+  screen=home/cart lines=none items=0 subtotal=$0.00 discount=$0.00 total=$0.00 promo=none canCheckout=false
+> expect screen=home/cart
+  screen=home/cart lines=none items=0 subtotal=$0.00 discount=$0.00 total=$0.00 promo=none canCheckout=false
+> device push promo tap
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false
+> expect screen=home/shop
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false
+exit=0

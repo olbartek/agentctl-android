@@ -25,6 +25,11 @@ public class AgentEnvironment(
     public val random: Random,
     public val zone: ZoneId,
     public val locale: Locale,
+    /**
+     * The simulated device the app's permission, connectivity, location and biometry fakes read, and `device`
+     * changes. Outside a host it is undriven: online, and every request granted at once.
+     */
+    public val device: AgentDevice = AgentDevice(),
 ) {
     public companion object {
         /**

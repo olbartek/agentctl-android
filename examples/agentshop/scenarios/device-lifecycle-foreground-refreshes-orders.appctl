@@ -1,0 +1,11 @@
+# Back in the foreground on the orders tab, the list is loaded again. Elsewhere, nothing is loaded.
+login-as alice
+tab orders
+device background
+expect screen=home/orders
+device foreground
+expect screen=home/orders orders=3 call=orders.fetchOrders
+tab profile
+device background
+device foreground
+expect screen=home/profile

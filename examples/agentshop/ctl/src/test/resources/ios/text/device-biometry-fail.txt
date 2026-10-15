@@ -1,0 +1,27 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> login-as bob
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=session.save,account.fetchProfile,catalog.fetchProducts
+> tab profile
+  screen=home/profile name=Bob email=bob@example.com orderUpdates=off faceID=off alert=none
+> face-id on
+  screen=home/profile name=Bob email=bob@example.com orderUpdates=off faceID=off alert=none prompt=biometry
+> device biometry fail
+  screen=home/profile name=Bob email=bob@example.com orderUpdates=off faceID=off alert=none error=biometryFailed
+> expect faceID=off error=biometryFailed prompt=none
+  screen=home/profile name=Bob email=bob@example.com orderUpdates=off faceID=off alert=none error=biometryFailed
+> face-id on
+  screen=home/profile name=Bob email=bob@example.com orderUpdates=off faceID=off alert=none prompt=biometry
+> device biometry match
+  screen=home/profile name=Bob email=bob@example.com orderUpdates=off faceID=on alert=none
+> logout
+  screen=home/profile name=Bob email=bob@example.com orderUpdates=off faceID=on alert=logout
+> confirm
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.clear
+> face-id
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false prompt=biometry
+> device biometry fail
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false error=biometryFailed
+> expect screen=auth/login error=biometryFailed prompt=none
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false error=biometryFailed
+exit=0

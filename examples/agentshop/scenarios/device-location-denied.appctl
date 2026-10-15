@@ -1,0 +1,12 @@
+# Refusing the location permission leaves the address empty and says why.
+device location 37.3349,-122.009
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+use-location
+device prompt deny
+expect screen=onboarding/address street="" error=locationDenied prompt=none
