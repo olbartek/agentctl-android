@@ -1,12 +1,10 @@
 package io.github.olbartek.agentctl.runtime
 
 import io.github.olbartek.agentctl.AgentCommandException
-import io.github.olbartek.agentctl.AgentContainer
 import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentDuration
 import io.github.olbartek.agentctl.AgentRegistry
-import io.github.olbartek.agentctl.AgentStore
 import io.github.olbartek.agentctl.ArgumentText
 import io.github.olbartek.agentctl.BiometryResult
 import io.github.olbartek.agentctl.DeviceLocation
@@ -64,12 +62,12 @@ public data class RunResult(
 public data class StepOutcome(val step: StepRecord, val status: RunStatus)
 
 /**
- * Runs script commands against an [AgentStore], headlessly (the CLI) or in the app (the bridge). Call it from
- * the store's own thread: the calling thread headlessly, the main thread in the app.
+ * Runs script commands against an app through its [AgentDriver], headlessly (the CLI) or in the app (the bridge).
+ * Call it from the app's own thread: the calling thread headlessly, the main thread in the app.
  */
-public class ScriptRunner<S, A>(
-    store: AgentStore<S, A>,
-    private val container: AgentContainer<S, A>,
+public class ScriptRunner<A>(
+    /** The app the script drives. `device relaunch` has it replace the app with a fresh one. */
+    public val driver: AgentDriver<A, *>,
     private val callLog: MockCallLog,
     private val faults: MockFaults,
     private val pending: () -> Int,
@@ -79,17 +77,11 @@ public class ScriptRunner<S, A>(
     /** The simulated device `device` changes and the app's fakes read. */
     public val device: AgentDevice = AgentDevice(),
     private val deviceConfig: AgentDeviceConfig<A> = AgentDeviceConfig.none(),
-    /** Builds a fresh store over the same environment, for `device relaunch`. */
-    private val relaunch: (() -> AgentStore<S, A>)? = null,
 ) {
-    /** The store the script drives. `device relaunch` replaces it with a fresh one. */
-    public var store: AgentStore<S, A> = store
-        private set
-
     /** The `device` subcommands this app has. */
     public val deviceSurface: DeviceSurface = deviceConfig.surface
 
-    /** Adds a diff of the root state to each step (`--diff`). */
+    /** Adds a diff of the app's state to each step (`--diff`). */
     public var recordsDiff: Boolean = false
 
     private var lastIdentity: String? = null
@@ -98,10 +90,8 @@ public class ScriptRunner<S, A>(
     /** How far `advance` has moved the clock so far. */
     private var advanced: AgentDuration = AgentDuration.ZERO
 
-    public val state: S get() = store.state
-
-    /** The root state, rendered for `state` and `GET /state`. */
-    public val stateDump: String get() = StateDump.render(state)
+    /** The whole state, as `state` and `GET /state` print it. */
+    public val stateDump: String get() = driver.stateDump
 
     /**
      * Settles the initial state (sending the first screen's appearance) and returns the `(launch)` step with its
@@ -110,7 +100,7 @@ public class ScriptRunner<S, A>(
      */
     public suspend fun launch(): StepOutcome {
         val start = callLog.count
-        val before = state
+        val before = driver.stateSnapshot()
         val settle = settleAndAppear()
         return finish("(launch)", start, settle, before)
     }
@@ -175,7 +165,7 @@ public class ScriptRunner<S, A>(
         }
         advanced += duration
         val start = callLog.count
-        val before = state
+        val before = driver.stateSnapshot()
         advanceClock(duration)
         val settle = settleAndAppear()
         return finish(line.text, start, settle, before)
@@ -200,7 +190,7 @@ public class ScriptRunner<S, A>(
     }
 
     private suspend fun command(line: ScriptLine): StepOutcome {
-        val screen = container.activeScreen(state)
+        val screen = driver.activeScreen()
         val command = screen.command(line.name)
         if (command == null) {
             val runtime = AgentRegistry.runtimeCommandNames + if (deviceSurface.exists) listOf("device") else emptyList()
@@ -219,8 +209,8 @@ public class ScriptRunner<S, A>(
             return fail(line, RunStatus.FAILED, "${command.usage}: ${error.error.message}")
         }
         val start = callLog.count
-        val before = state
-        store.send(action)
+        val before = driver.stateSnapshot()
+        driver.send(action)
         val settle = settleAndAppear()
         return finish(line.text, start, settle, before)
     }
@@ -278,7 +268,7 @@ public class ScriptRunner<S, A>(
                 val url = arguments.singleOrNull()?.let(::parseUrl) ?: return usage("device open-url <url>")
                 val action = deviceConfig.openUrl?.invoke(url)
                     ?: return failed("device open-url: the app does not handle ${arguments[0]}")
-                settling(line) { store.send(action) }
+                settling(line) { driver.send(action) }
             }
 
             DeviceSurface.Subcommand.PUSH -> {
@@ -289,7 +279,7 @@ public class ScriptRunner<S, A>(
                 val push = deviceConfig.pushes.firstOrNull { it.name == arguments[0] }
                     ?: return failed("unknown push '${arguments[0]}'; pushes: $names")
                 val action = if (arguments.size == 2) push.opened else push.received
-                settling(line) { if (action != null) store.send(action) }
+                settling(line) { if (action != null) driver.send(action) }
             }
 
             DeviceSurface.Subcommand.BACKGROUND, DeviceSurface.Subcommand.FOREGROUND -> {
@@ -298,17 +288,16 @@ public class ScriptRunner<S, A>(
                 val action = deviceConfig.scenePhase?.invoke(phase)
                 settling(line) {
                     device.setPhase(phase)
-                    if (action != null) store.send(action)
+                    if (action != null) driver.send(action)
                 }
             }
 
             DeviceSurface.Subcommand.RELAUNCH -> {
                 if (arguments.isNotEmpty()) return usage("device relaunch")
-                val relaunch = relaunch ?: return failed("device relaunch is not available in this runtime")
                 settling(line) {
-                    // The old store's effects are cancelled with it; a prompt one of them was waiting on goes with
-                    // it, as when the app quits.
-                    store = relaunch()
+                    // The old app goes with its work (the driver cancels it); a prompt that work was waiting on goes
+                    // with it, as when the app quits.
+                    driver.relaunch()
                     device.withdrawAllPrompts()
                     device.setPhase(DevicePhase.FOREGROUND)
                     lastIdentity = null
@@ -348,7 +337,7 @@ public class ScriptRunner<S, A>(
     /** Runs [change], then settles and prints the step, as a screen command does. */
     private suspend fun settling(line: ScriptLine, change: () -> Unit): StepOutcome {
         val start = callLog.count
-        val before = state
+        val before = driver.stateSnapshot()
         change()
         val settle = settleAndAppear()
         return finish(line.text, start, settle, before)
@@ -360,22 +349,22 @@ public class ScriptRunner<S, A>(
     private suspend fun settleAndAppear(): SettleResult {
         var result = environment.settle()
         repeat(10) {
-            val screen = container.activeScreen(state)
+            val screen = driver.activeScreen()
             if (screen.identity == lastIdentity) return result
             lastIdentity = screen.identity
             val appear = screen.appearAction
             if (!environment.synthesizesAppearance || appear == null) return@repeat
-            store.send(appear)
+            driver.send(appear)
             result = environment.settle()
         }
         return result
     }
 
-    private fun finish(command: String, callStart: Int, settle: SettleResult, before: S): StepOutcome {
+    private fun finish(command: String, callStart: Int, settle: SettleResult, before: Any?): StepOutcome {
         val calls = callLog.since(callStart)
         lastCalls = calls
         var step = record(command, calls, settle)
-        if (recordsDiff) step = step.copy(diff = StateDump.diff(before, state))
+        if (recordsDiff) step = step.copy(diff = driver.stateDiff(before))
         if (!settle.settled) {
             return StepOutcome(
                 step.copy(ok = false, message = "did not settle within the time limit (a real-time dependency may have leaked in)"),
@@ -386,7 +375,7 @@ public class ScriptRunner<S, A>(
     }
 
     private fun record(command: String, calls: List<String>, settle: SettleResult): StepRecord {
-        val screen = container.activeScreen(state)
+        val screen = driver.activeScreen()
         return StepRecord(
             command = command,
             screen = screen.path,

@@ -12,7 +12,7 @@ import io.github.olbartek.agentctl.pullback
 /**
  * The app: the list at the root of a navigation stack, with a detail screen pushed on top.
  *
- * The root is the one type AgentCtl is generic over: `ScriptRunner<TinyRoot.State, TinyRoot.Action>` drives its
+ * The root is the one type AgentCtl is generic over: `StoreDriver<TinyRoot.State, TinyRoot.Action>` drives its
  * store, and [TinyRootAgent] resolves which screen an agent is looking at.
  */
 object TinyRoot {

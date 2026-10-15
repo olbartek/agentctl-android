@@ -21,29 +21,28 @@ internal const val TASKS_PER_ROUND = 10_000
 
 /**
  * Headless settling, which is what lets a step be read only once the app has gone quiet (CONTRACT.md §6): run the
- * due tasks and look again, until the state, the call log and the running effect count have not changed for
- * `stableRounds` rounds, or until `limit` of real time has passed.
+ * due tasks and look again, until the app's fingerprint ([AgentDriver.fingerprint]: its state and the work in flight)
+ * and the call log have not changed for `stableRounds` rounds, or until `limit` of real time has passed.
  */
-internal fun <S> settleHeadless(
+internal fun settleHeadless(
     dispatcher: VirtualTimeDispatcher,
-    state: () -> S,
+    fingerprint: () -> Any,
     callLog: MockCallLog,
-    effectsInFlight: () -> Int,
     pending: () -> Int,
     stableRounds: Int = 3,
     limit: Duration = 2.seconds,
 ): SettleResult {
-    data class Fingerprint(val state: Any?, val calls: Int, val inFlight: Int)
+    data class Round(val app: Any, val calls: Int)
 
-    fun fingerprint() = Fingerprint(state(), callLog.count, effectsInFlight())
+    fun round() = Round(fingerprint(), callLog.count)
 
     val start = TimeSource.Monotonic.markNow()
-    var last = fingerprint()
+    var last = round()
     var stable = 0
     while (stable < stableRounds) {
         if (start.elapsedNow() > limit) return SettleResult(settled = false, pending = pending())
         dispatcher.runDue(TASKS_PER_ROUND)
-        val next = fingerprint()
+        val next = round()
         if (next == last && !dispatcher.hasDueTasks) {
             stable += 1
         } else {
@@ -56,16 +55,16 @@ internal fun <S> settleHeadless(
 
 /**
  * Live settling for the running app: wait until no mock call is in flight, the UI is idle ([uiIdle]: no transition or
- * animation in flight) and the state has not changed for `quietWindow`, or until `limit` (CONTRACT.md §8.5). Mock
- * latency is real here, so this uses real time. Must run on the store's own dispatcher (the main thread), where the
- * state and the UI are read.
+ * animation in flight) and the app's fingerprint has not changed for `quietWindow`, or until `limit` (CONTRACT.md
+ * §8.5). Mock latency is real here, so this uses real time. Must run on the app's own dispatcher (the main thread),
+ * where the app and the UI are read.
  *
  * A UI busy for longer than [uiLimit] at a stretch is animating without end (a spinner on screen), not in a
  * transition: from then on it no longer holds settling, so a screen with a spinner still settles. A stretch ends
  * only once the UI has stayed idle for [uiIdleGap], since an endless animation is idle for a moment between frames.
  */
-internal suspend fun <S> settleLive(
-    state: () -> S,
+internal suspend fun settleLive(
+    fingerprint: () -> Any,
     callLog: MockCallLog,
     pending: () -> Int,
     quietWindow: Duration = 100.milliseconds,
@@ -77,7 +76,7 @@ internal suspend fun <S> settleLive(
     uiIdleGap: Duration = 100.milliseconds,
 ): SettleResult {
     val start = TimeSource.Monotonic.markNow()
-    var last = state()
+    var last = fingerprint()
     var quietSince = TimeSource.Monotonic.markNow()
     var busySince: TimeMark? = null
     var idleSince: TimeMark? = null
@@ -94,7 +93,7 @@ internal suspend fun <S> settleLive(
     var uiWasBusy = false
     while (start.elapsedNow() < limit) {
         delay(pollInterval)
-        val next = state()
+        val next = fingerprint()
         // Asked on every poll, before anything else can short-circuit it: a busy stretch's idle moment seen only on
         // quiet polls could be missed, and the next transition taken for the old one's endless animation.
         val uiBusy = uiHolds()

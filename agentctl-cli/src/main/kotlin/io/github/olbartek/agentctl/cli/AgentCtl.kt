@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.runtime.AgentDriver
 import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.CoreCliktCommand
@@ -36,15 +37,15 @@ import kotlin.system.exitProcess
  */
 public object AgentCtl {
     /** Runs the CLI and exits the process with the command's exit code (CONTRACT.md §5). */
-    public fun <S, A> main(config: AppCtlConfig<S, A>, args: Array<String>): Nothing =
+    public fun <D : AgentDriver<A, *>, A> main(config: AppCtlConfig<D, A>, args: Array<String>): Nothing =
         exitProcess(run(config, args.toList()))
 
     /**
      * Runs the CLI and returns its exit code: 0 on success, the command's own code on failure, 2 for a malformed
      * command line (CONTRACT.md §5). Help goes to [out] with 0; every error, usage errors included, to [err].
      */
-    public fun <S, A> run(
-        config: AppCtlConfig<S, A>,
+    public fun <D : AgentDriver<A, *>, A> run(
+        config: AppCtlConfig<D, A>,
         args: List<String>,
         out: PrintStream = System.out,
         err: PrintStream = System.err,
@@ -80,7 +81,7 @@ public object AgentCtl {
     }
 
     /** The command tree, for rendering help pages in tests. */
-    internal fun <S, A> command(cli: Cli<S, A>): CoreCliktCommand = Root(cli)
+    internal fun <D : AgentDriver<A, *>, A> command(cli: Cli<D, A>): CoreCliktCommand = Root(cli)
         .subcommands(
             RunCommand(cli),
             StateCommand(cli),
@@ -127,7 +128,7 @@ public object AgentCtl {
         System.getProperty("agentctl.cli.name")?.takeIf { it.isNotBlank() }
             ?: config.help.invocation.trim().split(Regex("\\s+")).last().substringAfterLast('/').ifEmpty { CLIName.current }
 
-    private class Root<S, A>(private val cli: Cli<S, A>) : CoreCliktCommand(name = commandName(cli.config)) {
+    private class Root<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : CoreCliktCommand(name = commandName(cli.config)) {
         override fun help(context: Context): String =
             "Drive ${cli.config.name} headlessly, run its scenarios and check the verification ladder."
 
@@ -163,7 +164,7 @@ public object AgentCtl {
         }
     }
 
-    private class RunCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class RunCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "run",
         "Run a script against a fresh headless app and print one step per command.",
         cli.config.help.let { help ->
@@ -182,7 +183,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.run(script, session, diff, json)
     }
 
-    private class StateCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class StateCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "state",
         "Print the full root state after replaying an optional session file.",
         examples("${cli.config.help.invocation} state", "${cli.config.help.invocation} state --session ${cli.config.help.sessionPath}"),
@@ -192,14 +193,14 @@ public object AgentCtl {
         override fun execute(): Int = cli.state(session)
     }
 
-    private class ScreensCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class ScreensCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "screens",
         "List every screen path with its commands, arguments and help, including inherited commands.",
     ) {
         override fun execute(): Int = cli.screens()
     }
 
-    private class DocsCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class DocsCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "docs",
         "Write ${cli.config.docsPath} from the command registry.",
         examples(
@@ -212,7 +213,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.docs(check)
     }
 
-    private class TestCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class TestCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "test",
         "Run scenario files (default: ${cli.config.scenariosPath}/*.appctl) and print pass/fail per file.",
         examples(
@@ -225,7 +226,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.test(paths)
     }
 
-    private class SnapshotsCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class SnapshotsCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "snapshots",
         "Run the L3 screenshot tests (or re-record the reference images).",
         "Runs ${snapshotsSubject(cli.config.gradle)}. " +
@@ -240,7 +241,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.snapshots(record)
     }
 
-    private class CheckCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class CheckCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "check",
         "Run the verification ladder: L0 build, L1 tests, L2 scenarios, docs check (--ui adds L3 and L4).",
         "Prints one line per stage and stops at the first failing stage. Full logs: ${cli.config.outputPath}/logs/.\n\n" +
@@ -257,7 +258,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.check(ui, device ?: cli.config.device)
     }
 
-    private class AppLaunchCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppLaunchCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "launch",
         "Build, install and start the app on a device, optionally already in a seeded state.",
         examples(
@@ -275,7 +276,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.appLaunch(seed, device ?: cli.config.device, latency, clearSession, !noBuild, port)
     }
 
-    private class AppRunCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppRunCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "run",
         "Run a script in the running app; advance moves its clock forward.",
         examples(
@@ -290,7 +291,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.appRun(script, json, port)
     }
 
-    private class AppTestCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppTestCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "test",
         "Run scenario files in the app on a device, each from a fresh launch, and print pass/fail per file.",
         "Builds once, then launches the app with no saved session for each file and runs it through the agent " +
@@ -320,7 +321,7 @@ public object AgentCtl {
         )
     }
 
-    private class AppScreenshotCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppScreenshotCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "screenshot",
         "Save a PNG of the device's screen.",
         "Example: ${cli.config.help.invocation} app screenshot ${cli.config.outputPath}/screenshots/home.png",
@@ -337,7 +338,7 @@ public object AgentCtl {
         override fun run() = Unit
     }
 
-    private class AppRecordStartCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppRecordStartCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "start",
         "Start recording; the recorder keeps running after this command returns.",
         examples(
@@ -351,7 +352,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.appRecordStart(file, device)
     }
 
-    private class AppRecordStopCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppRecordStopCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "stop",
         "Stop the recording app record start began, and finish the file.",
     ) {
@@ -365,7 +366,7 @@ public object AgentCtl {
         override fun run() = Unit
     }
 
-    private class AppStatusbarCommand<S, A>(private val cli: Cli<S, A>, private val clean: Boolean) : Subcommand(
+    private class AppStatusbarCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>, private val clean: Boolean) : Subcommand(
         if (clean) "clean" else "reset",
         if (clean) "9:41, full signal, full battery." else "The device's own status bar again.",
     ) {
@@ -374,7 +375,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.appStatusbar(clean, device)
     }
 
-    private class AppInfoCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppInfoCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "info",
         "Print the installed app's ID, version and build, and the device, as one JSON line.",
     ) {
@@ -385,7 +386,7 @@ public object AgentCtl {
 
     // The real OS: live only, beside the script's simulated `device` (CONTRACT.md §2.4)
 
-    private class AppPermissionCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppPermissionCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "permission",
         "Grant, revoke or reset a real permission of the app on the device (pm grant|revoke|reset-permissions).",
         "<service> is an Android permission; without a dot it is android.permission.<service>. Android kills the app " +
@@ -401,7 +402,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.appPermission(action, service, device)
     }
 
-    private class AppOpenUrlCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppOpenUrlCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "openurl",
         "Open a URL on the device, as the system would (am start -a android.intent.action.VIEW).",
         "The app must declare an intent filter for the URL's scheme; Android opens it with no prompt. A script opens " +
@@ -413,7 +414,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.appOpenUrl(url, device)
     }
 
-    private class AppPushCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppPushCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "push",
         "Send the app a push notification (not available on Android).",
         "Nothing delivers a push to one app on Android, so this always fails (exit 2). A script delivers a push " +
@@ -428,7 +429,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.appPush()
     }
 
-    private class AppLocationCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppLocationCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "location",
         "Set the emulator's location (adb emu geo fix).",
         "An emulator only; it cannot clear its location, so clear fails (exit 2).\n" +
@@ -440,7 +441,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.appLocation(location, device)
     }
 
-    private class AppAppearanceCommand<S, A>(private val cli: Cli<S, A>) : Subcommand(
+    private class AppAppearanceCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
         "appearance",
         "Switch the device to light or dark mode (cmd uimode night).",
         "Example: ${cli.config.help.invocation} app appearance dark",
@@ -451,7 +452,7 @@ public object AgentCtl {
         override fun execute(): Int = cli.appAppearance(mode == "dark", device)
     }
 
-    private class AppGetCommand<S, A>(private val cli: Cli<S, A>, name: String, private val path: String) : Subcommand(
+    private class AppGetCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>, name: String, private val path: String) : Subcommand(
         name,
         if (path == "/state") "Print the running app's root state." else "List screens, from the running app.",
         if (path == "/state") "Example: ${cli.config.help.invocation} app state" else null,

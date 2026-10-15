@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.tests
 
+import io.github.olbartek.agentctl.runtime.store
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.MockLatency
@@ -371,8 +372,7 @@ class BridgeServerTest {
     fun advanceIsRefusedWhereNoClockIsControlled() = runBlocking {
         val host = TinyAppConfig.headless()
         val runner = ScriptRunner(
-            store = host.store,
-            container = TinyRootAgent,
+            driver = host.driver,
             callLog = host.callLog,
             faults = host.faults,
             pending = { host.clock.activeSleeps },
@@ -464,7 +464,7 @@ class BridgeServerTest {
         val session = AgentLaunchSession(config, AgentLaunchOptions(port = 0, seed = "open 2; device relaunch", latency = MockLatency.ZERO), dispatcher) {}
         val first = session.host.store
         val relaunched = mutableListOf<Any>()
-        session.host.onRelaunch = { relaunched.add(it) }
+        session.host.driver.onRelaunch = { relaunched.add(session.host.store) }
         val port = session.start()!!
         try {
             assertEquals(listOf<Any>(session.host.store), relaunched)

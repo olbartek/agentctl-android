@@ -16,7 +16,7 @@ val scenariosDirectory: File get() = File(exampleRoot, AgentShopConfig.appCtl.sc
 val scenarioFiles: List<File> get() = ScenarioRunner.files(scenariosDirectory)
 
 /** A fresh deterministic runner on AgentShop's headless wiring. */
-fun headlessRunner(): ScriptRunner<AppFeature.State, AppFeature.Action> = AgentShopConfig.headless().makeRunner()
+fun headlessRunner(): ScriptRunner<AppFeature.Action> = AgentShopConfig.headless().makeRunner()
 
 /** What one CLI invocation printed, and its exit code. */
 data class CliResult(val out: String, val err: String, val status: Int) {

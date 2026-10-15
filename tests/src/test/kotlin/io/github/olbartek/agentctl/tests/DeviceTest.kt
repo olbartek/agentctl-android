@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.tests
 
+import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentContainer
 import io.github.olbartek.agentctl.AgentDeviceConfig
@@ -205,7 +206,7 @@ object Notebook {
 /** What this guards: the `device` runtime command (CONTRACT.md §2.4). Its texts are agentctl-ios's, byte for byte. */
 class DeviceTest {
     /** The steps of `script` after `(launch)`, as text. */
-    private fun run(script: String, host: HeadlessHost<Gadget.State, Gadget.Action> = Gadget.host()): Pair<String, RunStatus> =
+    private fun run(script: String, host: HeadlessHost<StoreDriver<Gadget.State, Gadget.Action>, Gadget.Action> = Gadget.host()): Pair<String, RunStatus> =
         runBlocking {
             val runner = host.makeRunner()
             runner.launch()

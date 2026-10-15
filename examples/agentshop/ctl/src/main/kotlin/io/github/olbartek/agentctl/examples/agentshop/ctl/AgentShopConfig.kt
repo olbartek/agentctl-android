@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.examples.agentshop.ctl
 
+import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.AgentPush
@@ -131,7 +132,7 @@ object AgentShopConfig {
     )
 
     /** What `shopctl` runs on: headlessly the session lives in memory, so there is nothing on disk to clear. */
-    val appCtl: AppCtlConfig<AppFeature.State, AppFeature.Action> get() = appCtl(SessionStorage.inMemory())
+    val appCtl: AppCtlConfig<StoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> get() = appCtl(SessionStorage.inMemory())
 
     /**
      * The config the debug app hands its agent bridge: its live store keeps the session in `sessionStorage`, which
@@ -140,7 +141,7 @@ object AgentShopConfig {
     fun appCtl(
         sessionStorage: SessionStorage,
         scheduledFaults: ScheduledFaults = ScheduledFaults(),
-    ): AppCtlConfig<AppFeature.State, AppFeature.Action> = AppCtlConfig(
+    ): AppCtlConfig<StoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> = AppCtlConfig(
         name = "AgentShop",
         // Without APPCTL_ROOT the CLI walks up to the directory that holds the wrapper: examples/agentshop.
         rootMarker = "appctl",
@@ -169,7 +170,7 @@ object AgentShopConfig {
      * A deterministic store: fresh in-memory backends and session, and the headless host's pinned environment. The
      * auth server measures codes' age on the host's virtual clock, so `advance 5m` expires them.
      */
-    fun headless(): HeadlessHost<AppFeature.State, AppFeature.Action> =
+    fun headless(): HeadlessHost<StoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> =
         HeadlessHost(AppFeatureAgent, mockMethods, device, AppFactory { environment ->
             // Once per host: `device relaunch` builds the next store on the same session storage and backends.
             AgentShop.prepare(environment, SessionStorage.inMemory(), uptime = virtualUptime(environment))
@@ -184,7 +185,7 @@ object AgentShopConfig {
         dispatcher: CoroutineDispatcher,
         sessionStorage: SessionStorage,
         scheduledFaults: ScheduledFaults = ScheduledFaults(),
-    ): LiveHost<AppFeature.State, AppFeature.Action> =
+    ): LiveHost<StoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> =
         LiveHost(AppFeatureAgent, mockMethods, latency, dispatcher, device, AppFactory { environment ->
             AgentShop.prepare(environment, sessionStorage, scheduledFaults)
         })

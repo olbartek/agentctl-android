@@ -30,7 +30,7 @@ import java.net.URI
 /**
  * The root: launching, then auth, onboarding (once, for a new account) or home.
  *
- * This is the one type AgentCtl is generic over: `ScriptRunner<AppFeature.State, AppFeature.Action>` drives its store,
+ * This is the one type AgentCtl is generic over: `StoreDriver<AppFeature.State, AppFeature.Action>` drives its store,
  * and [AppFeatureAgent] resolves which screen an agent is looking at. A UI renders [State] by its case and sends
  * [Action]s: each case's screens are reached through [Action.Auth], [Action.Onboarding] and [Action.Home].
  */

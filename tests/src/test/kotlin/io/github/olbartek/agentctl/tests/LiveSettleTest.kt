@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.tests
 
+import io.github.olbartek.agentctl.runtime.store
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.examples.tinyapp.Items
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig

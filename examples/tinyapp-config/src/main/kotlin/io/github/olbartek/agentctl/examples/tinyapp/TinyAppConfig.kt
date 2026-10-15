@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.examples.tinyapp
 
+import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentPush
 import io.github.olbartek.agentctl.DocsText
@@ -94,7 +95,7 @@ object TinyAppConfig {
      * `app` commands and `check --ui` install `examples/tinyapp-android` on a device or emulator; TinyApp has no
      * screenshot tests, so the L3 rung of `check --ui` reports that it has nothing to run.
      */
-    val appCtl: AppCtlConfig<TinyRoot.State, TinyRoot.Action>
+    val appCtl: AppCtlConfig<StoreDriver<TinyRoot.State, TinyRoot.Action>, TinyRoot.Action>
         get() = AppCtlConfig(
             name = "TinyApp",
             // The file the CLI walks up the tree for; `scenariosPath` and `docsPath` are resolved against its directory.
@@ -133,10 +134,10 @@ object TinyAppConfig {
         )
 
     /** A deterministic store: a virtual clock, a fixed date, and everything else [HeadlessHost] pins. */
-    fun headless(device: AgentDeviceConfig<TinyRoot.Action> = this.device): HeadlessHost<TinyRoot.State, TinyRoot.Action> =
+    fun headless(device: AgentDeviceConfig<TinyRoot.Action> = this.device): HeadlessHost<StoreDriver<TinyRoot.State, TinyRoot.Action>, TinyRoot.Action> =
         HeadlessHost(TinyRootAgent, mockMethods, device, TinyApp::store)
 
     /** The store the app would run in a debug build behind the bridge: real time and real mock latency. */
-    fun live(latency: MockLatency, dispatcher: CoroutineDispatcher): LiveHost<TinyRoot.State, TinyRoot.Action> =
+    fun live(latency: MockLatency, dispatcher: CoroutineDispatcher): LiveHost<StoreDriver<TinyRoot.State, TinyRoot.Action>, TinyRoot.Action> =
         LiveHost(TinyRootAgent, mockMethods, latency, dispatcher, device, TinyApp::store)
 }

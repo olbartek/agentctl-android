@@ -30,7 +30,7 @@ public data class ScenarioResult(
 
 /** Runs `scenarios/<name>.appctl` files, each against a fresh [ScriptRunner] from `make`. */
 public object ScenarioRunner {
-    public suspend fun <S, A> run(name: String, source: String, make: () -> ScriptRunner<S, A>): ScenarioResult {
+    public suspend fun <A> run(name: String, source: String, make: () -> ScriptRunner<A>): ScenarioResult {
         val start = TimeSource.Monotonic.markNow()
         val runner = make()
         val launch = runner.launch()
@@ -49,7 +49,7 @@ public object ScenarioRunner {
         )
     }
 
-    public suspend fun <S, A> run(file: File, make: () -> ScriptRunner<S, A>): ScenarioResult {
+    public suspend fun <A> run(file: File, make: () -> ScriptRunner<A>): ScenarioResult {
         val name = file.nameWithoutExtension
         // A missing or unreadable file is an environment problem, not a script's: exit code 3 (CONTRACT.md §5).
         val source = try {

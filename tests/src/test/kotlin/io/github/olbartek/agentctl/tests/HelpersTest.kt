@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.tests
 
+import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.ActiveScreen
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentCommandError
@@ -98,7 +99,7 @@ class HelpersTest {
             }
         }
 
-        fun host(mockMethods: List<MockMethod> = emptyList()): HeadlessHost<Desk, DeskAction> =
+        fun host(mockMethods: List<MockMethod> = emptyList()): HeadlessHost<StoreDriver<Desk, DeskAction>, DeskAction> =
             HeadlessHost(DeskAgent, mockMethods) { environment -> Store(Desk(), reducer, environment.scope) }
     }
 

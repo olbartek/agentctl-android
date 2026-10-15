@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.tests
 
+import io.github.olbartek.agentctl.runtime.store
 import io.github.olbartek.agentctl.ActiveScreen
 import io.github.olbartek.agentctl.AgentContainer
 import io.github.olbartek.agentctl.AgentEnvironment

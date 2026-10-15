@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.runtime.AgentDriver
 import io.github.olbartek.agentctl.ScreensRenderer
 import io.github.olbartek.agentctl.ScriptLine
 import io.github.olbartek.agentctl.StepFormatter
@@ -26,8 +27,8 @@ internal class Io(val out: PrintStream, val err: PrintStream) {
  * The implementations behind the subcommands. Headless runs happen on the calling thread, on the headless host's
  * virtual-time dispatcher, which makes every one of them deterministic.
  */
-internal class Cli<S, A>(
-    val config: AppCtlConfig<S, A>,
+internal class Cli<D : AgentDriver<A, *>, A>(
+    val config: AppCtlConfig<D, A>,
     val io: Io,
     val environment: Map<String, String>,
     val workingDirectory: File,

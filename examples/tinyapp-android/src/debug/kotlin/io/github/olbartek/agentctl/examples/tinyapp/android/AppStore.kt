@@ -25,7 +25,7 @@ class AppStore private constructor(activity: Activity) {
         MainScope().launch { launch.start() }
     }
 
-    val store: AgentStore<TinyRoot.State, TinyRoot.Action> get() = launch.store
+    val store: AgentStore<TinyRoot.State, TinyRoot.Action> get() = launch.app
 
     /** False while a launch seed is being applied. */
     val isReady: StateFlow<Boolean> get() = launch.isReady

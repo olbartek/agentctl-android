@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.testsupport
 
+import io.github.olbartek.agentctl.runtime.AgentDriver
 import io.github.olbartek.agentctl.ArgumentText
 import io.github.olbartek.agentctl.ScriptError
 import io.github.olbartek.agentctl.ScriptLine
@@ -59,9 +60,9 @@ public class RepoRootNotFound(
  * @throws RepoRootNotFound when [root] is `null` and no ancestor of [start] holds the marker.
  * @throws NoScenariosFound when the scenarios directory holds no `*.appctl` files.
  */
-public class AgentScenarioChecks<S, A>(
+public class AgentScenarioChecks<D : AgentDriver<A, *>, A>(
     /** The app's config: its scenarios, its docs and the headless runner every check drives. */
-    public val config: AppCtlConfig<S, A>,
+    public val config: AppCtlConfig<D, A>,
     root: File? = null,
     start: File = File(System.getProperty("user.dir")),
 ) {
@@ -265,7 +266,7 @@ public class AgentScenarioChecks<S, A>(
 
         val session = mutableListOf<ScriptLine>()
         val steps = mutableListOf<StepRecord>()
-        var last: ScriptRunner<S, A>? = null
+        var last: ScriptRunner<A>? = null
         for ((index, part) in split(lines, parts).withIndex()) {
             val label = "$name, part ${index + 1} of ${minOf(parts, lines.size)}"
             val runner = config.makeRunner()
