@@ -31,8 +31,12 @@ public object DocsRenderer {
      * methods plus the runtime commands (`expect`, `advance`, `mock`) every app has. The CLI and
      * `AgentScenarioChecks.docsCurrent` both call this, so a host's test and its `docs --check` cannot disagree.
      */
-    public fun render(screens: List<ScreenDoc>, mockMethods: List<MockMethod>, text: DocsText): String =
-        render(screens, AgentRegistry.runtimeCommands(text.mockExample), mockMethods, text)
+    public fun render(
+        screens: List<ScreenDoc>,
+        mockMethods: List<MockMethod>,
+        text: DocsText,
+        device: DeviceSurface = DeviceSurface.NONE,
+    ): String = render(screens, AgentRegistry.runtimeCommands(text.mockExample, device), mockMethods, text)
 
     /** The command reference from its parts; [render] with the standard runtime commands is what `docs` writes. */
     public fun render(
@@ -66,6 +70,13 @@ public object DocsRenderer {
         out.add("  The line holds `screen`, the screen's summary keys, `calls=` (mock calls made during the step),")
         out.add("  `error=` (if set) and `pending=` (effects waiting on the clock, e.g. a countdown; headlessly")
         out.add("  `advance <duration>` releases them).")
+        val prompting = runtimeCommands.any {
+            it.name == "device" && (it.argument?.startsWith("prompt ") == true || it.argument?.startsWith("biometry ") == true)
+        }
+        if (prompting) {
+            out.add("  `prompt=` names the system prompt the app is waiting on, if any (`device prompt` or `device biometry`")
+            out.add("  answers it).")
+        }
         out.add("- Exit codes: `0` all steps passed, `1` a command or `expect` failed, `2` usage or parse error, `3` internal error.")
         out.add("")
         out.add("## Examples")

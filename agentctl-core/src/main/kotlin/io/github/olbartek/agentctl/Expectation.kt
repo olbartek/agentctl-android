@@ -8,14 +8,16 @@ public data class StepSnapshot(
     val calls: List<String>,
     val error: String?,
     val pending: Int,
+    /** The system prompt the app is waiting on, if any. */
+    val prompt: String? = null,
 )
 
 /**
  * `expect k=v [k=v …]` (CONTRACT.md §4).
  *
  * Keys: `screen`, any summary key, `call` (repeatable; the method was called during the previous step),
- * `error` (`none` = no error) and `pending` (sleeps waiting on the clock, such as a countdown — see
- * [CountingClock.activeSleeps]).
+ * `error` (`none` = no error), `pending` (sleeps waiting on the clock, such as a countdown — see
+ * [CountingClock.activeSleeps]) and `prompt` (the system prompt the app is waiting on; `none` = no prompt).
  */
 public data class Expectation(val pairs: List<Pair>) {
     public data class Pair(val key: String, val value: String)
@@ -38,6 +40,10 @@ public data class Expectation(val pairs: List<Pair>) {
                 val actual = snapshot.pending.toString()
                 if (actual == pair.value) null else mismatch(pair, actual)
             }
+            "prompt" -> {
+                val actual = snapshot.prompt ?: "none"
+                if (actual == pair.value) null else mismatch(pair, actual)
+            }
             else -> {
                 val item = snapshot.summary.firstOrNull { it.key == pair.key }
                 if (item == null) {
@@ -55,7 +61,7 @@ public data class Expectation(val pairs: List<Pair>) {
     private fun mismatch(pair: Pair, actual: String): String = "expected ${pair.key}=${pair.value}, got ${pair.key}=$actual"
 
     public companion object {
-        public val RESERVED_KEYS: List<String> = listOf("screen", "call", "error", "pending")
+        public val RESERVED_KEYS: List<String> = listOf("screen", "call", "error", "pending", "prompt")
 
         /** Parses the argument of `expect`. Values containing spaces must be quoted: `name="Alice Smith"`. */
         @Throws(ExpectationSyntaxError::class)

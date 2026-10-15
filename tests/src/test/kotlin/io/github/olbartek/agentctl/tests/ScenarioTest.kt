@@ -24,7 +24,7 @@ class ScenarioTest {
     @Test
     fun theConfigPointsAtTheseScenarios() {
         assertEquals(repositoryRoot.canonicalFile, checks.root.canonicalFile)
-        assertEquals(listOf("browse", "refresh-error", "save-cooldown"), checks.files.map { it.nameWithoutExtension })
+        assertEquals(listOf("browse", "deep-link", "push", "refresh-error", "save-cooldown"), checks.files.map { it.nameWithoutExtension })
         assertEquals(ScenarioRunner.files(scenariosDirectory), checks.files)
     }
 
@@ -55,8 +55,8 @@ class ScenarioTest {
 
     @Test
     fun stepCountsMatchTheReference() = runBlocking {
-        // The reference's README: browse (10 steps), refresh-error (7 steps), save-cooldown (13 steps).
+        // The reference's README: browse (10), deep-link (8), push (5), refresh-error (7), save-cooldown (13) steps.
         val counts = checks.files.associate { file -> file.nameWithoutExtension to ScenarioRunner.run(file) { TinyAppConfig.headless().makeRunner() }.steps.size }
-        assertEquals(mapOf("browse" to 10, "refresh-error" to 7, "save-cooldown" to 13), counts)
+        assertEquals(mapOf("browse" to 10, "deep-link" to 8, "push" to 5, "refresh-error" to 7, "save-cooldown" to 13), counts)
     }
 }

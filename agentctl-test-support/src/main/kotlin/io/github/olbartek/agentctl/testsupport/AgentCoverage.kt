@@ -1,6 +1,8 @@
 package io.github.olbartek.agentctl.testsupport
 
 import io.github.olbartek.agentctl.AgentRegistry
+import io.github.olbartek.agentctl.ArgumentText
+import io.github.olbartek.agentctl.DeviceSurface
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.runtime.ScenarioResult
@@ -33,6 +35,7 @@ public class NoScenariosFound(
  * app documents (its container's `registry`) and the directory its `*.appctl` scenarios live in, then ask:
  *
  * - [unusedCommands]: command names no scenario sends.
+ * - [unusedDeviceCommands]: `device` subcommands, and pushes, no scenario sends.
  * - [undocumentedSummaryKeys]: summary keys a scenario run emits that no screen's `summaryKeys` lists.
  * - [unvisitedScreens]: documented screen paths no scenario run visits. A pattern segment written `<id>` matches any
  *   concrete segment, so a screen with a variable path needs one scenario, not one per instance.
@@ -61,7 +64,27 @@ public class AgentCoverage<S, A>(
     /** Command names no scenario sends. */
     public fun unusedCommands(): List<String> {
         val used = files.flatMap { file -> ScriptParser.parse(file.readText()).map { it.name } }.toSet()
-        return (AgentRegistry.allCommandNames(screens) - used).sorted()
+        return (AgentRegistry.allCommandNames(screens, make().deviceSurface) - used).sorted()
+    }
+
+    /**
+     * The app's `device` subcommands no scenario sends, as `device <subcommand>`, then its pushes no scenario delivers,
+     * as `device push <name>`, in the order the app declares them. Permission services are not checked one by one: a
+     * scenario can exercise one through the app's prompt without naming it.
+     */
+    public fun unusedDeviceCommands(): List<String> {
+        val surface = make().deviceSurface
+        val used = mutableSetOf<String>()
+        for (file in files) {
+            for (line in ScriptParser.parse(file.readText()).filter { it.name == "device" }) {
+                val tokens = ArgumentText.tokens(line.argument ?: "")
+                val sub = tokens.firstOrNull() ?: continue
+                used.add("device $sub")
+                if (sub == DeviceSurface.Subcommand.PUSH.rawValue && tokens.size > 1) used.add("device push ${tokens[1]}")
+            }
+        }
+        val expected = surface.subcommands.map { "device ${it.rawValue}" } + surface.pushes.map { "device push ${it.name}" }
+        return expected.filter { it !in used }
     }
 
     /** Summary keys emitted during the scenarios that no screen documents. */

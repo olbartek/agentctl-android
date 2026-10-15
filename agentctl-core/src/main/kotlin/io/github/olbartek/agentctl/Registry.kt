@@ -14,13 +14,18 @@ public object AgentRegistry {
     /**
      * @param mockExample the example in `mock`'s help, e.g. `mock orders.fetchOrders network`. The client and
      *   method names are the host's, so it comes from [DocsText.mockExample].
+     * @param device the app's `device` subcommands, listed after `mock`; none by default.
      */
-    public fun runtimeCommands(mockExample: String = DEFAULT_MOCK_EXAMPLE): List<CommandDoc> = listOf(
+    public fun runtimeCommands(
+        mockExample: String = DEFAULT_MOCK_EXAMPLE,
+        device: DeviceSurface = DeviceSurface.NONE,
+    ): List<CommandDoc> = listOf(
         CommandDoc(
             name = "expect",
             argument = "k=v [k=v …]",
             help = "Assert on screen, any summary key, call=<client.method> (called during the previous step), " +
-                "error=<code|none> or pending=<n>. A failed assertion fails the script.",
+                (if (device.hasPrompts) "error=<code|none>, pending=<n> or prompt=<service|none>" else "error=<code|none> or pending=<n>") +
+                ". A failed assertion fails the script.",
             source = "runtime",
         ),
         CommandDoc(
@@ -35,11 +40,11 @@ public object AgentRegistry {
             help = "Make the next call to that method fail, e.g. $mockExample.",
             source = "runtime",
         ),
-    )
+    ) + device.commandDocs
 
-    /** Every command name across `screens`, including the runtime commands. */
-    public fun allCommandNames(screens: List<ScreenDoc>): Set<String> =
-        (screens.flatMap { screen -> screen.commands.map { it.name } } + runtimeCommands().map { it.name }).toSet()
+    /** Every command name across `screens`, including the runtime commands (`device` when the app has it). */
+    public fun allCommandNames(screens: List<ScreenDoc>, device: DeviceSurface = DeviceSurface.NONE): Set<String> =
+        (screens.flatMap { screen -> screen.commands.map { it.name } } + runtimeCommands(device = device).map { it.name }).toSet()
 }
 
 /**
@@ -47,7 +52,11 @@ public object AgentRegistry {
  * the same host-supplied [DocsText.mockExample].
  */
 public object ScreensRenderer {
-    public fun render(screens: List<ScreenDoc>, mockExample: String = AgentRegistry.DEFAULT_MOCK_EXAMPLE): String {
+    public fun render(
+        screens: List<ScreenDoc>,
+        mockExample: String = AgentRegistry.DEFAULT_MOCK_EXAMPLE,
+        device: DeviceSurface = DeviceSurface.NONE,
+    ): String {
         val lines = mutableListOf<String>()
         for (screen in screens) {
             lines.add("${screen.path}  [${screen.screen}]")
@@ -61,7 +70,7 @@ public object ScreensRenderer {
             if (screen.summaryKeys.isNotEmpty()) lines.add("  summary: " + screen.summaryKeys.joinToString(" "))
         }
         lines.add("every screen  [runtime]")
-        val runtimeCommands = AgentRegistry.runtimeCommands(mockExample)
+        val runtimeCommands = AgentRegistry.runtimeCommands(mockExample, device)
         val width = (runtimeCommands.maxOfOrNull { Graphemes.count(it.usage) } ?: 0) + 2
         for (command in runtimeCommands) {
             lines.add("  " + command.usage.padGraphemes(width) + command.help)

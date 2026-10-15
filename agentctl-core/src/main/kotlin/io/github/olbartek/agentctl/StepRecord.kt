@@ -8,6 +8,8 @@ public data class StepRecord(
     val calls: List<String>,
     val error: String?,
     val pending: Int,
+    /** The system prompt the app is waiting on (a permission's service, or `biometry`), if any. */
+    val prompt: String? = null,
     /** `false` when settling hit its real-time limit. */
     val settled: Boolean = true,
     val ok: Boolean = true,
@@ -16,7 +18,7 @@ public data class StepRecord(
     /** A state diff, for `--diff`. */
     val diff: String? = null,
 ) {
-    val snapshot: StepSnapshot get() = StepSnapshot(screen, summary, calls, error, pending)
+    val snapshot: StepSnapshot get() = StepSnapshot(screen, summary, calls, error, pending, prompt)
 }
 
 /** Renders steps in the text format of CONTRACT.md §3, and in the JSON form of its §8.4. */
@@ -33,6 +35,7 @@ public object StepFormatter {
         if (step.calls.isNotEmpty()) fields.add("calls=${step.calls.joinToString(",")}")
         if (step.error != null) fields.add("error=${step.error}")
         if (step.pending != 0) fields.add("pending=${step.pending}")
+        if (step.prompt != null) fields.add("prompt=${step.prompt}")
         if (!step.settled) fields.add("settled=false")
         val lines = mutableListOf("> ${step.command}", "  " + fields.joinToString(" "))
         step.message?.let { message ->
@@ -45,7 +48,9 @@ public object StepFormatter {
 
     public fun text(steps: List<StepRecord>): String = steps.joinToString("\n") { text(it) }
 
-    /** A JSON array of `{calls, command, error, message?, ok, pending, screen, settled, summary}`, keys sorted. */
+    /**
+     * A JSON array of `{calls, command, error, message?, ok, pending, prompt?, screen, settled, summary}`, keys sorted.
+     */
     public fun json(steps: List<StepRecord>): String = Json.render(Json.Array(steps.map(::jsonStep)))
 
     /**
@@ -70,6 +75,8 @@ public object StepFormatter {
             "settled" to Json.Bool(step.settled),
             "ok" to Json.Bool(step.ok),
         )
+        // Only when a prompt is pending, so a run without one encodes exactly as before `device` existed.
+        step.prompt?.let { fields["prompt"] = Json.Str(it) }
         step.message?.let { fields["message"] = Json.Str(it) }
         return Json.Object(fields)
     }

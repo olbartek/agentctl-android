@@ -55,7 +55,7 @@ class ExpectationTest {
                 "expected call=auth.login, got calls=auth.sendOTP",
                 "expected error=invalidCode, got error=none",
                 "expected pending=0, got pending=1",
-                "unknown key 'nope' on auth/otp/code; available: screen, call, error, pending, email, resendIn, name",
+                "unknown key 'nope' on auth/otp/code; available: screen, call, error, pending, prompt, email, resendIn, name",
             ),
             expectation.evaluate(snapshot),
         )

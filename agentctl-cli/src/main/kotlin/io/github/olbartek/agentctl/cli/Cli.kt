@@ -85,7 +85,7 @@ internal class Cli<S, A>(
     }
 
     fun screens(): Int {
-        io.print(ScreensRenderer.render(config.screens, config.docsText.mockExample))
+        io.print(ScreensRenderer.render(config.screens, config.docsText.mockExample, config.deviceConfig.surface))
         return 0
     }
 

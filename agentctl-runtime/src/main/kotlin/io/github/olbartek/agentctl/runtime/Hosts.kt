@@ -1,6 +1,8 @@
 package io.github.olbartek.agentctl.runtime
 
 import io.github.olbartek.agentctl.AgentContainer
+import io.github.olbartek.agentctl.AgentDevice
+import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.AgentStore
 import io.github.olbartek.agentctl.CountingClock
@@ -23,6 +25,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 
 /**
  * A real store running in the CLI's process with the deterministic environment CONTRACT.md §6 requires.
@@ -39,6 +42,7 @@ import kotlinx.coroutines.cancel
  * | `zone` | UTC |
  * | `locale` | `en_US_POSIX` |
  * | `mocks` | a fresh call log and fault registry, zero latency, on the clock above |
+ * | `device` | a driven [AgentDevice] |
  *
  * Nothing else is pinned: an app that reads `System.currentTimeMillis()`, `Locale.getDefault()` or
  * `Dispatchers.IO` around the environment is not deterministic headlessly, and `makeStore` is where a host pins
@@ -47,9 +51,20 @@ import kotlinx.coroutines.cancel
 public class HeadlessHost<S, A>(
     public val container: AgentContainer<S, A>,
     public val mockMethods: List<MockMethod>,
-    makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+    /** What of the device scripts can drive, and the actions its events become (`device`). */
+    public val deviceConfig: AgentDeviceConfig<A> = AgentDeviceConfig.none(),
+    private val makeStore: (AgentEnvironment) -> AgentStore<S, A>,
 ) {
+    /** A host without a device configuration: no `device` command. */
+    public constructor(
+        container: AgentContainer<S, A>,
+        mockMethods: List<MockMethod>,
+        makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+    ) : this(container, mockMethods, AgentDeviceConfig.none(), makeStore)
+
     public val dispatcher: VirtualTimeDispatcher = VirtualTimeDispatcher()
+
+    /** The host's scope. Each store runs its effects in a child of it, which `device relaunch` cancels. */
     public val scope: CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher)
 
     /**
@@ -64,17 +79,42 @@ public class HeadlessHost<S, A>(
     /** The one-shot failures `mock` arms. */
     public val faults: MockFaults = MockFaults()
 
-    public val environment: AgentEnvironment = AgentEnvironment(
-        scope = scope,
+    /** The simulated device, which `device` changes. */
+    public val device: AgentDevice = AgentDevice(isDriven = true, offlineErrorCode = deviceConfig.offlineErrorCode)
+
+    private val mocks = MockBackend(callLog, faults, MockLatency.ZERO, clock, SplitMix64Random(RANDOM_SEED), device)
+    private val uuids = IncrementingUuids()
+    private val random = SplitMix64Random(RANDOM_SEED)
+
+    /**
+     * What the current store was built on. `device relaunch` builds the next store on a copy whose only difference is
+     * a fresh [AgentEnvironment.scope], so the old store's effects end with it while everything else carries over.
+     */
+    public var environment: AgentEnvironment = makeEnvironment()
+        private set
+
+    /** The app's store. `device relaunch` replaces it with a fresh one. */
+    public var store: AgentStore<S, A> = makeStore(environment)
+        private set
+
+    private fun makeEnvironment(): AgentEnvironment = AgentEnvironment(
+        scope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job)),
         clock = clock,
-        mocks = MockBackend(callLog, faults, MockLatency.ZERO, clock, SplitMix64Random(RANDOM_SEED)),
-        uuids = IncrementingUuids(),
-        random = SplitMix64Random(RANDOM_SEED),
+        mocks = mocks,
+        uuids = uuids,
+        random = random,
         zone = FIXED_ZONE,
         locale = FIXED_LOCALE,
+        device = device,
     )
 
-    public val store: AgentStore<S, A> = makeStore(environment)
+    /** Cancels the store's effects and builds a fresh store from its initial state: `device relaunch`. */
+    private fun relaunch(): AgentStore<S, A> {
+        environment.scope.cancel()
+        environment = makeEnvironment()
+        store = makeStore(environment)
+        return store
+    }
 
     public fun settle(): SettleResult = settleHeadless(
         dispatcher = dispatcher,
@@ -96,6 +136,9 @@ public class HeadlessHost<S, A>(
             synthesizesAppearance = true,
         ),
         mockMethods = mockMethods,
+        device = device,
+        deviceConfig = deviceConfig,
+        relaunch = ::relaunch,
     )
 
     /** Cancels every effect still running. The host is unusable afterwards. */
@@ -134,25 +177,65 @@ public class LiveHost<S, A>(
     public val mockMethods: List<MockMethod>,
     public val latency: MockLatency,
     public val dispatcher: CoroutineDispatcher,
-    makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+    /** What of the device scripts can drive, and the actions its events become (`device`). */
+    public val deviceConfig: AgentDeviceConfig<A> = AgentDeviceConfig.none(),
+    private val makeStore: (AgentEnvironment) -> AgentStore<S, A>,
 ) {
+    /** A host without a device configuration: no `device` command. */
+    public constructor(
+        container: AgentContainer<S, A>,
+        mockMethods: List<MockMethod>,
+        latency: MockLatency,
+        dispatcher: CoroutineDispatcher,
+        makeStore: (AgentEnvironment) -> AgentStore<S, A>,
+    ) : this(container, mockMethods, latency, dispatcher, AgentDeviceConfig.none(), makeStore)
+
+    /** The host's scope. Each store runs its effects in a child of it, which `device relaunch` cancels. */
     public val scope: CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher)
     /** The app's clock: real time that `advance` moves forward, with its sleeps counted for `pending`. */
     public val clock: AdvanceableClock = AdvanceableClock()
     public val callLog: MockCallLog = MockCallLog()
     public val faults: MockFaults = MockFaults()
 
-    public val environment: AgentEnvironment = AgentEnvironment(
-        scope = scope,
+    /** The simulated device, which `device` changes. */
+    public val device: AgentDevice = AgentDevice(isDriven = true, offlineErrorCode = deviceConfig.offlineErrorCode)
+
+    private val mocks = MockBackend(callLog, faults, latency, clock, Random.Default, device)
+
+    /** What the current store was built on; `device relaunch` gives the next store a fresh [AgentEnvironment.scope]. */
+    public var environment: AgentEnvironment = makeEnvironment()
+        private set
+
+    /** The app's store. `device relaunch` replaces it; [onRelaunch] hears of it, so the app shows the new one. */
+    public var store: AgentStore<S, A> = makeStore(environment)
+        private set
+
+    /** Called on [dispatcher] with the new store after `device relaunch`: `agentctl-bridge`'s `AgentLaunch` shows it. */
+    public var onRelaunch: ((AgentStore<S, A>) -> Unit)? = null
+
+    private fun makeEnvironment(): AgentEnvironment = AgentEnvironment(
+        scope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job)),
         clock = clock,
-        mocks = MockBackend(callLog, faults, latency, clock, Random.Default),
+        mocks = mocks,
         uuids = { UUID.randomUUID() },
         random = Random.Default,
         zone = ZoneId.systemDefault(),
         locale = Locale.getDefault(),
+        device = device,
     )
 
-    public val store: AgentStore<S, A> = makeStore(environment)
+    /**
+     * Cancels the store's effects and builds a fresh store from its initial state, over the same clock, mocks and
+     * device: `device relaunch`. The app's root shows it once [onRelaunch] has passed it on, and its views send their
+     * own appearance.
+     */
+    private fun relaunch(): AgentStore<S, A> {
+        environment.scope.cancel()
+        environment = makeEnvironment()
+        store = makeStore(environment)
+        onRelaunch?.invoke(store)
+        return store
+    }
 
     /**
      * Whether the app's UI is idle: no navigation transition or animation in flight. [settle] waits for it as well as
@@ -218,5 +301,8 @@ public class LiveHost<S, A>(
             synthesizesAppearance = synthesizesAppearance,
         ),
         mockMethods = mockMethods,
+        device = device,
+        deviceConfig = deviceConfig,
+        relaunch = ::relaunch,
     )
 }

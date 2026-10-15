@@ -43,13 +43,22 @@ public class AgentLaunch<S, A>(config: AppCtlConfig<S, A>, intent: Intent?) {
         message.split("\n").forEach { Log.i(TAG, it) }
     }
 
+    private val currentStore = MutableStateFlow(session.host.store)
+
     init {
         // Compose's idleness, unless the config's live host brings a check of its own.
         if (session.host.isUIIdle == null) session.host.isUIIdle = ComposeUI::isIdle
+        session.host.onRelaunch = { currentStore.value = it }
     }
 
-    /** The app's live store: render it, and send the user's actions to it. */
-    public val store: AgentStore<S, A> get() = session.host.store
+    /** The app's live store: render it, and send the user's actions to it. `device relaunch` replaces it. */
+    public val store: AgentStore<S, A> get() = currentStore.value
+
+    /**
+     * The store over time: a new one after each `device relaunch`, which starts the app's state over. An app whose
+     * device configuration has `relaunch` renders the latest, e.g. `launch.stores.collectAsState().value`.
+     */
+    public val stores: StateFlow<AgentStore<S, A>> = currentStore.asStateFlow()
 
     /**
      * Whether the app's UI is idle — no navigation transition or animation in flight — which settling waits for

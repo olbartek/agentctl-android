@@ -41,6 +41,8 @@ Scenarios in `examples/tinyapp/scenarios/*.appctl` use the same syntax plus `exp
 | `expect k=v [k=v …]` | Assert on screen, any summary key, call=<client.method> (called during the previous step), error=<code\|none> or pending=<n>. A failed assertion fails the script. |
 | `advance <duration>` | Move the app's clock forward, e.g. 500ms, 30s, 5m, 1h, firing the timers due. |
 | `mock <client.method> <error>` | Make the next call to that method fail, e.g. mock items.fetch network. |
+| `device open-url <url>` | Open a link in the app, as a tapped deep link or universal link. |
+| `device push <name> [tap]` | Deliver a push notification while the app is in front; with tap, open the app from it. Pushes: item-updated (Item 2 was updated.). |
 
 ## Screens
 

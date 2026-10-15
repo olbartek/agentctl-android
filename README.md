@@ -566,6 +566,7 @@ fun everyCommandIsUsedByAScenario() {
 - `unusedCommands()`: a command no scenario ever sends.
 - `undocumentedSummaryKeys()`: a key a run emits that the screen's `summaryKeys` does not list.
 - `unvisitedScreens()`: a documented screen path no scenario reaches. An `<id>` segment matches any concrete one.
+- `unusedDeviceCommands()`: a `device` subcommand, or a push, the app configures and no scenario sends.
 
 The constructor throws `NoScenariosFound` when the directory holds no `*.appctl` files; otherwise all three guards
 would pass having examined nothing.
@@ -761,7 +762,7 @@ The wire protocol (routes, the `X-Appctl-Exit` header, the JSON form) is
 implementation. It specifies:
 
 - the script language and command resolution;
-- the three runtime commands;
+- the runtime commands (`expect`, `advance`, `mock`, and `device` when the app configures one);
 - the exact step output and the exit codes;
 - the determinism requirements;
 - the bridge protocol.
@@ -813,6 +814,14 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   test's source file (`#filePath`). Its checks block (`runBlocking`) where the reference's are `async`, need no
   serialized suite (the reference turns a process-wide executor on for each run), and compare the final state dumps
   as they are, since pushed screens take their ids from the state, not from a per-process counter.
+- The simulated device (§2.4) is `AgentEnvironment.device`, where the reference's is the `\.agentDevice` dependency;
+  its configuration is `AppCtlConfig.deviceConfig`, since `device` there already names the `adb` device. Its
+  requests are `suspend` functions and its updates `Flow`s, where the reference's are `async` and `AsyncStream`s; a
+  cancelled request throws `CancellationException` rather than returning. A link reaches `openUrl` as a
+  `java.net.URI`, where the reference's `openURL` gets a `URL`. `device relaunch` builds the next store with the
+  host's `makeStore` on a copy of the environment with a fresh `scope` (cancelling the old one ends the old store's
+  effects), where the reference rebuilds the store over the same dependencies; in the app it is the same process,
+  and `AgentLaunch.stores` gives the root the new store.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.

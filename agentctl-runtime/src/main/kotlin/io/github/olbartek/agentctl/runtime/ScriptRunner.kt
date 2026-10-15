@@ -2,19 +2,28 @@ package io.github.olbartek.agentctl.runtime
 
 import io.github.olbartek.agentctl.AgentCommandException
 import io.github.olbartek.agentctl.AgentContainer
+import io.github.olbartek.agentctl.AgentDevice
+import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentDuration
 import io.github.olbartek.agentctl.AgentRegistry
 import io.github.olbartek.agentctl.AgentStore
 import io.github.olbartek.agentctl.ArgumentText
+import io.github.olbartek.agentctl.BiometryResult
+import io.github.olbartek.agentctl.DeviceLocation
+import io.github.olbartek.agentctl.DevicePhase
+import io.github.olbartek.agentctl.DeviceSurface
 import io.github.olbartek.agentctl.Expectation
 import io.github.olbartek.agentctl.ExpectationSyntaxError
 import io.github.olbartek.agentctl.MockCallLog
 import io.github.olbartek.agentctl.MockFaults
 import io.github.olbartek.agentctl.MockMethod
+import io.github.olbartek.agentctl.PermissionStatus
 import io.github.olbartek.agentctl.ScriptError
 import io.github.olbartek.agentctl.ScriptLine
 import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.StepRecord
+import java.net.URI
+import java.net.URISyntaxException
 
 /** How a [ScriptRunner] waits for the app and whether it can control time. */
 public class RunnerEnvironment(
@@ -59,7 +68,7 @@ public data class StepOutcome(val step: StepRecord, val status: RunStatus)
  * the store's own thread: the calling thread headlessly, the main thread in the app.
  */
 public class ScriptRunner<S, A>(
-    public val store: AgentStore<S, A>,
+    store: AgentStore<S, A>,
     private val container: AgentContainer<S, A>,
     private val callLog: MockCallLog,
     private val faults: MockFaults,
@@ -67,7 +76,19 @@ public class ScriptRunner<S, A>(
     private val environment: RunnerEnvironment,
     /** The methods `mock` accepts, from the host that built this runner. */
     private val mockMethods: List<MockMethod>,
+    /** The simulated device `device` changes and the app's fakes read. */
+    public val device: AgentDevice = AgentDevice(),
+    private val deviceConfig: AgentDeviceConfig<A> = AgentDeviceConfig.none(),
+    /** Builds a fresh store over the same environment, for `device relaunch`. */
+    private val relaunch: (() -> AgentStore<S, A>)? = null,
 ) {
+    /** The store the script drives. `device relaunch` replaces it with a fresh one. */
+    public var store: AgentStore<S, A> = store
+        private set
+
+    /** The `device` subcommands this app has. */
+    public val deviceSurface: DeviceSurface = deviceConfig.surface
+
     /** Adds a diff of the root state to each step (`--diff`). */
     public var recordsDiff: Boolean = false
 
@@ -120,6 +141,7 @@ public class ScriptRunner<S, A>(
         "expect" -> expect(line)
         "advance" -> advance(line)
         "mock" -> mock(line)
+        "device" -> if (deviceSurface.exists) device(line) else command(line)
         else -> command(line)
     }
 
@@ -181,8 +203,12 @@ public class ScriptRunner<S, A>(
         val screen = container.activeScreen(state)
         val command = screen.command(line.name)
         if (command == null) {
-            val valid = (screen.commands.map { it.usage } + AgentRegistry.runtimeCommandNames).joinToString(", ")
+            val runtime = AgentRegistry.runtimeCommandNames + if (deviceSurface.exists) listOf("device") else emptyList()
+            val valid = (screen.commands.map { it.usage } + runtime).joinToString(", ")
             return fail(line, RunStatus.FAILED, "unknown command '${line.name}' on ${screen.path}. Valid here: $valid")
+        }
+        if (DeviceSurface.Subcommand.BACKGROUND in deviceSurface.subcommands && device.phase == DevicePhase.BACKGROUND) {
+            return fail(line, RunStatus.FAILED, "${command.name} is unavailable: the app is in the background (device foreground first)")
         }
         command.disabledReason?.let { reason ->
             return fail(line, RunStatus.FAILED, "${command.name} is disabled here ($reason)")
@@ -195,6 +221,135 @@ public class ScriptRunner<S, A>(
         val start = callLog.count
         val before = state
         store.send(action)
+        val settle = settleAndAppear()
+        return finish(line.text, start, settle, before)
+    }
+
+    // device (CONTRACT.md §2.4)
+
+    private suspend fun device(line: ScriptLine): StepOutcome {
+        val surface = deviceSurface
+        val available = surface.subcommands.joinToString(", ") { it.rawValue }
+        val tokens = ArgumentText.tokens(line.argument ?: "")
+        val first = tokens.firstOrNull()
+            ?: return fail(line, RunStatus.USAGE, "usage: device <subcommand>; available: $available")
+        val sub = DeviceSurface.Subcommand.of(first)
+            ?: return fail(line, RunStatus.USAGE, "unknown device command '$first'; available: $available")
+        if (sub !in surface.subcommands) {
+            return fail(line, RunStatus.USAGE, "device $first is not configured by this app; available: $available")
+        }
+        val arguments = tokens.drop(1)
+        fun usage(text: String) = fail(line, RunStatus.USAGE, "usage: $text")
+        fun failed(text: String) = fail(line, RunStatus.FAILED, text)
+        val services = surface.services.joinToString(", ")
+
+        return when (sub) {
+            DeviceSurface.Subcommand.PERMISSION -> {
+                val status = arguments.takeIf { it.size == 2 }?.let { PermissionStatus.of(it[1]) }
+                    ?: return usage("device permission <service> <not-determined|granted|denied|limited>; services: $services")
+                val service = arguments[0]
+                if (service !in surface.services) return failed("unknown permission '$service'; services: $services")
+                if (device.isPrompting(service)) {
+                    return failed("device permission: a prompt for $service is pending; answer it with device prompt allow|deny|limited")
+                }
+                settling(line) { device.setPermission(service, status) }
+            }
+
+            DeviceSurface.Subcommand.PROMPT -> {
+                val answers = mapOf(
+                    "allow" to PermissionStatus.GRANTED,
+                    "deny" to PermissionStatus.DENIED,
+                    "limited" to PermissionStatus.LIMITED,
+                )
+                val status = arguments.singleOrNull()?.let(answers::get) ?: return usage("device prompt <allow|deny|limited>")
+                try {
+                    device.answerPermission(status)
+                } catch (error: AgentDevice.AnswerError) {
+                    return when (error) {
+                        AgentDevice.AnswerError.NoPrompt -> failed("device prompt: no prompt is pending")
+                        is AgentDevice.AnswerError.OtherPrompt ->
+                            failed("device prompt: the pending prompt is ${error.name}; answer it with device biometry match|fail")
+                    }
+                }
+                settling(line) {}
+            }
+
+            DeviceSurface.Subcommand.OPEN_URL -> {
+                val url = arguments.singleOrNull()?.let(::parseUrl) ?: return usage("device open-url <url>")
+                val action = deviceConfig.openUrl?.invoke(url)
+                    ?: return failed("device open-url: the app does not handle ${arguments[0]}")
+                settling(line) { store.send(action) }
+            }
+
+            DeviceSurface.Subcommand.PUSH -> {
+                val names = surface.pushes.joinToString(", ") { it.name }
+                if (!(arguments.size == 1 || (arguments.size == 2 && arguments[1] == "tap"))) {
+                    return usage("device push <name> [tap]; pushes: $names")
+                }
+                val push = deviceConfig.pushes.firstOrNull { it.name == arguments[0] }
+                    ?: return failed("unknown push '${arguments[0]}'; pushes: $names")
+                val action = if (arguments.size == 2) push.opened else push.received
+                settling(line) { if (action != null) store.send(action) }
+            }
+
+            DeviceSurface.Subcommand.BACKGROUND, DeviceSurface.Subcommand.FOREGROUND -> {
+                if (arguments.isNotEmpty()) return usage("device ${sub.rawValue}")
+                val phase = if (sub == DeviceSurface.Subcommand.BACKGROUND) DevicePhase.BACKGROUND else DevicePhase.FOREGROUND
+                val action = deviceConfig.scenePhase?.invoke(phase)
+                settling(line) {
+                    device.setPhase(phase)
+                    if (action != null) store.send(action)
+                }
+            }
+
+            DeviceSurface.Subcommand.RELAUNCH -> {
+                if (arguments.isNotEmpty()) return usage("device relaunch")
+                val relaunch = relaunch ?: return failed("device relaunch is not available in this runtime")
+                settling(line) {
+                    // The old store's effects are cancelled with it; a prompt one of them was waiting on goes with
+                    // it, as when the app quits.
+                    store = relaunch()
+                    device.withdrawAllPrompts()
+                    device.setPhase(DevicePhase.FOREGROUND)
+                    lastIdentity = null
+                }
+            }
+
+            DeviceSurface.Subcommand.NETWORK -> {
+                val online = when (arguments.singleOrNull()) {
+                    "online" -> true
+                    "offline" -> false
+                    else -> return usage("device network <online|offline>")
+                }
+                settling(line) { device.setOnline(online) }
+            }
+
+            DeviceSurface.Subcommand.LOCATION -> {
+                val location = arguments.singleOrNull()?.let(DeviceLocation::parseArgument)
+                    ?: return usage("device location <lat>,<lon> or none, e.g. 52.2297,21.0122")
+                settling(line) { device.setLocation(location.location) }
+            }
+
+            DeviceSurface.Subcommand.BIOMETRY -> when (arguments.singleOrNull()) {
+                "enrolled", "unenrolled" -> settling(line) { device.setBiometryEnrolled(arguments[0] == "enrolled") }
+                "match", "fail" -> {
+                    try {
+                        device.answerBiometry(if (arguments[0] == "match") BiometryResult.SUCCESS else BiometryResult.FAILURE)
+                    } catch (_: AgentDevice.AnswerError) {
+                        return failed("device biometry: no biometric prompt is pending")
+                    }
+                    settling(line) {}
+                }
+                else -> usage("device biometry <enrolled|unenrolled|match|fail>")
+            }
+        }
+    }
+
+    /** Runs [change], then settles and prints the step, as a screen command does. */
+    private suspend fun settling(line: ScriptLine, change: () -> Unit): StepOutcome {
+        val start = callLog.count
+        val before = state
+        change()
         val settle = settleAndAppear()
         return finish(line.text, start, settle, before)
     }
@@ -239,6 +394,7 @@ public class ScriptRunner<S, A>(
             calls = calls,
             error = screen.errorCode,
             pending = settle.pending,
+            prompt = device.pendingPrompt,
             settled = settle.settled,
         )
     }
@@ -255,5 +411,21 @@ public class ScriptRunner<S, A>(
          * saturates long before that, which no app can observe.
          */
         public val ADVANCE_LIMIT: AgentDuration = AgentDuration.ofSeconds(Long.MAX_VALUE)
+
+        private val URL_SCHEME = Regex("[A-Za-z][A-Za-z0-9+.-]*")
+
+        /**
+         * An absolute URL: a scheme (`[A-Za-z][A-Za-z0-9+.-]*`), a colon, then no whitespace, parsed strictly (nothing
+         * percent-encoded on the way), so both ports accept and reject the same texts.
+         */
+        internal fun parseUrl(text: String): URI? {
+            val colon = text.indexOf(':')
+            if (colon < 0 || text.any { it.isWhitespace() } || !URL_SCHEME.matches(text.substring(0, colon))) return null
+            return try {
+                URI(text)
+            } catch (_: URISyntaxException) {
+                null
+            }
+        }
     }
 }

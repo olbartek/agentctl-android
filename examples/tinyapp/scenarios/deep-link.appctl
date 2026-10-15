@@ -1,0 +1,9 @@
+# Links: `device open-url` hands a URL to the app as a tapped deep link would. `tinyapp://items/<id>` opens that
+# item on top of whatever is shown; a link to an item the list does not have reports notFound, as `open` does.
+device open-url tinyapp://items/2
+expect screen=items/2 title="Second item"
+back
+device open-url tinyapp://items/9
+expect screen=items error=notFound
+device open-url tinyapp://items/3
+expect screen=items/3 title="Third item" error=none

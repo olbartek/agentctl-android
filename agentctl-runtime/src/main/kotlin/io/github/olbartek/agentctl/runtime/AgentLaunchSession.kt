@@ -71,13 +71,16 @@ public class AgentLaunchSession<S, A>(
     public val host: LiveHost<S, A>
     private val server: BridgeServer
     private val screensText: () -> String
+
+    /** Made after the seed, so its runner drives the store the seed left (a seed's `device relaunch` replaces it). */
+    private lateinit var router: BridgeRouter<S, A>
     private var started = false
 
     init {
         if (options.clearSession) config.clearSession()
         host = config.makeLive(options.latency ?: MockLatency.LIVE, dispatcher)
-        screensText = { ScreensRenderer.render(config.screens, config.docsText.mockExample) }
-        val router = BridgeRouter(host.makeRunner(synthesizesAppearance = false), screensText)
+        val device = config.deviceConfig.surface
+        screensText = { ScreensRenderer.render(config.screens, config.docsText.mockExample, device) }
         server = BridgeServer(dispatcher, config.applicationId) { router.handle(it) }
     }
 
@@ -89,6 +92,7 @@ public class AgentLaunchSession<S, A>(
         if (started) return null
         started = true
         options.seed?.let { seed -> log(applySeed(seed, host.makeRunner(synthesizesAppearance = true)).log) }
+        router = BridgeRouter(host.makeRunner(synthesizesAppearance = false), screensText)
         return try {
             server.start(options.port).also { log("AgentCtlBridge: listening on 127.0.0.1:$it") }
         } catch (error: IOException) {
