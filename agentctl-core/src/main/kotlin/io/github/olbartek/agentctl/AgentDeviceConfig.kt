@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl
 
+import io.github.olbartek.agentctl.AgentDevice.Surface.Subcommand
 import java.net.URI
 
 /**
@@ -35,14 +36,14 @@ public class AgentDeviceConfig<A>(
     public val surface: AgentDevice.Surface
         get() {
             val subcommands = mutableListOf<AgentDevice.Surface.Subcommand>()
-            if (permissions.isNotEmpty()) subcommands += listOf(AgentDevice.Surface.Subcommand.PERMISSION, AgentDevice.Surface.Subcommand.PROMPT)
-            if (openUrl != null) subcommands += AgentDevice.Surface.Subcommand.OPEN_URL
-            if (pushes.isNotEmpty()) subcommands += AgentDevice.Surface.Subcommand.PUSH
-            if (scenePhase != null) subcommands += listOf(AgentDevice.Surface.Subcommand.BACKGROUND, AgentDevice.Surface.Subcommand.FOREGROUND)
-            if (relaunch) subcommands += AgentDevice.Surface.Subcommand.RELAUNCH
-            if (offlineErrorCode != null) subcommands += AgentDevice.Surface.Subcommand.NETWORK
-            if (location) subcommands += AgentDevice.Surface.Subcommand.LOCATION
-            if (biometry) subcommands += AgentDevice.Surface.Subcommand.BIOMETRY
+            if (permissions.isNotEmpty()) subcommands += listOf(Subcommand.PERMISSION, Subcommand.PROMPT)
+            if (openUrl != null) subcommands += Subcommand.OPEN_URL
+            if (pushes.isNotEmpty()) subcommands += Subcommand.PUSH
+            if (scenePhase != null) subcommands += listOf(Subcommand.BACKGROUND, Subcommand.FOREGROUND)
+            if (relaunch) subcommands += Subcommand.RELAUNCH
+            if (offlineErrorCode != null) subcommands += Subcommand.NETWORK
+            if (location) subcommands += Subcommand.LOCATION
+            if (biometry) subcommands += Subcommand.BIOMETRY
             return AgentDevice.Surface(
                 subcommands = subcommands,
                 services = permissions,
