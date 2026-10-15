@@ -1,0 +1,9 @@
+# Turning order updates on asks for permission to send notifications: the system prompt waits until it is
+# answered, and allowing it turns them on.
+login-as alice
+tab profile
+expect orderUpdates=off prompt=none
+order-updates on
+expect orderUpdates=off prompt=notifications
+device prompt allow
+expect orderUpdates=on prompt=none error=none

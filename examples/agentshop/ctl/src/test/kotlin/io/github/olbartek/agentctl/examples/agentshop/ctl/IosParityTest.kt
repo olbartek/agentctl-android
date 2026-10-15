@@ -19,7 +19,7 @@ class IosParityTest {
     @Test
     fun everyScenarioPrintsWhatTheReferencePrints() {
         val files = scenarioFiles
-        assertEquals(105, files.size, "the scenarios are iOS's 105")
+        assertEquals(123, files.size, "the scenarios are iOS's 123")
         val mismatches = mutableListOf<String>()
         for (file in files) {
             val expected = resource("ios/text/${file.nameWithoutExtension}.txt")

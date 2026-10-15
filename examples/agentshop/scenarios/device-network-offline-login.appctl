@@ -1,0 +1,9 @@
+# Signing in offline fails with network; back online, it works.
+device network offline
+email alice@example.com
+password Passw0rd!
+submit
+expect screen=auth/login error=network call=auth.login
+device network online
+submit
+expect screen=home/shop

@@ -107,11 +107,12 @@ class LoginTest {
         val screen = LoginAgent.activeScreen(Login.State(email = "alice@example.com"))
         assertEquals("auth/login", screen.path)
         assertEquals(
-            listOf("email", "password", "show-password", "keep-signed-in", "submit", "google", "use-otp", "register", "forgot"),
+            listOf("email", "password", "show-password", "keep-signed-in", "submit", "google", "face-id", "use-otp", "register", "forgot"),
             screen.commands.map { it.name },
         )
         assertEquals("canSubmit=false", screen.command("submit")?.disabledReason)
         assertNull(screen.command("google")?.disabledReason)
+        assertEquals("no account has turned Face ID on", screen.command("face-id")?.disabledReason)
         assertEquals(LoginAgent.summaryKeys, screen.summary.map { it.key })
         assertTrue(SummaryItem("keepSignedIn", true) in screen.summary)
         val revealed = LoginAgent.activeScreen(Login.State(showPassword = true, isGoogleLoading = true))

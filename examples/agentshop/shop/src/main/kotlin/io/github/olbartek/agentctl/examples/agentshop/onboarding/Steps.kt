@@ -3,10 +3,13 @@ package io.github.olbartek.agentctl.examples.agentshop.onboarding
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentScreen
 import io.github.olbartek.agentctl.CommandGate
+import io.github.olbartek.agentctl.DeviceLocation
 import io.github.olbartek.agentctl.Effect
+import io.github.olbartek.agentctl.PermissionStatus
 import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.examples.agentshop.clients.AccountClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.LocationClient
 import io.github.olbartek.agentctl.examples.agentshop.models.AccountError
 import io.github.olbartek.agentctl.examples.agentshop.models.AccountProfile
 import io.github.olbartek.agentctl.examples.agentshop.models.Address
@@ -144,9 +147,23 @@ object InterestsAgent : AgentScreen<Interests.State, Interests.Action> {
 /**
  * A shipping address, saved for checkout. Optional: "Skip" moves on without one. "Continue" needs every field, and a
  * zip that is not five digits is refused with `invalidZip`.
+ *
+ * "Use my location" asks for the location permission, then fills the street, city and zip from where the device is:
+ * `locationDenied` when refused, `locationUnavailable` when the device has no location, `addressNotFound` for a place
+ * the (mock) geocoder does not know.
  */
 object AddressForm {
-    enum class Error(override val code: String) : Coded { INVALID_ZIP("invalidZip") }
+    enum class Error(override val code: String) : Coded {
+        INVALID_ZIP("invalidZip"),
+        LOCATION_DENIED("locationDenied"),
+        LOCATION_UNAVAILABLE("locationUnavailable"),
+        ADDRESS_NOT_FOUND("addressNotFound"),
+    }
+
+    /** The mock geocoder: the one place it knows. */
+    val knownPlaces: Map<DeviceLocation, Address> = mapOf(
+        DeviceLocation(37.3349, -122.009) to Address(street = "1 Apple Park Way", city = "Cupertino", zip = "95014"),
+    )
 
     data class State(val address: Address = Address(), val error: Error? = null) {
         val canContinue: Boolean get() = address.isComplete
@@ -159,6 +176,10 @@ object AddressForm {
         data class ZipChanged(val zip: String) : Action
         data object ContinueTapped : Action
         data object SkipTapped : Action
+        data object UseLocationTapped : Action
+
+        /** Where the device is, or why it could not say. */
+        data class Located(val location: DeviceLocation?, val error: Error?) : Action
 
         sealed interface Delegate : Action {
             /** `address` is `null` when skipped. */
@@ -166,8 +187,34 @@ object AddressForm {
         }
     }
 
-    val reducer: Reducer<State, Action> = Reducer { state, action ->
+    fun reducer(locationClient: LocationClient = LocationClient()): Reducer<State, Action> = Reducer { state, action ->
         when (action) {
+            Action.UseLocationTapped -> next(
+                state.copy(error = null),
+                Effect.run { send ->
+                    val status = locationClient.requestAuthorization()
+                    if (status != PermissionStatus.GRANTED && status != PermissionStatus.LIMITED) {
+                        send(Action.Located(null, Error.LOCATION_DENIED))
+                        return@run
+                    }
+                    val location = locationClient.current()
+                    send(if (location == null) Action.Located(null, Error.LOCATION_UNAVAILABLE) else Action.Located(location, null))
+                },
+            )
+            is Action.Located -> {
+                val location = action.location
+                if (location == null) {
+                    next(state.copy(error = action.error))
+                } else {
+                    // A location fills the street, city and zip only: the name stays the shopper's.
+                    val place = knownPlaces[location]
+                    if (place == null) {
+                        next(state.copy(error = Error.ADDRESS_NOT_FOUND))
+                    } else {
+                        next(state.copy(address = state.address.copy(street = place.street, city = place.city, zip = place.zip)))
+                    }
+                }
+            }
             is Action.NameChanged -> next(state.copy(address = state.address.copy(name = action.name), error = null))
             is Action.StreetChanged -> next(state.copy(address = state.address.copy(street = action.street), error = null))
             is Action.CityChanged -> next(state.copy(address = state.address.copy(city = action.city), error = null))
@@ -210,6 +257,11 @@ object AddressFormAgent : AgentScreen<AddressForm.State, AddressForm.Action> {
             help = "Save the address for checkout; a zip that isn't five digits reports error=invalidZip.",
             action = AddressForm.Action.ContinueTapped,
             gate = CommandGate("canContinue=false") { it.canContinue },
+        ),
+        AgentCommand.action(
+            "use-location",
+            help = "Fill the street, city and zip from the device's location (asks for the location permission).",
+            action = AddressForm.Action.UseLocationTapped,
         ),
         AgentCommand.action("skip", help = "Go on without an address.", action = AddressForm.Action.SkipTapped),
     )

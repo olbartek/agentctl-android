@@ -4,6 +4,7 @@ import io.github.olbartek.agentctl.ActiveScreen
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentContainer
 import io.github.olbartek.agentctl.CommandDoc
+import io.github.olbartek.agentctl.DevicePhase
 import io.github.olbartek.agentctl.Effect
 import io.github.olbartek.agentctl.EffectScope
 import io.github.olbartek.agentctl.Next
@@ -15,6 +16,9 @@ import io.github.olbartek.agentctl.examples.agentshop.auth.AuthFlowAgent
 import io.github.olbartek.agentctl.examples.agentshop.clients.MockAccounts
 import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabs
 import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabsAgent
+import io.github.olbartek.agentctl.examples.agentshop.home.OrdersList
+import io.github.olbartek.agentctl.examples.agentshop.auth.Login
+import io.github.olbartek.agentctl.examples.agentshop.models.DeepLink
 import io.github.olbartek.agentctl.examples.agentshop.models.Outcome
 import io.github.olbartek.agentctl.examples.agentshop.models.Session
 import io.github.olbartek.agentctl.examples.agentshop.models.attempt
@@ -54,6 +58,15 @@ object AppFeature {
 
         /** Restarts from a fresh launch: the saved session and the mock backends are kept. */
         data object Reset : Action
+
+        /** A link opened from outside (`device open-url`, a tapped push). Signed out, it is ignored. */
+        data class DeepLinkOpened(val link: DeepLink) : Action
+
+        /** A push saying an order changed arrived while the app is in front: the orders are loaded again. */
+        data object OrderPushReceived : Action
+
+        /** The app came to the foreground or went to the background. */
+        data class ScenePhaseChanged(val phase: DevicePhase) : Action
     }
 
     /** The scope each case's effects run in, cancelled when the app leaves the case (TCA's `ifCaseLet`). */
@@ -69,9 +82,21 @@ object AppFeature {
     fun reducer(dependencies: ShopDependencies): Reducer<State, Action> {
         val sessionClient = dependencies.sessionClient
         val accountClient = dependencies.accountClient
-        val auth = AuthFlow.reducer(dependencies.authClient, dependencies.clock)
-        val onboarding = OnboardingFlow.reducer(accountClient)
-        val home = HomeTabs.reducer(dependencies.catalogClient, dependencies.cartClient, dependencies.ordersClient, accountClient)
+        val faceIDVault = dependencies.faceIDVault
+        val auth = AuthFlow.reducer(dependencies.authClient, dependencies.clock, dependencies.biometricsClient)
+        val onboarding = OnboardingFlow.reducer(accountClient, dependencies.locationClient)
+        val home = HomeTabs.reducer(
+            dependencies.catalogClient,
+            dependencies.cartClient,
+            dependencies.ordersClient,
+            accountClient,
+            dependencies.notificationsClient,
+            dependencies.biometricsClient,
+            faceIDVault,
+        )
+
+        /** The sign-in screens, offering Face ID when an account has turned it on. */
+        fun authState(): State = State.Auth(AuthFlow.State(login = Login.State(faceIDAccount = faceIDVault.session)))
 
         fun homeState(session: Session): State = State.Home(HomeTabs.State(dependencies.uuids(), session))
 
@@ -104,7 +129,7 @@ object AppFeature {
                 } else {
                     next(state, Effect.run { send -> send(Action.SessionLoaded(sessionClient.current())) })
                 }
-            is Action.SessionLoaded -> next(action.session?.let(::homeState) ?: State.Auth(AuthFlow.State()))
+            is Action.SessionLoaded -> next(action.session?.let(::homeState) ?: authState())
             is Action.Auth -> when (val delegate = action.action) {
                 is AuthFlow.Action.Delegate.Authenticated -> next(state, signIn(delegate.session, delegate.remember))
                 else -> next(state)
@@ -125,7 +150,18 @@ object AppFeature {
                 } else {
                     next(state)
                 }
-            Action.SignedOut -> next(State.Auth(AuthFlow.State()))
+            Action.SignedOut -> next(authState())
+            is Action.DeepLinkOpened ->
+                if (state is State.Home) next(state, Effect.send(Action.Home(HomeTabs.Action.OpenDeepLink(action.link)))) else next(state)
+            Action.OrderPushReceived ->
+                if (state is State.Home) next(state, Effect.send(Action.Home(HomeTabs.Action.OrdersList(OrdersList.Action.Refresh)))) else next(state)
+            // Back in front on the orders tab, the list may be stale: load it again.
+            is Action.ScenePhaseChanged ->
+                if (action.phase == DevicePhase.FOREGROUND && state is State.Home && state.state.selectedTab == HomeTabs.Tab.ORDERS) {
+                    next(state, Effect.send(Action.Home(HomeTabs.Action.OrdersList(OrdersList.Action.Refresh))))
+                } else {
+                    next(state)
+                }
             // The launching screen appears again and sends `Appeared`, which restores the session.
             Action.Reset -> next(State.Launching)
         }

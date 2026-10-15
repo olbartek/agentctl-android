@@ -80,6 +80,24 @@ fun LoginView(state: Login.State, send: (Login.Action) -> Unit) {
             send(Login.Action.GoogleTapped)
         }
 
+        state.faceIDAccount?.let { account ->
+            LinkButton(
+                "Sign in with Face ID as ${account.user.email}",
+                testTag = "Login.face-id",
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 16.dp),
+            ) { send(Login.Action.FaceIDTapped) }
+        }
+        state.faceIDError?.let { error ->
+            InlineError(
+                when (error) {
+                    Login.FaceIDError.BIOMETRY_FAILED -> "Face ID didn't recognize you."
+                    Login.FaceIDError.BIOMETRY_UNAVAILABLE -> "Face ID isn't set up on this device."
+                },
+                code = error.code,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
         DividerLabel("or sign in with", Modifier.padding(top = 24.dp))
 
         Column(Modifier.padding(top = Metrics.sectionSpacing), verticalArrangement = Arrangement.spacedBy(Metrics.fieldSpacing)) {

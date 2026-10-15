@@ -1,6 +1,6 @@
 # AgentShop
 
-The showcase app for [AgentCtl](../../README.md): a small but complete shop whose 105 scenario files run
+The showcase app for [AgentCtl](../../README.md): a small but complete shop whose 123 scenario files run
 **unchanged** on both ports. It is the Kotlin port of agentctl-ios's `Examples/AgentShop` (the TCA app), screen
 for screen and command for command, and every scenario prints the same bytes here as it does there.
 [`docs/APP.md`](docs/APP.md) shows the app, screen by screen.
@@ -10,6 +10,7 @@ for screen and command for command, and every scenario prints the same bytes her
 | **Authentication** | login, one-time code, sign-up, email verification, password reset, profile and log-out | 35 |
 | **Onboarding** | welcome carousel, interests (2–4), shipping address, notifications — once per new account | 26 |
 | **Shop** | feed (filter, search, sort), product (sizes, quantity, favorite), cart (promo codes), checkout (saved address, express shipping, card or Apple Pay), confirmation, orders | 44 |
+| **Device** | the simulated device (`device …`): the notifications permission (profile's order updates), the location permission and location (onboarding's "use my location"), links `agentshop://product/<id>`, `agentshop://order/<id>` and `agentshop://shop`, the `order-shipped` and `promo` pushes, background, foreground and relaunch, the network going offline, Face ID (turned on in the profile, then offered at login) | 18 |
 
 Everything behind the screens is mocked in memory (`shop/…/clients`), and every mocked call can be made to fail
 from a script (`mock orders.placeOrder network`). The accounts:
@@ -30,7 +31,7 @@ On the JVM, no emulator, no views:
 
 ```bash
 cd examples/agentshop
-./appctl test                                        # all 105 scenarios
+./appctl test                                        # all 123 scenarios
 ./appctl test scenarios/shop-checkout-happy-path.appctl
 ./appctl run "login-as alice; tab orders; open 1003; cancel"
 ./appctl run "use-otp; email alice@example.com; send; advance 30s; resend"
@@ -106,7 +107,8 @@ cd examples/agentshop
   -Pandroid.testInstrumentationRunnerArguments.class=io.github.olbartek.agentctl.examples.agentshop.app.generated.ShopUiTests#test_checkout_happy_path
 ```
 
-`app test` runs 103 of the 105 scenarios green in the app. The two that fail do so for the same reasons as on iOS:
+`app test` runs 103 of the first 105 scenarios green in the app; the 18 device scenarios have not been run in the
+Android app yet (`device relaunch` there shows the new store through `AgentLaunch.stores`). The two that fail do so for the same reasons as on iOS:
 `auth-launch` expects the launch's `call=session.current`, which happens before `app run` starts, and
 `auth-otp-resend-countdown` expects `resendIn=20` after `advance 10s`, while the real clock also ticked during the
 steps before it (`resendIn=19`).
@@ -127,8 +129,10 @@ which records per scenario what is asserted through the UI and what only headles
 3. `expect` becomes waits for what the screen shows. `mock` becomes a `mock-fault` launch extra that fails the same
    call, `orders.placeOrder#1=network`, read by `ScheduledFaults`.
 
-99 of the 105 scenarios become UI tests, the same 99 as on iOS. The other six move a virtual clock (`advance 30s`),
-seed (`login-as`) or relaunch (`reset`), which a UI test can only do by really waiting. They stay headless.
+99 of the 123 scenarios become UI tests, the same 99 as on iOS. Six others move a virtual clock (`advance 30s`),
+seed (`login-as`) or relaunch (`reset`), which a UI test can only do by really waiting, and the 18 device scenarios
+drive the device AgentCtl simulates inside the app (`device prompt allow`, `device network offline`), which a UI test
+cannot reach. They stay headless.
 
 ```bash
 python3 bench/gen_uitests.py          # after changing a scenario or a screen's commands
@@ -178,7 +182,7 @@ then copies it next to the latest report. [`docs/APP.md`](docs/APP.md) shows the
 | `shop/…/<feature>/<Screen>.kt` | Each screen's state, actions and reducer, and beside it its agent surface (`<Screen>Agent`): path, summary, commands. |
 | `ctl/` | `:examples:agentshop:ctl`: `AgentShopConfig`, the whole AgentCtl integration — one `AppCtlConfig`, and the headless and live hosts — and the tests that drive AgentShop through it. |
 | `shopctl/` | `:examples:agentshop:shopctl`: the CLI executable (`shopctl`). |
-| `scenarios/` | `<group>-<name>.appctl`, 105 of them, byte for byte the reference's. |
+| `scenarios/` | `<group>-<name>.appctl`, 123 of them, byte for byte the reference's. |
 | `bench/` | `gen_uitests.py` and `uitests.json` (the UI tests); `bench.py`, `video.py` + `compose.py` and `screenshots.py` (the benchmark, its video and `docs/screenshots`); and `ios_transcripts.sh`, which regenerates the reference transcripts the parity test compares against. |
 | `docs/` | `APP.md`, the app screen by screen, and its screenshots. |
 | `app/` | `:examples:agentshop:app`: the Compose app (`design/` is the design system), and in `src/androidTest` the UI test driver and the generated tests. |

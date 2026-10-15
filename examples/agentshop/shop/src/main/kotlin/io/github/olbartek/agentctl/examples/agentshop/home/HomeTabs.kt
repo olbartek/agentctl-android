@@ -11,10 +11,14 @@ import io.github.olbartek.agentctl.ResolvedCommand
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.appending
 import io.github.olbartek.agentctl.examples.agentshop.clients.AccountClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.BiometricsClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.CartClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.CatalogClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.FaceIDVault
+import io.github.olbartek.agentctl.examples.agentshop.clients.NotificationsClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.OrdersClient
 import io.github.olbartek.agentctl.examples.agentshop.models.Coded
+import io.github.olbartek.agentctl.examples.agentshop.models.DeepLink
 import io.github.olbartek.agentctl.examples.agentshop.models.Session
 import io.github.olbartek.agentctl.examples.agentshop.navigation.Stack
 import io.github.olbartek.agentctl.examples.agentshop.shop.Cart
@@ -76,7 +80,7 @@ object HomeTabs {
         val ordersPath: Stack<OrderDetail.State> = Stack("orders"),
         val profile: Profile.State,
     ) {
-        constructor(id: UUID, session: Session) : this(id = id, profile = Profile.State(session.user))
+        constructor(id: UUID, session: Session) : this(id = id, profile = Profile.State(session.user, session = session))
     }
 
     sealed interface Action {
@@ -92,6 +96,9 @@ object HomeTabs {
         data class OrdersPopFrom(val id: Int) : Action
         data class Profile(val action: io.github.olbartek.agentctl.examples.agentshop.home.Profile.Action) : Action
 
+        /** A link opened while signed in: the tab it belongs to, with the product or order on top. */
+        data class OpenDeepLink(val link: DeepLink) : Action
+
         sealed interface Delegate : Action {
             data object LoggedOut : Delegate
         }
@@ -102,7 +109,11 @@ object HomeTabs {
         cartClient: CartClient,
         ordersClient: OrdersClient,
         accountClient: AccountClient,
+        notificationsClient: NotificationsClient = NotificationsClient(),
+        biometricsClient: BiometricsClient = BiometricsClient(),
+        faceIDVault: FaceIDVault = FaceIDVault(),
     ): Reducer<State, Action> {
+        val profile = Profile.reducer(notificationsClient, biometricsClient, faceIDVault)
         val shop = ShopFeed.reducer(catalogClient)
         val cart = Cart.reducer(cartClient)
         val ordersList = OrdersList.reducer(ordersClient)
@@ -127,7 +138,7 @@ object HomeTabs {
                     .let { Next(state.copy(cart = it.state), it.effect.map { a -> Action.Cart(a) }) }
                 is Action.OrdersList -> ordersList.reduce(state.ordersList, action.action)
                     .let { Next(state.copy(ordersList = it.state), it.effect.map { a -> Action.OrdersList(a) }) }
-                is Action.Profile -> Profile.reducer.reduce(state.profile, action.action)
+                is Action.Profile -> profile.reduce(state.profile, action.action)
                     .let { Next(state.copy(profile = it.state), it.effect.map { a -> Action.Profile(a) }) }
                 is Action.ShopElement -> state.shopPath
                     .reduceElement(action.id, { Action.ShopElement(action.id, it) }) { ProductDetail.reducer.reduce(it, action.action) }
@@ -232,6 +243,24 @@ object HomeTabs {
 
                 is Action.Profile ->
                     if (action.action == Profile.Action.Delegate.LoggedOut) next(state, Effect.send(Action.Delegate.LoggedOut)) else next(state)
+
+                is Action.OpenDeepLink -> when (val link = action.link) {
+                    DeepLink.Shop -> next(state.copy(selectedTab = Tab.SHOP))
+                    is DeepLink.Product -> {
+                        val popped = state.shopPath.removeAll()
+                        next(
+                            state.copy(selectedTab = Tab.SHOP, shopPath = popped.state),
+                            Effect.merge(popped.effect, Effect.send(Action.Shop(ShopFeed.Action.ProductTapped(link.id)))),
+                        )
+                    }
+                    is DeepLink.Order -> {
+                        val popped = state.ordersPath.removeAll()
+                        next(
+                            state.copy(selectedTab = Tab.ORDERS, ordersPath = popped.state.push(OrderDetail.State(orderID = link.id))),
+                            popped.effect,
+                        )
+                    }
+                }
 
                 is Action.ShopPopFrom -> state.shopPath.popFrom(action.id).let { Next(state.copy(shopPath = it.state), it.effect) }
                 is Action.CartPopFrom -> state.cartPath.popFrom(action.id).let { Next(state.copy(cartPath = it.state), it.effect) }

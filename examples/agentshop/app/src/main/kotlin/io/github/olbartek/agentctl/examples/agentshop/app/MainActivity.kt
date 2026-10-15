@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -36,8 +37,12 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                     val ready by app.isReady.collectAsState()
                     if (ready) {
-                        val state by app.store.states.collectAsState()
-                        RootView(state, app.store::send)
+                        val store by app.stores.collectAsState()
+                        // Keyed by the store, so `device relaunch` (a new store) shows a fresh view tree, as a relaunch would.
+                        key(store) {
+                            val state by store.states.collectAsState()
+                            RootView(state, store::send)
+                        }
                     } else {
                         Box(Modifier.fillMaxSize().background(Palette.background), contentAlignment = Alignment.Center) { LoadingView() }
                     }

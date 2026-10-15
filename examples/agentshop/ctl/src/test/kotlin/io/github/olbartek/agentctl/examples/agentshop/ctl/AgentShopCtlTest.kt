@@ -32,7 +32,7 @@ class ScenarioTest {
     @Test
     fun thereAreScenarios() {
         assertEquals(exampleRoot.canonicalFile, checks.root.canonicalFile)
-        assertEquals(105, checks.files.size, "the scenarios at ${checks.scenarios.path}")
+        assertEquals(123, checks.files.size, "the scenarios at ${checks.scenarios.path}")
     }
 
     /** Every scenario passes against AgentShop's own headless wiring. */
@@ -48,7 +48,7 @@ class ScenarioTest {
     fun theCliRunsThemAll() {
         val result = shopctl("test")
         assertEquals(0, result.status, result.combined)
-        assertTrue(result.out.endsWith("105 passed, 0 failed\n"), result.out)
+        assertTrue(result.out.endsWith("123 passed, 0 failed\n"), result.out)
     }
 
     /** The committed command reference is what `./appctl docs` would write today. */
@@ -69,6 +69,11 @@ class CoverageTest {
     @Test
     fun everyCommandIsUsedByAScenario() {
         assertEquals(emptyList(), coverage.unusedCommands(), "commands not used by any scenario")
+    }
+
+    @Test
+    fun everyDeviceCommandAndPushIsUsedByAScenario() {
+        assertEquals(emptyList(), coverage.unusedDeviceCommands(), "device commands not used by any scenario")
     }
 
     @Test

@@ -1,0 +1,7 @@
+# A product link opens the shop tab with that product on top, whatever tab was showing.
+login-as alice
+tab orders
+device open-url agentshop://product/101
+expect screen=home/shop/101 qty=1
+device open-url agentshop://shop
+expect screen=home/shop/101

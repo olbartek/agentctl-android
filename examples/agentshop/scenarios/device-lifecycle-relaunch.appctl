@@ -1,0 +1,15 @@
+# Quitting and relaunching the app: the remembered session is restored, the orders backend keeps the cancelled
+# order, and a permission granted before the relaunch is still granted.
+device permission notifications granted
+login-as alice
+tab orders
+open 1003
+cancel
+expect status=cancelled
+device relaunch
+expect screen=home/shop call=session.current
+tab orders
+expect statuses=delivered,shipped,cancelled
+tab profile
+order-updates on
+expect orderUpdates=on prompt=none

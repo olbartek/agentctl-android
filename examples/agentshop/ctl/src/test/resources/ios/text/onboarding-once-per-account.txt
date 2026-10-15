@@ -21,9 +21,9 @@
 > expect screen=home/shop
   screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
 > tab profile
-  screen=home/profile name=Nina email=nina@example.com alert=none
+  screen=home/profile name=Nina email=nina@example.com orderUpdates=off faceID=off alert=none
 > logout
-  screen=home/profile name=Nina email=nina@example.com alert=logout
+  screen=home/profile name=Nina email=nina@example.com orderUpdates=off faceID=off alert=logout
 > confirm
   screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.clear
 > email nina@example.com

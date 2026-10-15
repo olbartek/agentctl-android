@@ -68,7 +68,7 @@ class AddressFormTest {
 
     @Test
     fun zipIsValidatedOnContinue() {
-        val store = TestStore(AddressForm.State(address), reducer = AddressForm.reducer)
+        val store = TestStore(AddressForm.State(address), reducer = AddressForm.reducer())
         store.send(AddressForm.Action.ContinueTapped)
         assertEquals(AddressForm.Error.INVALID_ZIP, store.state.error)
         store.send(AddressForm.Action.ZipChanged("97201"))
@@ -79,7 +79,7 @@ class AddressFormTest {
 
     @Test
     fun incompleteCannotContinueButCanSkip() {
-        val store = TestStore(AddressForm.State(Address(name = "Nina")), reducer = AddressForm.reducer)
+        val store = TestStore(AddressForm.State(Address(name = "Nina")), reducer = AddressForm.reducer())
         assertFalse(store.state.canContinue)
         store.send(AddressForm.Action.ContinueTapped)
         assertFalse(store.received.any { it is AddressForm.Action.Delegate })

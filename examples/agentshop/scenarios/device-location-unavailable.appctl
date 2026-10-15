@@ -1,0 +1,18 @@
+# Allowed, but the device has no location yet: locationUnavailable. Somewhere the geocoder does not know:
+# addressNotFound. At a known place, the address fills in.
+device permission location granted
+email nina@example.com
+password Passw0rd!
+submit
+skip
+toggle bags
+toggle home
+continue
+use-location
+expect error=locationUnavailable prompt=none street=""
+device location 52.2297,21.0122
+use-location
+expect error=addressNotFound street=""
+device location 37.3349,-122.009
+use-location
+expect error=none street="1 Apple Park Way"

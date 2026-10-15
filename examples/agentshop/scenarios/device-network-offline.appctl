@@ -1,0 +1,10 @@
+# Offline, every call fails with network: the feed keeps its products and shows the error. Back online, retry
+# loads it.
+login-as alice
+expect products=12
+device network offline
+refresh
+expect products=12 error=network call=catalog.fetchProducts
+device network online
+retry
+expect products=12 error=none call=catalog.fetchProducts

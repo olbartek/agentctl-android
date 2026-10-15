@@ -1,0 +1,9 @@
+# Refusing the notifications prompt leaves order updates off and says why; asking again shows no prompt, since
+# the answer is remembered.
+login-as alice
+tab profile
+order-updates on
+device prompt deny
+expect orderUpdates=off error=notificationsDenied prompt=none
+order-updates on
+expect orderUpdates=off error=notificationsDenied prompt=none

@@ -1,0 +1,13 @@
+# A failed Face ID leaves it off in the profile; at login, it leaves the shopper on the login screen.
+login-as bob
+tab profile
+face-id on
+device biometry fail
+expect faceID=off error=biometryFailed prompt=none
+face-id on
+device biometry match
+logout
+confirm
+face-id
+device biometry fail
+expect screen=auth/login error=biometryFailed prompt=none

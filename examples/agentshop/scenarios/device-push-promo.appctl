@@ -1,0 +1,7 @@
+# The promo push does nothing while the app is in front; tapped, it opens the shop.
+login-as alice
+tab cart
+device push promo
+expect screen=home/cart
+device push promo tap
+expect screen=home/shop

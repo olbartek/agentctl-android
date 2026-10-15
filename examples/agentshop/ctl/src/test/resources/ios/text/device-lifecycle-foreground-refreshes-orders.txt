@@ -1,0 +1,23 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> login-as alice
+  screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=session.save,account.fetchProfile,catalog.fetchProducts
+> tab orders
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders
+> device background
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending
+> expect screen=home/orders
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending
+> device foreground
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders
+> expect screen=home/orders orders=3 call=orders.fetchOrders
+  screen=home/orders orders=3 loading=false statuses=delivered,shipped,pending calls=orders.fetchOrders
+> tab profile
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=none
+> device background
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=none
+> device foreground
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=none
+> expect screen=home/profile
+  screen=home/profile name=Alice email=alice@example.com orderUpdates=off faceID=off alert=none
+exit=0

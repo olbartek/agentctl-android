@@ -2,11 +2,13 @@ package io.github.olbartek.agentctl.examples.agentshop.auth
 
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentScreen
+import io.github.olbartek.agentctl.BiometryResult
 import io.github.olbartek.agentctl.CommandGate
 import io.github.olbartek.agentctl.Effect
 import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.examples.agentshop.clients.AuthClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.BiometricsClient
 import io.github.olbartek.agentctl.examples.agentshop.models.AuthError
 import io.github.olbartek.agentctl.examples.agentshop.models.Outcome
 import io.github.olbartek.agentctl.examples.agentshop.models.Session
@@ -19,6 +21,8 @@ import io.github.olbartek.agentctl.next
  *
  * "Keep me signed in" is read by the container when any auth screen signs in: when it is off, the session is not
  * restored on the next launch. An unverified account is sent to email verification instead of signing in.
+ *
+ * When an account has turned Face ID sign-in on in its profile, `face-id` signs it in after passing Face ID.
  */
 object Login {
     data class State(
@@ -29,12 +33,21 @@ object Login {
         val isLoading: Boolean = false,
         val isGoogleLoading: Boolean = false,
         val error: AuthError? = null,
+        /** The account that turned Face ID sign-in on in its profile, if any: `face-id` signs it in. */
+        val faceIDAccount: Session? = null,
+        /** Why the last Face ID sign-in failed. */
+        val faceIDError: FaceIDError? = null,
     ) {
         /** A sign-in (password or Google) is in flight. */
         val isBusy: Boolean get() = isLoading || isGoogleLoading
 
         /** Submit is enabled only for a valid email and a non-empty password. */
         val canSubmit: Boolean get() = isValidEmail(email) && password.isNotEmpty() && !isBusy
+    }
+
+    enum class FaceIDError(val code: String) {
+        BIOMETRY_FAILED("biometryFailed"),
+        BIOMETRY_UNAVAILABLE("biometryUnavailable"),
     }
 
     sealed interface Action {
@@ -44,6 +57,8 @@ object Login {
         data class KeepSignedInChanged(val isOn: Boolean) : Action
         data object SubmitTapped : Action
         data object GoogleTapped : Action
+        data object FaceIDTapped : Action
+        data class FaceIDAnswered(val result: BiometryResult) : Action
         data class LoginResponse(val result: Outcome<Session, AuthError>) : Action
         data object UseOTPTapped : Action
         data object RegisterTapped : Action
@@ -61,7 +76,7 @@ object Login {
         }
     }
 
-    fun reducer(authClient: AuthClient): Reducer<State, Action> = Reducer { state, action ->
+    fun reducer(authClient: AuthClient, biometricsClient: BiometricsClient = BiometricsClient()): Reducer<State, Action> = Reducer { state, action ->
         when (action) {
             // A field change clears the error, as a binding does; the two switches leave it.
             is Action.EmailChanged -> next(state.copy(email = action.email, error = null))
@@ -85,6 +100,20 @@ object Login {
                     state.copy(isGoogleLoading = true, error = null),
                     Effect.run { send -> send(Action.LoginResponse(attempt(AuthError::of) { authClient.signInWithGoogle() })) },
                 )
+            }
+
+            Action.FaceIDTapped -> {
+                if (state.faceIDAccount == null || state.isBusy) return@Reducer next(state)
+                next(state.copy(faceIDError = null), Effect.run { send -> send(Action.FaceIDAnswered(biometricsClient.authenticate())) })
+            }
+
+            is Action.FaceIDAnswered -> when (action.result) {
+                BiometryResult.SUCCESS -> {
+                    val session = state.faceIDAccount ?: return@Reducer next(state)
+                    next(state, Effect.send(Action.Delegate.Authenticated(session)))
+                }
+                BiometryResult.FAILURE -> next(state.copy(faceIDError = FaceIDError.BIOMETRY_FAILED))
+                BiometryResult.UNAVAILABLE -> next(state.copy(faceIDError = FaceIDError.BIOMETRY_UNAVAILABLE))
             }
 
             is Action.LoginResponse -> {
@@ -124,7 +153,7 @@ object LoginAgent : AgentScreen<Login.State, Login.Action> {
         SummaryItem("loading", state.isBusy),
     )
 
-    override fun errorCode(state: Login.State): String? = state.error?.code
+    override fun errorCode(state: Login.State): String? = state.error?.code ?: state.faceIDError?.code
 
     override val commands: List<AgentCommand<Login.State, Login.Action>> = listOf(
         AgentCommand.text("email", help = "Set the email field.") { Login.Action.EmailChanged(it) },
@@ -145,6 +174,12 @@ object LoginAgent : AgentScreen<Login.State, Login.Action> {
             help = "Sign in with Google (the mock signs in as becca@gmail.com).",
             action = Login.Action.GoogleTapped,
             gate = CommandGate("loading=true") { !it.isBusy },
+        ),
+        AgentCommand.action(
+            "face-id",
+            help = "Sign in with Face ID, as the account that turned it on in its profile.",
+            action = Login.Action.FaceIDTapped,
+            gate = CommandGate("no account has turned Face ID on") { it.faceIDAccount != null && !it.isBusy },
         ),
         AgentCommand.action("use-otp", help = "Switch to login with a one-time code (keeps the email).", action = Login.Action.UseOTPTapped),
         AgentCommand.action("register", help = "Open registration (\"Sign up here\").", action = Login.Action.RegisterTapped),

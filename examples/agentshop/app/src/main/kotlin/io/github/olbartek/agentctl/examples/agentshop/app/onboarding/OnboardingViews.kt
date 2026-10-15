@@ -193,7 +193,18 @@ fun AddressFormView(state: AddressForm.State, onBack: () -> Unit, send: (Address
             FormField("City") {
                 ASTextField("City", state.address.city, { send(AddressForm.Action.CityChanged(it)) }, testTag = "AddressForm.city")
             }
-            FormField("Zip Code", error = state.error?.let { "Enter a five-digit zip code." }, errorCode = state.error?.code) {
+            FormField(
+                "Zip Code",
+                error = state.error?.let {
+                    when (it) {
+                        AddressForm.Error.INVALID_ZIP -> "Enter a five-digit zip code."
+                        AddressForm.Error.LOCATION_DENIED -> "Location is off for AgentShop. Turn it on in Settings, or type the address."
+                        AddressForm.Error.LOCATION_UNAVAILABLE -> "Your location isn't available yet. Type the address instead."
+                        AddressForm.Error.ADDRESS_NOT_FOUND -> "We couldn't find an address here. Type it instead."
+                    }
+                },
+                errorCode = state.error?.code,
+            ) {
                 ASTextField("12345", state.address.zip, { send(AddressForm.Action.ZipChanged(it)) }, testTag = "AddressForm.zip")
             }
         }
@@ -203,6 +214,11 @@ fun AddressFormView(state: AddressForm.State, onBack: () -> Unit, send: (Address
             testTag = "AddressForm.continue",
             modifier = Modifier.padding(top = Metrics.sectionSpacing),
         ) { send(AddressForm.Action.ContinueTapped) }
+        LinkButton(
+            "Use my location",
+            testTag = "AddressForm.use-location",
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 16.dp),
+        ) { send(AddressForm.Action.UseLocationTapped) }
         LinkButton(
             "Skip for now",
             testTag = "AddressForm.skip",

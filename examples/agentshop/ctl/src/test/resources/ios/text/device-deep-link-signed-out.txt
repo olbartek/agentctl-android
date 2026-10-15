@@ -1,0 +1,7 @@
+> (launch)
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.current
+> device open-url agentshop://order/1003
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false
+> expect screen=auth/login email="" error=none
+  screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false
+exit=0

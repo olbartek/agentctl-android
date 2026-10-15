@@ -849,8 +849,8 @@ screens, one mocked client, three scenarios, its own `tinyctl` CLI and a committ
 [`examples/tinyapp-android`](examples/tinyapp-android) runs it as an Android app with the bridge.
 
 [`examples/agentshop`](examples/agentshop) is the showcase: a real Compose app (sign-in, onboarding, a shop with a
-cart and checkout), the port of the iOS one, with 105 scenarios that print the same bytes on both ports, UI tests
-generated from them, and the benchmark behind [the numbers above](#how-much-faster). See
+cart and checkout, and the simulated device: permissions, links, pushes, relaunch, offline, Face ID), the port of the
+iOS one, with 123 scenarios that print the same bytes on both ports, UI tests generated from them, and the benchmark behind [the numbers above](#how-much-faster). See
 [its README](examples/agentshop/README.md) and [the app, screen by screen](examples/agentshop/docs/APP.md).
 
 ## Building this repository

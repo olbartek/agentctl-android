@@ -46,7 +46,7 @@ MANIFEST = ROOT / "bench/uitests.json"
 GROUPS = {"auth": "AuthUiTests", "onboarding": "OnboardingUiTests", "shop": "ShopUiTests"}
 
 #: Commands that only exist headlessly (or only make sense there).
-HEADLESS_ONLY = {"advance", "login-as", "reset"}
+HEADLESS_ONLY = {"advance", "login-as", "reset", "device"}
 
 #: Summary keys each screen shows on screen, as `<Screen>.<key>` with the value as its `UiTestValue`.
 UI_KEYS: dict[str, set[str]] = {

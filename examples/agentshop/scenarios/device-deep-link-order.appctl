@@ -1,0 +1,4 @@
+# An order link opens the orders tab with that order on top.
+login-as alice
+device open-url agentshop://order/1003
+expect screen=home/orders/1003 status=pending

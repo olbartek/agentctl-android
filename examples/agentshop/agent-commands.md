@@ -20,6 +20,8 @@ in scenario files (`scenarios/*.appctl`), at launch (`-appctl-seed`) and in the 
   The line holds `screen`, the screen's summary keys, `calls=` (mock calls made during the step),
   `error=` (if set) and `pending=` (effects waiting on the clock, e.g. a countdown; headlessly
   `advance <duration>` releases them).
+  `prompt=` names the system prompt the app is waiting on, if any (`device prompt` or `device biometry`
+  answers it).
 - Exit codes: `0` all steps passed, `1` a command or `expect` failed, `2` usage or parse error, `3` internal error.
 
 ## Examples
@@ -30,6 +32,7 @@ in scenario files (`scenarios/*.appctl`), at launch (`-appctl-seed`) and in the 
 ./appctl run "mock orders.fetchOrders network; login-as alice; retry"
 ./appctl run --session .appctl/s.session "register"   # keep going from the same state next time
 ./appctl app launch --no-build --seed "login-as bob; tab profile"   # the real app, already there
+./appctl run "login-as alice; tab profile; order-updates on; device prompt deny"   # a refused permission
 ```
 
 Scenarios in `scenarios/*.appctl` use the same syntax plus `expect` lines; `./appctl test` runs them.
@@ -38,9 +41,19 @@ Scenarios in `scenarios/*.appctl` use the same syntax plus `expect` lines; `./ap
 
 | Command | Description |
 |---|---|
-| `expect k=v [k=v …]` | Assert on screen, any summary key, call=<client.method> (called during the previous step), error=<code\|none> or pending=<n>. A failed assertion fails the script. |
+| `expect k=v [k=v …]` | Assert on screen, any summary key, call=<client.method> (called during the previous step), error=<code\|none>, pending=<n> or prompt=<service\|none>. A failed assertion fails the script. |
 | `advance <duration>` | Move the app's clock forward, e.g. 500ms, 30s, 5m, 1h, firing the timers due. |
 | `mock <client.method> <error>` | Make the next call to that method fail, e.g. mock orders.fetchOrders network. |
+| `device permission <service> <not-determined\|granted\|denied\|limited>` | Set a permission as if changed in Settings. Services: notifications, location. |
+| `device prompt <allow\|deny\|limited>` | Answer the system permission prompt the app is showing (prompt=<service>). |
+| `device open-url <url>` | Open a link in the app, as a tapped deep link or universal link. |
+| `device push <name> [tap]` | Deliver a push notification while the app is in front; with tap, open the app from it. Pushes: order-shipped (Order #1002 has shipped.), promo (A new promo code: SAVE10.). |
+| `device background` | Send the app to the background; screen commands fail until device foreground. |
+| `device foreground` | Bring the app back to the foreground. |
+| `device relaunch` | Quit and relaunch the app: its state starts over, while what its clients stored and the device's settings stay. |
+| `device network <online\|offline>` | Turn the network off or on. Offline, every mocked call fails with network. |
+| `device location <lat>,<lon>\|none` | Set the device's location, e.g. 52.2297,21.0122, or none. |
+| `device biometry <enrolled\|unenrolled\|match\|fail>` | Enroll or remove Face ID / Touch ID, or answer the biometric prompt the app is showing (prompt=biometry). |
 
 ## Screens
 
@@ -67,6 +80,7 @@ Summary keys: `email`, `keepSignedIn`, `revealed`, `canSubmit`, `loading`.
 | `keep-signed-in <on\|off>` | Tick "Keep me signed in" (on by default). Off: the session is not restored on relaunch. | Login |
 | `submit` | Log in with the email and password. *(disabled when canSubmit=false)* | Login |
 | `google` | Sign in with Google (the mock signs in as becca@gmail.com). *(disabled when loading=true)* | Login |
+| `face-id` | Sign in with Face ID, as the account that turned it on in its profile. *(disabled when no account has turned Face ID on)* | Login |
 | `use-otp` | Switch to login with a one-time code (keeps the email). | Login |
 | `register` | Open registration ("Sign up here"). | Login |
 | `forgot` | Open forgot password (keeps the email). | Login |
@@ -215,6 +229,7 @@ Summary keys: `name`, `street`, `city`, `zip`, `canContinue`.
 | `city <text>` | Set the city. | AddressForm |
 | `zip <text>` | Set the zip code (five digits). | AddressForm |
 | `continue` | Save the address for checkout; a zip that isn't five digits reports error=invalidZip. *(disabled when canContinue=false)* | AddressForm |
+| `use-location` | Fill the street, city and zip from the device's location (asks for the location permission). | AddressForm |
 | `skip` | Go on without an address. | AddressForm |
 | `back` | Go back to the previous step. | OnboardingFlow |
 | `login-as <alice\|bob>` | Save a seeded account's session and go straight home. | AppFeature |
@@ -356,10 +371,12 @@ Summary keys: `id`, `status`, `items`, `total`, `date`, `canCancel`, `loading`.
 ### `home/profile`
 
 Screen: `Profile`.
-Summary keys: `name`, `email`, `alert`.
+Summary keys: `name`, `email`, `orderUpdates`, `faceID`, `alert`.
 
 | Command | Description | From |
 |---|---|---|
+| `order-updates <on\|off>` | Turn order updates on (asks for permission to send notifications) or off. | Profile |
+| `face-id <on\|off>` | Turn Face ID sign-in on (passing Face ID once) or off; the login screen then offers face-id. | Profile |
 | `logout` | Ask to log out (shows a confirmation alert). | Profile |
 | `confirm` | Confirm logging out in the alert. *(disabled when alert=none)* | Profile |
 | `dismiss` | Dismiss the alert. *(disabled when alert=none)* | Profile |

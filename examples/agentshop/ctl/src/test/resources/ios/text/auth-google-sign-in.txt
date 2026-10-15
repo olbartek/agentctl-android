@@ -19,11 +19,11 @@
 > expect screen=home/shop products=12
   screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=account.completeOnboarding,catalog.fetchProducts
 > tab profile
-  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=none
+  screen=home/profile name="Becca Ade" email=becca@gmail.com orderUpdates=off faceID=off alert=none
 > expect name="Becca Ade" email=becca@gmail.com
-  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=none
+  screen=home/profile name="Becca Ade" email=becca@gmail.com orderUpdates=off faceID=off alert=none
 > logout
-  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=logout
+  screen=home/profile name="Becca Ade" email=becca@gmail.com orderUpdates=off faceID=off alert=logout
 > confirm
   screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.clear
 > expect screen=auth/login
@@ -35,9 +35,9 @@
 > expect screen=home/shop call=auth.signInWithGoogle
   screen=home/shop products=12 filter=all query="" sort=featured loading=false calls=auth.signInWithGoogle,session.save,account.fetchProfile,catalog.fetchProducts
 > tab profile
-  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=none
+  screen=home/profile name="Becca Ade" email=becca@gmail.com orderUpdates=off faceID=off alert=none
 > logout
-  screen=home/profile name="Becca Ade" email=becca@gmail.com alert=logout
+  screen=home/profile name="Becca Ade" email=becca@gmail.com orderUpdates=off faceID=off alert=logout
 > confirm
   screen=auth/login email="" keepSignedIn=true revealed=none canSubmit=false loading=false calls=session.clear
 > mock auth.signInWithGoogle network
