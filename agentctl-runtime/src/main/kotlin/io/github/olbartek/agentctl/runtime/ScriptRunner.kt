@@ -8,16 +8,11 @@ import io.github.olbartek.agentctl.AgentDuration
 import io.github.olbartek.agentctl.AgentRegistry
 import io.github.olbartek.agentctl.AgentStore
 import io.github.olbartek.agentctl.ArgumentText
-import io.github.olbartek.agentctl.BiometryResult
-import io.github.olbartek.agentctl.DeviceLocation
-import io.github.olbartek.agentctl.DevicePhase
-import io.github.olbartek.agentctl.DeviceSurface
 import io.github.olbartek.agentctl.Expectation
 import io.github.olbartek.agentctl.ExpectationSyntaxError
 import io.github.olbartek.agentctl.MockCallLog
 import io.github.olbartek.agentctl.MockFaults
 import io.github.olbartek.agentctl.MockMethod
-import io.github.olbartek.agentctl.PermissionStatus
 import io.github.olbartek.agentctl.ScriptError
 import io.github.olbartek.agentctl.ScriptLine
 import io.github.olbartek.agentctl.ScriptParser
@@ -87,7 +82,7 @@ public class ScriptRunner<S, A>(
         private set
 
     /** The `device` subcommands this app has. */
-    public val deviceSurface: DeviceSurface = deviceConfig.surface
+    public val deviceSurface: AgentDevice.Surface = deviceConfig.surface
 
     /** Adds a diff of the root state to each step (`--diff`). */
     public var recordsDiff: Boolean = false
@@ -207,7 +202,7 @@ public class ScriptRunner<S, A>(
             val valid = (screen.commands.map { it.usage } + runtime).joinToString(", ")
             return fail(line, RunStatus.FAILED, "unknown command '${line.name}' on ${screen.path}. Valid here: $valid")
         }
-        if (DeviceSurface.Subcommand.BACKGROUND in deviceSurface.subcommands && device.phase == DevicePhase.BACKGROUND) {
+        if (AgentDevice.Surface.Subcommand.BACKGROUND in deviceSurface.subcommands && device.phase == AgentDevice.Phase.BACKGROUND) {
             return fail(line, RunStatus.FAILED, "${command.name} is unavailable: the app is in the background (device foreground first)")
         }
         command.disabledReason?.let { reason ->
@@ -233,7 +228,7 @@ public class ScriptRunner<S, A>(
         val tokens = ArgumentText.tokens(line.argument ?: "")
         val first = tokens.firstOrNull()
             ?: return fail(line, RunStatus.USAGE, "usage: device <subcommand>; available: $available")
-        val sub = DeviceSurface.Subcommand.of(first)
+        val sub = AgentDevice.Surface.Subcommand.of(first)
             ?: return fail(line, RunStatus.USAGE, "unknown device command '$first'; available: $available")
         if (sub !in surface.subcommands) {
             return fail(line, RunStatus.USAGE, "device $first is not configured by this app; available: $available")
@@ -244,8 +239,8 @@ public class ScriptRunner<S, A>(
         val services = surface.services.joinToString(", ")
 
         return when (sub) {
-            DeviceSurface.Subcommand.PERMISSION -> {
-                val status = arguments.takeIf { it.size == 2 }?.let { PermissionStatus.of(it[1]) }
+            AgentDevice.Surface.Subcommand.PERMISSION -> {
+                val status = arguments.takeIf { it.size == 2 }?.let { AgentDevice.PermissionStatus.of(it[1]) }
                     ?: return usage("device permission <service> <not-determined|granted|denied|limited>; services: $services")
                 val service = arguments[0]
                 if (service !in surface.services) return failed("unknown permission '$service'; services: $services")
@@ -255,11 +250,11 @@ public class ScriptRunner<S, A>(
                 settling(line) { device.setPermission(service, status) }
             }
 
-            DeviceSurface.Subcommand.PROMPT -> {
+            AgentDevice.Surface.Subcommand.PROMPT -> {
                 val answers = mapOf(
-                    "allow" to PermissionStatus.GRANTED,
-                    "deny" to PermissionStatus.DENIED,
-                    "limited" to PermissionStatus.LIMITED,
+                    "allow" to AgentDevice.PermissionStatus.GRANTED,
+                    "deny" to AgentDevice.PermissionStatus.DENIED,
+                    "limited" to AgentDevice.PermissionStatus.LIMITED,
                 )
                 val status = arguments.singleOrNull()?.let(answers::get) ?: return usage("device prompt <allow|deny|limited>")
                 try {
@@ -274,14 +269,14 @@ public class ScriptRunner<S, A>(
                 settling(line) {}
             }
 
-            DeviceSurface.Subcommand.OPEN_URL -> {
+            AgentDevice.Surface.Subcommand.OPEN_URL -> {
                 val url = arguments.singleOrNull()?.let(::parseUrl) ?: return usage("device open-url <url>")
                 val action = deviceConfig.openUrl?.invoke(url)
                     ?: return failed("device open-url: the app does not handle ${arguments[0]}")
                 settling(line) { store.send(action) }
             }
 
-            DeviceSurface.Subcommand.PUSH -> {
+            AgentDevice.Surface.Subcommand.PUSH -> {
                 val names = surface.pushes.joinToString(", ") { it.name }
                 if (!(arguments.size == 1 || (arguments.size == 2 && arguments[1] == "tap"))) {
                     return usage("device push <name> [tap]; pushes: $names")
@@ -292,9 +287,9 @@ public class ScriptRunner<S, A>(
                 settling(line) { if (action != null) store.send(action) }
             }
 
-            DeviceSurface.Subcommand.BACKGROUND, DeviceSurface.Subcommand.FOREGROUND -> {
+            AgentDevice.Surface.Subcommand.BACKGROUND, AgentDevice.Surface.Subcommand.FOREGROUND -> {
                 if (arguments.isNotEmpty()) return usage("device ${sub.rawValue}")
-                val phase = if (sub == DeviceSurface.Subcommand.BACKGROUND) DevicePhase.BACKGROUND else DevicePhase.FOREGROUND
+                val phase = if (sub == AgentDevice.Surface.Subcommand.BACKGROUND) AgentDevice.Phase.BACKGROUND else AgentDevice.Phase.FOREGROUND
                 val action = deviceConfig.scenePhase?.invoke(phase)
                 settling(line) {
                     device.setPhase(phase)
@@ -302,7 +297,7 @@ public class ScriptRunner<S, A>(
                 }
             }
 
-            DeviceSurface.Subcommand.RELAUNCH -> {
+            AgentDevice.Surface.Subcommand.RELAUNCH -> {
                 if (arguments.isNotEmpty()) return usage("device relaunch")
                 val relaunch = relaunch ?: return failed("device relaunch is not available in this runtime")
                 settling(line) {
@@ -310,12 +305,12 @@ public class ScriptRunner<S, A>(
                     // it, as when the app quits.
                     store = relaunch()
                     device.withdrawAllPrompts()
-                    device.setPhase(DevicePhase.FOREGROUND)
+                    device.setPhase(AgentDevice.Phase.FOREGROUND)
                     lastIdentity = null
                 }
             }
 
-            DeviceSurface.Subcommand.NETWORK -> {
+            AgentDevice.Surface.Subcommand.NETWORK -> {
                 val online = when (arguments.singleOrNull()) {
                     "online" -> true
                     "offline" -> false
@@ -324,17 +319,17 @@ public class ScriptRunner<S, A>(
                 settling(line) { device.setOnline(online) }
             }
 
-            DeviceSurface.Subcommand.LOCATION -> {
-                val location = arguments.singleOrNull()?.let(DeviceLocation::parseArgument)
+            AgentDevice.Surface.Subcommand.LOCATION -> {
+                val location = arguments.singleOrNull()?.let(AgentDevice.Location::parseArgument)
                     ?: return usage("device location <lat>,<lon> or none, e.g. 52.2297,21.0122")
                 settling(line) { device.setLocation(location.location) }
             }
 
-            DeviceSurface.Subcommand.BIOMETRY -> when (arguments.singleOrNull()) {
+            AgentDevice.Surface.Subcommand.BIOMETRY -> when (arguments.singleOrNull()) {
                 "enrolled", "unenrolled" -> settling(line) { device.setBiometryEnrolled(arguments[0] == "enrolled") }
                 "match", "fail" -> {
                     try {
-                        device.answerBiometry(if (arguments[0] == "match") BiometryResult.SUCCESS else BiometryResult.FAILURE)
+                        device.answerBiometry(if (arguments[0] == "match") AgentDevice.BiometryResult.SUCCESS else AgentDevice.BiometryResult.FAILURE)
                     } catch (_: AgentDevice.AnswerError) {
                         return failed("device biometry: no biometric prompt is pending")
                     }

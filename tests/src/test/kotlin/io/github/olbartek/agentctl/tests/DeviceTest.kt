@@ -2,17 +2,13 @@ package io.github.olbartek.agentctl.tests
 
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentContainer
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentEnvironment
-import io.github.olbartek.agentctl.AgentPush
 import io.github.olbartek.agentctl.AgentRegistry
 import io.github.olbartek.agentctl.AgentScreen
-import io.github.olbartek.agentctl.BiometryResult
-import io.github.olbartek.agentctl.DeviceLocation
-import io.github.olbartek.agentctl.DevicePhase
 import io.github.olbartek.agentctl.Effect
 import io.github.olbartek.agentctl.MockMethod
-import io.github.olbartek.agentctl.PermissionStatus
 import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.StepFormatter
@@ -51,12 +47,12 @@ object Gadget {
     sealed interface Action {
         data object OnAppear : Action
         data object CameraTapped : Action
-        data class CameraAnswered(val status: PermissionStatus) : Action
+        data class CameraAnswered(val status: AgentDevice.PermissionStatus) : Action
         data object UnlockTapped : Action
-        data class Unlocked(val result: BiometryResult) : Action
+        data class Unlocked(val result: AgentDevice.BiometryResult) : Action
         data class OnlineChanged(val online: Boolean) : Action
-        data class LocationChanged(val location: DeviceLocation?) : Action
-        data class PhaseChanged(val phase: DevicePhase) : Action
+        data class LocationChanged(val location: AgentDevice.Location?) : Action
+        data class PhaseChanged(val phase: AgentDevice.Phase) : Action
         data class LinkOpened(val link: String) : Action
         data object Pinged : Action
         data object FetchTapped : Action
@@ -127,7 +123,7 @@ object Gadget {
     val device = AgentDeviceConfig<Action>(
         permissions = listOf("camera", "location"),
         openUrl = { if (it.scheme == "gadget") Action.LinkOpened(it.toString()) else null },
-        pushes = listOf(AgentPush("ping", help = "A ping.", received = Action.Pinged, opened = Action.LinkOpened("ping"))),
+        pushes = listOf(AgentDevice.Push("ping", help = "A ping.", received = Action.Pinged, opened = Action.LinkOpened("ping"))),
         scenePhase = { Action.PhaseChanged(it) },
         relaunch = true,
         offlineErrorCode = "offline",

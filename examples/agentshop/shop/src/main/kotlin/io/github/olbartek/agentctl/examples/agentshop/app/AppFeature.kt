@@ -3,8 +3,8 @@ package io.github.olbartek.agentctl.examples.agentshop.app
 import io.github.olbartek.agentctl.ActiveScreen
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentContainer
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.CommandDoc
-import io.github.olbartek.agentctl.DevicePhase
 import io.github.olbartek.agentctl.Effect
 import io.github.olbartek.agentctl.EffectScope
 import io.github.olbartek.agentctl.Next
@@ -13,11 +13,11 @@ import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.appendingBackFallback
 import io.github.olbartek.agentctl.examples.agentshop.auth.AuthFlow
 import io.github.olbartek.agentctl.examples.agentshop.auth.AuthFlowAgent
+import io.github.olbartek.agentctl.examples.agentshop.auth.Login
 import io.github.olbartek.agentctl.examples.agentshop.clients.MockAccounts
 import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabs
 import io.github.olbartek.agentctl.examples.agentshop.home.HomeTabsAgent
 import io.github.olbartek.agentctl.examples.agentshop.home.OrdersList
-import io.github.olbartek.agentctl.examples.agentshop.auth.Login
 import io.github.olbartek.agentctl.examples.agentshop.models.DeepLink
 import io.github.olbartek.agentctl.examples.agentshop.models.Outcome
 import io.github.olbartek.agentctl.examples.agentshop.models.Session
@@ -67,7 +67,7 @@ object AppFeature {
         data object OrderPushReceived : Action
 
         /** The app came to the foreground or went to the background. */
-        data class ScenePhaseChanged(val phase: DevicePhase) : Action
+        data class ScenePhaseChanged(val phase: AgentDevice.Phase) : Action
     }
 
     /** The scope each case's effects run in, cancelled when the app leaves the case (TCA's `ifCaseLet`). */
@@ -158,7 +158,7 @@ object AppFeature {
                 if (state is State.Home) next(state, Effect.send(Action.Home(HomeTabs.Action.OrdersList(OrdersList.Action.Refresh)))) else next(state)
             // Back in front on the orders tab, the list may be stale: load it again.
             is Action.ScenePhaseChanged ->
-                if (action.phase == DevicePhase.FOREGROUND && state is State.Home && state.state.selectedTab == HomeTabs.Tab.ORDERS) {
+                if (action.phase == AgentDevice.Phase.FOREGROUND && state is State.Home && state.state.selectedTab == HomeTabs.Tab.ORDERS) {
                     next(state, Effect.send(Action.Home(HomeTabs.Action.OrdersList(OrdersList.Action.Refresh))))
                 } else {
                     next(state)

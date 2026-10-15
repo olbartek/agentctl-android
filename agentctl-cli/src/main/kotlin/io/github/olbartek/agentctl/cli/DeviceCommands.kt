@@ -1,6 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
-import io.github.olbartek.agentctl.DeviceLocation
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.runtime.RunStatus
 import java.io.File
 import java.io.IOException
@@ -167,7 +167,7 @@ internal class DeviceCommands(private val cli: Cli<*, *>, private val root: File
                 RunStatus.USAGE,
             )
         }
-        DeviceLocation.parse(value)
+        AgentDevice.Location.parse(value)
             ?: throw AppCtlException("app location needs <lat>,<lon> or clear, e.g. 52.2297,21.0122", RunStatus.USAGE)
         val target = target(device)
         if (!target.serial.startsWith("emulator-")) throw AppCtlException("app location needs an emulator")

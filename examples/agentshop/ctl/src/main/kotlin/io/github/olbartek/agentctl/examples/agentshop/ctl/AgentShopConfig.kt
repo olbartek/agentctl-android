@@ -1,8 +1,8 @@
 package io.github.olbartek.agentctl.examples.agentshop.ctl
 
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentEnvironment
-import io.github.olbartek.agentctl.AgentPush
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
@@ -20,8 +20,8 @@ import io.github.olbartek.agentctl.examples.agentshop.clients.SessionStorage
 import io.github.olbartek.agentctl.examples.agentshop.models.DeepLink
 import io.github.olbartek.agentctl.examples.agentshop.models.ScheduledFaults
 import io.github.olbartek.agentctl.runtime.AppCheck
-import io.github.olbartek.agentctl.runtime.AppFactory
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
+import io.github.olbartek.agentctl.runtime.AppFactory
 import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.HelpExamples
@@ -68,13 +68,13 @@ object AgentShopConfig {
             permissions = listOf("notifications", "location"),
             openUrl = AppFeature::actionOpening,
             pushes = listOf(
-                AgentPush(
+                AgentDevice.Push(
                     "order-shipped",
                     help = "Order #1002 has shipped.",
                     received = AppFeature.Action.OrderPushReceived,
                     opened = AppFeature.Action.DeepLinkOpened(DeepLink.Order(1002)),
                 ),
-                AgentPush("promo", help = "A new promo code: SAVE10.", opened = AppFeature.Action.DeepLinkOpened(DeepLink.Shop)),
+                AgentDevice.Push("promo", help = "A new promo code: SAVE10.", opened = AppFeature.Action.DeepLinkOpened(DeepLink.Shop)),
             ),
             scenePhase = { AppFeature.Action.ScenePhaseChanged(it) },
             relaunch = true,
