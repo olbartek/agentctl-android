@@ -20,7 +20,7 @@ dependencyResolutionManagement {
 
 // a module's build.gradle.kts
 dependencies {
-    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.5.1")
+    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.6.0")
 }
 ```
 
@@ -273,7 +273,7 @@ which you can copy).
 dependencies {
     implementation(project(":feature:items"))           // screens and store: agentctl-core
     debugImplementation(project(":appctl-config"))      // the AppCtlConfig: agentctl-runtime
-    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.5.1")
+    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.6.0")
 }
 ```
 
