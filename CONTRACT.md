@@ -333,8 +333,11 @@ is reserved — has a status, initially `not-determined`.
   `device prompt: the pending prompt is biometry; answer it with device biometry match|fail`.
 
 **`device open-url <url>`.** The token must be an absolute URL — a scheme matching
-`[A-Za-z][A-Za-z0-9+.-]*`, a colon, and no whitespace anywhere, parsed strictly (nothing is
-percent-encoded on the way) — else the usage error. The app's link handler turns it into what the app
+`[A-Za-z][A-Za-z0-9+.-]*`, a colon, at least one character after it, and no whitespace anywhere,
+parsed strictly: only ASCII, `[` and `]` only around an IP literal host, `%` only before two hex
+digits, nothing percent-encoded on the way (`gadget://[::1]:8080/a`, `gadget://x/a%20b?q=1#f` and
+`gadget:x` are links; `gadget:`, `gadget://x/é`, `gadget://x/%zz` and `gadget://x/2?x=[1]` are
+not) — else the usage error. The app's link handler turns it into what the app
 does; a link it does not handle fails with exit 1, `device open-url: the app does not handle <url>`.
 
 **`device push <name> [tap]`.** Each push the app declares has a name, a line of help, what the app does

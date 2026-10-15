@@ -336,7 +336,7 @@ class DeviceTest {
         assertTrue(other.endsWith("  FAIL device open-url: the app does not handle https://example.com"), other)
         // Parsed as strictly as the reference's Foundation: RFC 3986's characters only, `%` before two hex digits,
         // brackets only around an IP literal.
-        for (url in listOf("gadget://x/é", "gadget://x/2?x=[1]", "gadget://x/%zz", "gadget://x/２", "gadget://[x/1")) {
+        for (url in listOf("gadget://x/é", "gadget://x/2?x=[1]", "gadget://x/%zz", "gadget://x/２", "gadget://[x/1", "gadget:")) {
             val (refused, refusedStatus) = run("device open-url $url")
             assertEquals(RunStatus.USAGE, refusedStatus, "$url: $refused")
         }

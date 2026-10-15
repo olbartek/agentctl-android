@@ -421,13 +421,12 @@ public class ScriptRunner<S, A>(
         /**
          * An absolute URL: a scheme (`[A-Za-z][A-Za-z0-9+.-]*`), a colon, then no whitespace, parsed strictly (nothing
          * percent-encoded on the way), so both ports accept and reject the same texts: only RFC 3986's characters, a
-         * `%` only before two hex digits, and `[` `]` only around an authority's IP literal, as Foundation's strict
-         * parse requires. One difference is left: a scheme and a colon alone (`myapp:`) cannot be a [URI], and is
-         * refused here where the reference accepts it.
+         * `%` only before two hex digits, and `[` `]` only around an authority's IP literal, and something
+         * after the colon (CONTRACT.md §2.4).
          */
         internal fun parseUrl(text: String): URI? {
             val colon = text.indexOf(':')
-            if (colon < 0 || text.any { it.isWhitespace() } || !URL_SCHEME.matches(text.substring(0, colon))) return null
+            if (colon < 0 || colon == text.lastIndex || text.any { it.isWhitespace() } || !URL_SCHEME.matches(text.substring(0, colon))) return null
             if (!URL_CHARACTERS.matches(text) || PERCENT.containsMatchIn(text)) return null
             if ('[' in text || ']' in text) {
                 val rest = text.substring(colon + 1)
