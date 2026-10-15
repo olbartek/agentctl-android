@@ -45,7 +45,16 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   fresh `scope` (cancelling the old one ends the old store's effects), where the reference rebuilds the store over
   the same dependencies. A host built with an `AppFactory` keeps what `prepare` built (the clients, and what they
   stored) as the reference does; one built with a plain `makeStore` runs all of it again. In the app it is the same
-  process, and `AgentLaunch.stores` gives the root the new store.
+  process, and `AgentLaunch.apps` gives the root the new app.
+- The driver seam (0.7): `AgentDriver<A, App>` takes the action and app types as parameters, where the reference's
+  protocol has associated types, so the hosts and the config name both (`HeadlessHost<StoreDriver<State, Action>,
+  Action>`) and `ScriptRunner` only the action. The MVVM driver is `ViewModelDriver`, for Jetpack `ViewModel`s or any
+  class, where the reference's is `ObservationDriver` for `@Observable` view models. `AgentTasks` is
+  `environment.tasks`, on each launch's scope, where the reference's `\.agentTasks` runs work in its owner's
+  dependencies: Kotlin view models are given their environment, so there is no owner to name. A relaunch also
+  cancels that scope, after `cancelAllWork()`. Hosts for each architecture are functions named like the class
+  (`HeadlessHost(container, …)`, `HeadlessHost(mockMethods, …, coordinator = …)`), where the reference has
+  constrained initializers.
 - The real-OS `app` commands use `adb`: `app permission` takes an Android permission (`CAMERA` is
   `android.permission.CAMERA`) and its `reset` resets every permission of the app (`pm reset-permissions -p`); `app
   location` needs an emulator (exit 3 on a phone) and `app location clear` is a usage error (exit 2: an emulator

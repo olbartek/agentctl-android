@@ -17,7 +17,7 @@ class AppStore private constructor(activity: Activity) {
         MainScope().launch { launch.start() }   // applies the seed, then starts the bridge
     }
 
-    val store: AgentStore<TinyRoot.State, TinyRoot.Action> get() = launch.store
+    val store: AgentStore<TinyRoot.State, TinyRoot.Action> get() = launch.app   // a coordinator, in an MVVM app
     val isReady: StateFlow<Boolean> get() = launch.isReady   // false while a seed is applied: show a splash
 
     companion object {
