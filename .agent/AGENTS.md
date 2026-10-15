@@ -73,7 +73,8 @@ The two repositories share MAJOR.MINOR; PATCH is each repository's own.
   of both repositories.
 
 Tags are bare `X.Y.Z` on `main`. (Tags before 0.4.1 were `vX.Y.Z`.) To release here: bump
-`agentctlVersion` in `gradle.properties` and the README's pins and Status, merge, then tag and push the tag; JitPack
+`agentctlVersion` in `gradle.properties`, the version pins (README.md and docs/guides/integration.md) and the
+README's Status, merge, then tag and push the tag; JitPack
 builds it (`jitpack.yml`) as `com.github.olbartek.agentctl-android:<module>:X.Y.Z`. For a minor or major release, tag
 agentctl-ios with the same number.
 
