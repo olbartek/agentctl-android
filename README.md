@@ -10,8 +10,8 @@ AgentCtl makes an app **agent-addressable**. Each screen describes itself:
 A CLI drives those commands from the terminal, *headlessly on the JVM with no emulator*, and prints one line of
 state per step. A coding agent (or you) can open a screen, run a command and assert on the result in milliseconds,
 instead of building the app, booting an emulator and guessing whether a tap landed. The same script also drives
-the real app on a device, through a debug-only in-app bridge that answers only the CLI that launched the app (a
-fresh token per launch), so what you assert headlessly is what the app does.
+the real app on a device, through a debug-only in-app bridge that answers only requests carrying the token of the
+launch that started it (a fresh token per launch), so what you assert headlessly is what the app does.
 
 This is the Kotlin port of [agentctl-ios](https://github.com/olbartek/agentctl-ios). Both implement the same
 contract, [CONTRACT.md](CONTRACT.md) (version 2): the same script prints the same bytes in both. This repository's

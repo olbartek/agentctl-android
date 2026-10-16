@@ -3,8 +3,8 @@
 Add `agentctl-bridge` with **`debugImplementation`** only, as your config module, and keep the code that names them
 in `src/debug`. A release build then carries neither the bridge, nor AgentCtl's runtime, nor the `INTERNET`
 permission the bridge's manifest adds. The server listens on
-`127.0.0.1` only; the CLI reaches it with `adb forward`. It answers only the launch that started it: every request
-carries that launch's token (see [Who may ask](#who-may-ask)).
+`127.0.0.1` only; the CLI reaches it with `adb forward`. It answers only requests that carry the token of the launch
+that started it (see [Who may ask](#who-may-ask)).
 
 [`examples/tinyapp-android`](../../examples/tinyapp-android) is TinyApp as a real app: plain views that render the store
 and send it the same actions the commands do. Its debug build's store, the whole integration
@@ -90,7 +90,8 @@ forward holds `127.0.0.1`, where the CLI connects, and fails otherwise. `app lau
 }
 ```
 
-The file holds the launch's token, so it is written with mode 0600: only you can read it.
+The file holds the launch's token, so it is written with mode 0600: only you can read it. So are the CLI's logs
+under `<outputPath>/logs`, and a command line they record shows the token as `<token>`.
 
 `app run`, `app state` and `app screens` then talk to that port, so two apps (or an emulator and a simulator) on one
 Mac never need a port by hand. Each command's port is `--port` if given, else `APPCTL_PORT`, else the last launch's,
@@ -157,7 +158,9 @@ headless fixed date. Such a file says so on a comment line, and `app test` print
 
 ### Who may ask
 
-The bridge answers only the CLI that launched the app. `app launch` makes a fresh token for each launch (128 bits from
+The token binds every request to whoever launched the app: the bridge answers only requests that carry the token
+that launch passed it. The launch itself is not authenticated: anything that can start the debug app with
+`am start` can pass a token of its own, which is why the bridge exists in debug builds only. `app launch` makes a fresh token for each launch (128 bits from
 `SecureRandom`, as 32 lowercase hex characters), passes it to the app as the `agent-token` extra, and records it in
 `bridge.json`. Every request then carries it in the `X-Appctl-Token` header: `app run`, `app state` and `app screens`
 send `APPCTL_TOKEN` if it is set (as `APPCTL_PORT` overrides the port), else the token `bridge.json` records when its
@@ -181,7 +184,9 @@ error: the app's agent bridge on 127.0.0.1:8765 refused the request (forbidden)
 
 The first means the app was launched by another `app launch` than the one `bridge.json` records (or by hand, with a
 token of its own): relaunch it, or set `APPCTL_TOKEN`. The second should not happen from the CLI, which always sends
-`Host: 127.0.0.1:<port>` and no `Origin`; a web page's request always carries one of them.
+`Host: 127.0.0.1:<port>` and no `Origin`. The Host and Origin checks stop DNS rebinding and the cross-origin requests
+that carry an `Origin`; a request that gets past them (a web page's no-cors `GET`, say, which carries a loopback
+`Host` and no `Origin`) still lacks the token.
 
 A `BridgeServer` you construct yourself checks a token only when you give it one; the host and size checks always
 apply.

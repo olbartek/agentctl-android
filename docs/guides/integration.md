@@ -501,7 +501,7 @@ changes as follows:
   reference's `run` now `throws(CancellationError)`).
 ### Moving a host to 0.9
 
-0.9 makes the debug bridge answer only the CLI that launched the app. A host's types and scripts are unchanged;
+0.9 binds the debug bridge's requests to whoever launched the app, with a token per launch. A host's types and scripts are unchanged;
 what it changes:
 
 - **A 0.9 app needs a 0.9 `app launch`.** The app starts its bridge only when the launch passes a well-formed
