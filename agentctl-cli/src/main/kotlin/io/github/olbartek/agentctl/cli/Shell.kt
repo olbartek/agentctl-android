@@ -83,10 +83,12 @@ internal object Shell {
      */
     private fun finish(process: Process, timeoutSeconds: Long): Int? {
         if (process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) return process.exitValue()
-        stoppable(process).forEach { it.destroy() }
+        val signalled = stoppable(process)
+        signalled.forEach { it.destroy() }
         if (!process.waitFor(KILL_AFTER_SECONDS, TimeUnit.SECONDS)) process.destroyForcibly()
-        // Taken again: a parent that outlived SIGTERM may have started more.
-        stoppable(process).filter { it.isAlive }.forEach { it.destroyForcibly() }
+        // The first list too: a child whose parent died on SIGTERM is reparented, no longer a descendant. Taken again
+        // as well: a parent that outlived SIGTERM may have started more.
+        (signalled + stoppable(process)).distinct().filter { it.isAlive }.forEach { it.destroyForcibly() }
         process.waitFor(5, TimeUnit.SECONDS)
         return null
     }

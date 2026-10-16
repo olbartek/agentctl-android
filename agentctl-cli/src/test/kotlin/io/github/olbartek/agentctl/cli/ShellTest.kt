@@ -54,6 +54,17 @@ class ShellTest {
     }
 
     @Test
+    fun aGrandchildThatIgnoresSigtermIsKilledToo() {
+        // Its parent dies on SIGTERM, which reparents it: no longer a descendant once the parent is gone.
+        val nap = "sleep 77.${ProcessHandle.current().pid()}"
+        assertNull(Shell.capture(listOf("sh", "-c", "(trap '' TERM; exec $nap) & wait"), timeoutSeconds = 1))
+        val left = { ProcessHandle.allProcesses().filter { nap in it.info().commandLine().orElse("") }.count() }
+        val deadline = TimeSource.Monotonic.markNow() + 5.seconds
+        while (left() > 0 && deadline.hasNotPassedNow()) Thread.sleep(50)
+        assertEquals(0, left(), "a grandchild of a timed-out command is still running")
+    }
+
+    @Test
     fun aLogSaysWhenItsCommandWasStopped() {
         val directory = Files.createTempDirectory("shell").toFile()
         val log = java.io.File(directory, "tool.log")
