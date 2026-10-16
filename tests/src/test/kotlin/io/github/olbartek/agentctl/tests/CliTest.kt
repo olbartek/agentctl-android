@@ -27,6 +27,31 @@ class CliTest {
         assertEquals("", help.err)
     }
 
+    /**
+     * `help [<subcommand>…]` is `<subcommand>… --help`, as Swift ArgumentParser's root `help` is: stdout, exit 0. A name
+     * that is not a subcommand ends the path (`help nosuch` is the root's help), and `help` is only the root's.
+     */
+    @Test
+    fun helpIsTheRootsHelpSubcommand() {
+        for ((args, page) in listOf(
+            listOf("help") to listOf(),
+            listOf("help", "app") to listOf("app"),
+            listOf("help", "app", "record") to listOf("app", "record"),
+            listOf("help", "nosuch") to listOf(),
+            listOf("help", "app", "nosuch", "record") to listOf("app"),
+            listOf("help", "run", "extra") to listOf("run"),
+            listOf("help", "--help") to listOf(),
+        )) {
+            val result = tinyctl(*args.toTypedArray())
+            assertEquals(0, result.status, "$args: ${result.combined}")
+            assertEquals("", result.err, "$args")
+            assertEquals(tinyctl(*(page + "--help").toTypedArray()).out, result.out, "$args")
+        }
+        for (args in listOf(listOf("app", "help"), listOf("app", "record", "help"))) {
+            assertEquals(2, tinyctl(*args.toTypedArray()).status, "$args")
+        }
+    }
+
     @Test
     fun malformedCommandLinesAreUsageErrors() {
         for (args in listOf(arrayOf("bogus"), arrayOf("run"), arrayOf("run", "a", "b"), arrayOf("run", "--nope", "x"), arrayOf("app", "run", "--port", "x"))) {
@@ -36,6 +61,7 @@ class CliTest {
         }
         // A command group without a subcommand prints its usage as an error.
         assertEquals(2, tinyctl().status)
+        assertEquals(2, tinyctl("app").status)
     }
 
     /** Every page is rendered from the host's examples, so none names another app's CLI or screens. */

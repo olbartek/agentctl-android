@@ -57,7 +57,7 @@ public object AgentCtl {
         val cli = Cli(config, io, environment, workingDirectory)
         val root = command(cli)
         return try {
-            root.parse(arguments(args))
+            root.parse(helpArguments(arguments(args), root))
             0
         } catch (error: CliktError) {
             val status = exitStatus(error)
@@ -93,6 +93,22 @@ public object AgentCtl {
     }
 
     private val NEGATIVE_NUMBER = Regex("^-\\.?[0-9]")
+
+    /**
+     * `help [<subcommand>…]` as `<subcommand>… --help`: that command's help on stdout, exit 0, as Swift
+     * ArgumentParser's `help` subcommand. Only the root has it. The names are followed while they name a subcommand;
+     * the first that does not ends the path, and the rest is ignored (`help nosuch` is the root's help).
+     */
+    internal fun helpArguments(args: List<String>, root: CoreCliktCommand): List<String> {
+        if (args.firstOrNull() != "help") return args
+        val path = mutableListOf<String>()
+        var command = root
+        for (name in args.drop(1)) {
+            command = command.registeredSubcommands().firstOrNull { it.commandName == name } as? CoreCliktCommand ?: break
+            path += name
+        }
+        return path + "--help"
+    }
 
     /** The command tree, for rendering help pages in tests. */
     internal fun <D : AgentDriver<A, *>, A> command(cli: Cli<D, A>): CoreCliktCommand = Root(cli)
