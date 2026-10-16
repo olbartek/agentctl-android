@@ -20,19 +20,26 @@ class ScreenRecorderTest {
     private val bin = File(sandbox, "bin").apply { mkdirs() }
     private val log = File(sandbox, "record.log")
 
-    /** A fake adb: `shell` runs the command here, with /sdcard mapped into [device] and signals as a device has them. */
+    /**
+     * A fake adb: `shell` runs the command here, with /sdcard mapped into [device] and signals as a device has them.
+     *
+     * Its screenrecord reports its pid (which the recorder then signals) only once its SIGINT trap is set, as the
+     * real one is set up by the time the recorder signals it; the chunk's own `echo $$` is dropped for that. It waits
+     * in `wait`, never on a foreground child: macOS's /bin/sh (bash 3.2) drops a SIGINT that lands as a foreground
+     * child exits, and the chunk would run to its limit. Either was a stop that left no finished chunk (#81).
+     */
     private fun adb(startDelay: String = "0", failsAtOnce: Boolean = false, writesNothing: Boolean = false): String {
         File(bin, "screenrecord").apply {
             writeText(
                 """
                 #!/bin/sh
                 # screenrecord --time-limit N FILE: "partial" until it ends, "complete" once it does, on SIGINT too.
-                ${if (failsAtOnce) "echo 'cannot record' >&2; exit 0" else ""}
-                ${if (writesNothing) "file=${'$'}3; mkdir -p \"${'$'}(dirname \"${'$'}file\")\"; : > \"${'$'}file\"; trap 'exit 0' INT; while :; do sleep 0.1; done" else ""}
+                ${if (failsAtOnce) "echo ${'$'}${'$'}; echo 'cannot record' >&2; exit 0" else ""}
+                ${if (writesNothing) "file=${'$'}3; trap ': >> \"${'$'}file\"; exit 0' INT; : > \"${'$'}file\"; echo ${'$'}${'$'}; while :; do sleep 0.1 & wait ${'$'}!; done" else ""}
                 limit=${'$'}2; file=${'$'}3
-                mkdir -p "${'$'}(dirname "${'$'}file")"; echo partial > "${'$'}file"
                 trap 'echo complete > "${'$'}file"; exit 0' INT
-                n=0; while [ ${'$'}n -lt ${'$'}((limit * 10)) ]; do sleep 0.1; n=${'$'}((n + 1)); done
+                echo partial > "${'$'}file"; echo ${'$'}${'$'}
+                n=0; while [ ${'$'}n -lt ${'$'}((limit * 10)) ]; do sleep 0.1 & wait ${'$'}!; n=${'$'}((n + 1)); done
                 echo complete > "${'$'}file"
                 """.trimIndent() + "\n",
             )
@@ -46,7 +53,7 @@ class ScreenRecorderTest {
                 what=${'$'}1; shift
                 case "${'$'}what" in
                   shell)
-                    command=${'$'}(printf '%s ' "${'$'}@" | sed "s#/sdcard/#${device.path}/#g")
+                    command=${'$'}(printf '%s ' "${'$'}@" | sed -e "s#/sdcard/#${device.path}/#g" -e 's#echo [$][$] && exec screenrecord#exec screenrecord#')
                     sleep $startDelay
                     # A device's processes have SIGINT as usual, not ignored as a background job's here would be.
                     PATH="${bin.path}:${'$'}PATH" exec perl -e '${'$'}SIG{INT}="DEFAULT"; exec @ARGV' sh -c "${'$'}command" ;;
@@ -115,6 +122,25 @@ class ScreenRecorderTest {
         assertEquals("partial", chunks["appctl-record-${second.pid}-0.mp4"], "the second recorder's chunk was stopped too")
         assertTrue(second.stop(10.seconds))
         assertEquals("complete", chunkFiles()["appctl-record-${second.pid}-0.mp4"])
+    }
+
+    /**
+     * A stop that lands after the loop checked its flag but before it began to wait for the chunk only sets the flag,
+     * and the loop then waits: the stop signals it again, so it does not wait the chunk out (#81). The stand-in loop
+     * here always takes the first signal before its wait.
+     */
+    @Test
+    fun aStopThatLandsBeforeTheLoopWaitsIsSentAgain() {
+        val ready = File(sandbox, "ready")
+        val script = "trap 'stop=1' TERM; stop=0; : > \"${'$'}1\"; while [ ${'$'}stop = 0 ]; do :; done; " +
+            "sleep 30 & chunk=${'$'}!; wait ${'$'}chunk; kill ${'$'}chunk"
+        val loop = ProcessBuilder("/bin/sh", "-c", script, "appctl-record", ready.path)
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectErrorStream(true).start()
+        val deadline = TimeSource.Monotonic.markNow() + 5.seconds
+        while (!ready.isFile && deadline.hasNotPassedNow()) Thread.sleep(20)
+        val start = TimeSource.Monotonic.markNow()
+        assertTrue(ScreenRecorder.of("adb", "emulator-5556", loop.pid(), File(sandbox, "work")).stop(10.seconds), "the loop waited its chunk out")
+        assertTrue(start.elapsedNow() < 5.seconds, "took ${start.elapsedNow()}")
     }
 
     /** Chunks that reach their limit are followed by the next, and all end up finished. */

@@ -81,12 +81,23 @@ internal class ScreenRecorder private constructor(
         return stoppedAt
     }
 
-    /** Stops the loop, which finishes its chunk first; `false` if it is still running after [timeout]. */
+    /**
+     * Stops the loop, which finishes its chunk first; `false` if it is still running after [timeout].
+     *
+     * The loop is sent SIGTERM again every second until it ends. A signal that lands after the loop checked its stop
+     * flag but before it began to `wait` for the chunk only sets the flag (dash and bash alike run the trap before the
+     * `wait`, which then blocks), and the loop would wait the chunk out, up to [CHUNK_SECONDS]. The next one
+     * interrupts that `wait`. The loop takes any number of them: it signals its chunk once (#81).
+     */
     fun stop(timeout: Duration): Boolean {
         val handle = handle ?: return true
         handle.destroy()
         val deadline = TimeSource.Monotonic.markNow() + timeout
-        while (handle.isAlive && deadline.hasNotPassedNow()) Thread.sleep(100)
+        var ticks = 0
+        while (handle.isAlive && deadline.hasNotPassedNow()) {
+            Thread.sleep(100)
+            if (++ticks % 10 == 0 && handle.isAlive) handle.destroy()
+        }
         return !handle.isAlive
     }
 
