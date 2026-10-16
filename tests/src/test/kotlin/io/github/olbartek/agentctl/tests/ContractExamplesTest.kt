@@ -1,13 +1,20 @@
 package io.github.olbartek.agentctl.tests
 
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
+import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.BridgeRequest
+import io.github.olbartek.agentctl.runtime.BridgeResponse
 import io.github.olbartek.agentctl.runtime.BridgeRouter
+import io.github.olbartek.agentctl.runtime.BridgeServer
 import io.github.olbartek.agentctl.runtime.HttpParser
 import java.io.File
+import java.net.Socket
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -83,6 +90,45 @@ class ContractExamplesTest {
             val expected = head + body
             // §8.4's examples come from the iOS build of an app whose id is com.example.tinyapp.
             assertEquals(expected, String(HttpParser.serialize(response, "com.example.tinyapp", "ios"), Charsets.UTF_8))
+        }
+    }
+
+    /**
+     * CONTRACT.md §8.4: the request example, sent as written (its newlines as CRLFs) to a bridge expecting the
+     * example's token, is routed whole: past every check of §8.1, with its body. Its token is a launch token (§8.2),
+     * and the same request with another one is refused.
+     */
+    @Test
+    fun theBridgeRequestExampleIsAccepted() {
+        val block = Regex("```\n(POST /run HTTP/1\\.1\n.*?)```", RegexOption.DOT_MATCHES_ALL).findAll(contract)
+            .map { it.groupValues[1] }.single()
+        val separator = block.indexOf("\n\n")
+        val token = Regex("X-Appctl-Token: (\\S+)").find(block)!!.groupValues[1]
+        assertTrue(AgentLaunchOptions.isToken(token), token)
+        val wire = block.substring(0, separator + 2).replace("\n", "\r\n") + block.substring(separator + 2).removeSuffix("\n")
+        val executor = Executors.newSingleThreadExecutor()
+        val received = AtomicReference<BridgeRequest>()
+        val server = BridgeServer(executor.asCoroutineDispatcher(), "com.example.tinyapp", "ios", token) {
+            received.set(it)
+            BridgeResponse(200, "ok\n", exitCode = 0)
+        }
+        try {
+            val port = server.start(0)
+            fun send(wire: String) = Socket("127.0.0.1", port).use { socket ->
+                socket.soTimeout = 5_000
+                socket.getOutputStream().apply { write(wire.toByteArray()); flush() }
+                String(socket.getInputStream().readBytes())
+            }
+            val other = token.dropLast(1) + if (token.last() == '0') '1' else '0'
+            val refused = send(wire.replace(token, other))
+            assertTrue(refused.startsWith("HTTP/1.1 401 Unauthorized\r\n"), refused)
+            assertEquals(null, received.get())
+            val answer = send(wire)
+            assertTrue(answer.startsWith("HTTP/1.1 200 OK\r\n"), answer)
+            assertEquals("open 2", received.get()?.body)
+        } finally {
+            server.stop()
+            executor.shutdownNow()
         }
     }
 }
