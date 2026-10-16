@@ -33,10 +33,10 @@ class BridgeClientGoneTest {
         executor.shutdownNow()
     }
 
-    private val get = "GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+    private val get = "GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Appctl-Token: $TOKEN\r\n\r\n"
 
     private fun start(handler: suspend () -> BridgeResponse): Int {
-        val server = BridgeServer(executor.asCoroutineDispatcher(), "app", "android") { handler() }
+        val server = BridgeServer(executor.asCoroutineDispatcher(), "app", "android", TOKEN) { handler() }
         server.events = { events += it; if (it == "client gone") clientsGone.incrementAndGet() }
         servers += server
         return server.start(0)
@@ -135,3 +135,6 @@ class BridgeClientGoneTest {
         assertEquals(emptyList(), events.toList())
     }
 }
+
+/** The token the test bridge expects, as `app launch` would have passed it. */
+private const val TOKEN = "0123456789abcdef0123456789abcdef"

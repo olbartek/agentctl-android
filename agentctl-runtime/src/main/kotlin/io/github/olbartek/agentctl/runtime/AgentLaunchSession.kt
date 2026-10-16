@@ -138,7 +138,8 @@ public class AgentLaunchSession<D : AgentDriver<A, *>, A>(
 
     /** The live host built from the config: the app the seed and the bridge drive. */
     public val host: LiveHost<D, A>
-    private val server: BridgeServer
+    /** The bridge, checking the launch's token; `null` without one: no token, no bridge (CONTRACT.md §8.2). */
+    private val server: BridgeServer?
     private val screensText: () -> String
 
     /** Made after the seed, so its runner drives the store the seed left (a seed's `device relaunch` replaces it). */
@@ -150,7 +151,9 @@ public class AgentLaunchSession<D : AgentDriver<A, *>, A>(
         host = config.makeLive(this.options.latency ?: MockLatency.LIVE, dispatcher)
         val device = config.deviceConfig.surface
         screensText = { ScreensRenderer.render(config.screens, config.docsText.mockExample, device) }
-        server = BridgeServer(dispatcher, config.applicationId, BridgeDefaults.PLATFORM, this.options.token) { router.handle(it) }
+        server = this.options.token?.let { token ->
+            BridgeServer(dispatcher, config.applicationId, BridgeDefaults.PLATFORM, token) { router.handle(it) }
+        }
     }
 
     /**
@@ -160,7 +163,7 @@ public class AgentLaunchSession<D : AgentDriver<A, *>, A>(
     public suspend fun start(): Int? {
         if (started) return null
         started = true
-        if (options.token == null) {
+        if (server == null) {
             log("AgentCtlBridge: no agent-token; not listening")
             return null
         }
@@ -176,7 +179,7 @@ public class AgentLaunchSession<D : AgentDriver<A, *>, A>(
 
     /** Stops the bridge and cancels the live store's running effects: the session is over. */
     public fun stop() {
-        server.stop()
+        server?.stop()
         host.close()
     }
 

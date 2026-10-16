@@ -520,5 +520,6 @@ what it changes:
   sends it too: `curl -H "X-Appctl-Token: $(jq -r .token .appctl/bridge.json)" http://127.0.0.1:<port>/snapshot`.
   Without it the bridge answers `401 unauthorized`; a request naming another `Host`, or with an `Origin`, gets
   `403 forbidden`; a body over 1 MiB gets `400 bad request`.
-- `BridgeRequest` has a `headers` map, and `BridgeServer` a constructor that takes the expected token. Code built
-  against 0.8's constructors still links; a `BridgeServer` built with them checks no token.
+- `BridgeRequest` has a `headers` map, and `BridgeServer` a constructor that takes the expected token. 0.8's
+  constructors are deprecated (removed in 1.0): code built against them still links, and a `BridgeServer` built with
+  them checks no token. Pass the token instead.
