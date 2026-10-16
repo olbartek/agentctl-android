@@ -90,4 +90,11 @@ class AppCommandLineTest {
         assertEquals(3, result.status, result.combined)
         assertEquals("error: cannot run `adb devices` (exit 1): adb: failed to check server version: protocol fault\n", result.err)
     }
+
+    /** The app's own latency is whatever its config says, not a range the CLI cannot know. */
+    @Test
+    fun launchLatencyHelpDefersToTheApp() {
+        val page = tinyctl("app", "launch", "--help").out.replace(Regex("\\s+"), " ")
+        assertTrue("Fixed mock latency in ms (default: the app's own)." in page, page)
+    }
 }

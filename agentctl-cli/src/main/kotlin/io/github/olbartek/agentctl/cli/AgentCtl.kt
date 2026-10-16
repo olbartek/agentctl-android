@@ -282,7 +282,7 @@ public object AgentCtl {
     ) {
         private val seed by option(help = "Commands to run before the first frame (appctl-seed).")
         private val device by option(help = "adb serial or AVD name.")
-        private val latency by option(help = "Fixed mock latency in ms (default: the app's 300–800 ms).").int()
+        private val latency by option(help = "Fixed mock latency in ms (default: the app's own).").int()
         private val clearSession by option("--clear-session", help = "Forget the saved session before launching.").flag()
         private val noBuild by option("--no-build", help = "Relaunch the installed app instead of building it.").flag()
         private val port by launchPortOption()
