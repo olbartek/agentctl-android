@@ -19,9 +19,9 @@ import io.github.olbartek.agentctl.examples.agentshop.clients.OrdersClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.SessionStorage
 import io.github.olbartek.agentctl.examples.agentshop.models.DeepLink
 import io.github.olbartek.agentctl.examples.agentshop.models.ScheduledFaults
+import io.github.olbartek.agentctl.runtime.AgentAppFactory
 import io.github.olbartek.agentctl.runtime.AppCheck
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
-import io.github.olbartek.agentctl.runtime.AppFactory
 import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.HelpExamples
@@ -170,7 +170,7 @@ object AgentShopConfig {
      * auth server measures codes' age on the host's virtual clock, so `advance 5m` expires them.
      */
     fun headless(): HeadlessHost<AppFeature.State, AppFeature.Action> =
-        HeadlessHost(AppFeatureAgent, mockMethods, device, AppFactory { environment ->
+        HeadlessHost(AppFeatureAgent, mockMethods, device, AgentAppFactory { environment ->
             // Once per host: `device relaunch` builds the next store on the same session storage and backends.
             AgentShop.prepare(environment, SessionStorage.inMemory(), uptime = virtualUptime(environment))
         })
@@ -185,7 +185,7 @@ object AgentShopConfig {
         sessionStorage: SessionStorage,
         scheduledFaults: ScheduledFaults = ScheduledFaults(),
     ): LiveHost<AppFeature.State, AppFeature.Action> =
-        LiveHost(AppFeatureAgent, mockMethods, latency, dispatcher, device, AppFactory { environment ->
+        LiveHost(AppFeatureAgent, mockMethods, latency, dispatcher, device, AgentAppFactory { environment ->
             AgentShop.prepare(environment, sessionStorage, scheduledFaults)
         })
 

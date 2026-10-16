@@ -16,7 +16,7 @@ import io.github.olbartek.agentctl.Store
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
 import io.github.olbartek.agentctl.next
-import io.github.olbartek.agentctl.runtime.AppFactory
+import io.github.olbartek.agentctl.runtime.AgentAppFactory
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.testsupport.AgentCoverage
@@ -188,9 +188,9 @@ object Notebook {
     /** Builds its client once per host: a relaunch keeps it. */
     fun preparedHost() = HeadlessHost(
         Screen, emptyList(), relaunch,
-        AppFactory { _ ->
+        AgentAppFactory { _ ->
             val notes = Notes()
-            return@AppFactory { scope -> store(notes, scope) }
+            return@AgentAppFactory { scope -> store(notes, scope) }
         },
     )
 
@@ -397,7 +397,7 @@ class DeviceTest {
         assertEquals(RunStatus.OK, status, text)
     }
 
-    /** CONTRACT.md §2.4: what the app's clients stored stays. An [AppFactory] builds them once per host. */
+    /** CONTRACT.md §2.4: what the app's clients stored stays. An [AgentAppFactory] builds them once per host. */
     @Test
     fun relaunchKeepsWhatAPreparedAppsClientsStored() = runBlocking {
         for ((host, after) in listOf(Notebook.preparedHost() to "hi", Notebook.rebuildingHost() to "none")) {

@@ -21,7 +21,7 @@ either is imported by name or with `*`.
 | Deep and app links | `device open-url <url>` | `openUrl = { uri -> … }` returns the root action, or `null` for a link you don't handle | the screen the link opens | `app openurl <url>` (the app declares an intent filter for the scheme) |
 | Push notifications | `device push <name> [tap]` | `pushes = listOf(AgentDevice.Push(name, help, received, opened))` | what receiving or tapping it does | — (`app push` exits 2 on Android) |
 | Background / foreground | `device background`, `device foreground` | `scenePhase = { phase -> … }` returns the root action | screen commands fail while in the background | — |
-| Relaunch | `device relaunch` | `relaunch = true`; build the hosts with an `AppFactory` so the clients survive | the fresh launch; what your clients stored, the device and the clock survive | `app launch --no-build` (the real process) |
+| Relaunch | `device relaunch` | `relaunch = true`; build the hosts with an `AgentAppFactory` so the clients survive | the fresh launch; what your clients stored, the device and the clock survive | `app launch --no-build` (the real process) |
 | Network | `device network <online\|offline>` | `offlineErrorCode = "network"`; observers collect `device.onlineUpdates()` | offline, every mocked call fails with that code | — |
 | Location | `device location <lat>,<lon>\|none` | `location = true`; fakes read `device.location` / `device.locationUpdates()` | what your screen does with it | `app location <lat>,<lon>` (an emulator only) |
 | Biometry | `device biometry <enrolled\|unenrolled\|match\|fail>` | `biometry = true`; fakes call `device.authenticateBiometry()` (suspend) | `prompt=biometry` until `match` or `fail` | — |
