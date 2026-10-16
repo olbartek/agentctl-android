@@ -6,11 +6,11 @@
 $ ./tinyctl check --ui
 L0 build      ok    1 task                       0.5s
 L1 test       ok    1 task, 100 tests            11.9s
-L2 scenarios  ok    3/3 scenarios                0.0s
+L2 scenarios  ok    5/5 scenarios                0.0s
 docs          ok    up to date                   0.0s
 L3 snapshots  ok    no snapshot tasks configured 0.0s
 L4 app        ok    refresh-error via the agent bridge 2.9s
-  nzoz_pixel7_api36 (Android 16), screenshot: …/.appctl/screenshots/check-ui-1790264952.png
+  agentctl_pixel7_api36 (Android 16), screenshot: …/.appctl/screenshots/check-ui-1790264952.png
 ```
 
 | Rung | What runs |

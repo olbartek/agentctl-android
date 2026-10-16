@@ -53,10 +53,11 @@ export JAVA_HOME=$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home
 ./gradlew build                 # everything, including the suite; what CI runs, with the two below
 ./tinyctl test                  # the scenarios through the real CLI
 ./tinyctl docs --check          # the generated command reference is current (./tinyctl docs rewrites it)
-./tinyctl check                 # the ladder; --ui --device nzoz_pixel7_api36 adds the emulator (boots the AVD)
+./tinyctl check                 # the ladder; --ui --device agentctl_pixel7_api36 adds the emulator (boots the AVD)
 ```
 
-`local.properties` (`sdk.dir`) is gitignored. The emulator AVD `nzoz_pixel7_api36` is shared with nzozopole-android.
+`local.properties` (`sdk.dir`) is gitignored. This repository's emulator AVD is `agentctl_pixel7_api36`; never use
+`nzoz_pixel7_api36`, which belongs to nzozopole-android. Shut the emulator down when no live run is pending.
 
 ## Releases
 

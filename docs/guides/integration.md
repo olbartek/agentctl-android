@@ -1,7 +1,8 @@
 # The five-minute integration
 
-Every snippet below is real code from [`examples/tinyapp`](../../examples/tinyapp), a two-screen app with one mocked
-client. It is also this repository's test fixture.
+Most snippets below are real code from [`examples/tinyapp`](../../examples/tinyapp), a two-screen app with one mocked
+client and this repository's test fixture. The others name their source (AgentShop, TinyMVVM), except the `choice`
+forms, which are illustrations.
 
 ## 1. Add the dependency
 

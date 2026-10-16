@@ -18,7 +18,7 @@ fun everyCommandIsUsedByAScenario() {
 - `unvisitedScreens()`: a documented screen path no scenario reaches. An `<id>` segment matches any concrete one.
 - `unusedDeviceCommands()`: a `device` subcommand, or a push, the app configures and no scenario sends.
 
-The constructor throws `NoScenariosFound` when the directory holds no `*.appctl` files; otherwise all three guards
+The constructor throws `NoScenariosFound` when the directory holds no `*.appctl` files; otherwise all four guards
 would pass having examined nothing.
 
 The guards are deliberately shallow: they check that a command *appears* in some script, not that its result was

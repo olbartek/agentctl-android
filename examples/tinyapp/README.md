@@ -14,7 +14,7 @@ is the same app with Android views and the agent bridge, for the `app` commands 
 ./tinyctl run "open 2; save"               # one step per command
 ./tinyctl run "open 2; save; advance 3s"   # let the cooldown run out
 ./tinyctl run --diff "open 2"              # with a state diff per step
-./tinyctl test                             # the three scenarios below
+./tinyctl test                             # the five scenarios below
 ./tinyctl screens                          # every screen, command and summary key
 ./tinyctl state                            # the full root state
 ./tinyctl docs                             # regenerate agent-commands.md (--check verifies it)
@@ -23,10 +23,12 @@ is the same app with Android views and the agent bridge, for the `app` commands 
 
 ```
 $ ./tinyctl test
-PASS browse (10 steps, 75 ms)
+PASS browse (10 steps, 25 ms)
+PASS deep-link (8 steps, 1 ms)
+PASS push (5 steps, 0 ms)
 PASS refresh-error (7 steps, 1 ms)
-PASS save-cooldown (13 steps, 4 ms)
-3 passed, 0 failed
+PASS save-cooldown (13 steps, 1 ms)
+5 passed, 0 failed
 ```
 
 The step counts are fixed, because scenario output is deterministic. The millisecond timings are not.
