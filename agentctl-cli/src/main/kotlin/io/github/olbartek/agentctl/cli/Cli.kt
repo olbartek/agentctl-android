@@ -149,7 +149,7 @@ internal class Cli<D : AgentDriver<A, *>, A>(
         if (record && result.ok && references.isNotEmpty()) {
             io.print("Review the changes: git status --short ${references.joinToString(" ")}")
         }
-        return if (result.ok) 0 else 1
+        return result.status
     }
 
     fun check(ui: Boolean, device: String?): Int {
