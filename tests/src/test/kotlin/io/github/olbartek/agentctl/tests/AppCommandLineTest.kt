@@ -113,4 +113,24 @@ class AppCommandLineTest {
             assertEquals("error: cannot run `adb devices` (exit 1)\n", result.err, value)
         }
     }
+
+    /** `--port` and `--latency` read what Swift's `Int(_:)` reads: ASCII digits only, so `٣` is not 3. */
+    @Test
+    fun numberOptionsTakeAsciiDigitsOnly() {
+        for ((args, value) in listOf(
+            listOf("app", "state", "--port") to "\u0663",
+            listOf("app", "run", "--port") to "\u0663",
+            listOf("app", "launch", "--port") to "\u0663",
+            listOf("app", "test", "--port") to "\u0663",
+            listOf("app", "launch", "--latency") to "\u0663",
+            listOf("app", "test", "--latency") to "\u0663",
+            listOf("app", "state", "--port") to "abc",
+        )) {
+            val option = args.last()
+            val result = run(*(args + value + if (args[1] == "run") listOf("open 2") else emptyList()).toTypedArray())
+            assertEquals(2, result.status, "$args $value: ${result.combined}")
+            assertTrue("Error: invalid value for $option: $value is not a valid integer\n" in result.err, result.err)
+            assertEquals(false, adbCalls.exists(), "$args reached adb")
+        }
+    }
 }
