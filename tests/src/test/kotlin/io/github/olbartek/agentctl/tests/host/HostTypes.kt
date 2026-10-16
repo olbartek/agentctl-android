@@ -1,7 +1,8 @@
 package io.github.olbartek.agentctl.tests.host
 
-// A host's own types, named with the common words apps use (nzozopole declares its own PermissionStatus): the names
-// agentctl-ios's HostNamesTests checks, and the names 0.7's seam renamed to start with Agent. PublicNamesTest uses them beside every agentctl package.
+// A host's own types, named with the common words apps use (nzozopole declares its own PermissionStatus): the 26
+// names agentctl-ios's HostNamesTests checks, the seam's old and generic names among them. PublicNamesTest uses
+// them beside every agentctl package.
 
 enum class PermissionStatus { GRANTED, DENIED, NOT_DETERMINED }
 
@@ -37,8 +38,20 @@ class AppIntent
 
 class ScreenIntent
 
+class Intent
+
 class StoreDriver
+
+class StoreDriving
+
+class ObservationDriver
 
 class ViewModelDriver
 
 class AppFactory
+
+class Driver
+
+class Coordinator
+
+class ViewModel

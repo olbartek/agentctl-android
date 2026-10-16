@@ -9,15 +9,50 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
+ * Each of the host's names in a type position, unqualified: what fails to compile ("Overload resolution ambiguity")
+ * when an agentctl package declares the same name at its top level.
+ */
+private data class UsesHostNames(
+    val permissionStatus: PermissionStatus? = null,
+    val biometryResult: BiometryResult? = null,
+    val devicePhase: DevicePhase? = null,
+    val deviceLocation: DeviceLocation? = null,
+    val deviceSurface: DeviceSurface? = null,
+    val deviceConfig: DeviceConfig? = null,
+    val device: Device? = null,
+    val permission: Permission? = null,
+    val biometry: Biometry? = null,
+    val push: Push? = null,
+    val pushNotification: PushNotification? = null,
+    val location: Location? = null,
+    val phase: Phase? = null,
+    val surface: Surface? = null,
+    val subcommand: Subcommand? = null,
+    val appIntent: AppIntent? = null,
+    val screenIntent: ScreenIntent? = null,
+    val intent: Intent? = null,
+    val storeDriver: StoreDriver? = null,
+    val storeDriving: StoreDriving? = null,
+    val observationDriver: ObservationDriver? = null,
+    val viewModelDriver: ViewModelDriver? = null,
+    val appFactory: AppFactory? = null,
+    val driver: Driver? = null,
+    val coordinator: Coordinator? = null,
+    val viewModel: ViewModel? = null,
+)
+
+/**
  * What this guards: a host that declares common words of its own (`PermissionStatus`, `Location`, `Push`…) still
  * compiles beside a star import of every agentctl package on the JVM, because the library declares none of them at
- * its top level (agentctl-ios's HostNamesTests). A library name equal to one of them makes this file ambiguous, so
- * compiling it is the real assertion. (`agentctl-bridge` is an Android library, out of this JVM module's reach; it
- * declares `AgentLaunch` and `AgentLaunchArguments` only.)
+ * its top level (agentctl-ios's HostNamesTests). [UsesHostNames] fails to compile on a clash; the class literals are
+ * checked at run time too, since `X::class` silently picks a library class that has a companion object.
+ * (`agentctl-bridge` is an Android library, out of this JVM module's reach; it declares `AgentLaunch` and
+ * `AgentLaunchArguments` only.)
  */
 class PublicNamesTest {
     @Test
     fun aHostsOwnNamesStayUnambiguous() {
+        assertEquals(UsesHostNames(), UsesHostNames())
         val names = listOf(
             PermissionStatus::class,
             BiometryResult::class,
@@ -36,11 +71,17 @@ class PublicNamesTest {
             Subcommand::class,
             AppIntent::class,
             ScreenIntent::class,
+            Intent::class,
             StoreDriver::class,
+            StoreDriving::class,
+            ObservationDriver::class,
             ViewModelDriver::class,
             AppFactory::class,
+            Driver::class,
+            Coordinator::class,
+            ViewModel::class,
         ).map { it.java.name }
-        assertEquals(20, names.size)
+        assertEquals(26, names.size)
         assertEquals(emptyList(), names.filterNot { it.startsWith("io.github.olbartek.agentctl.tests.host.") })
     }
 
