@@ -91,8 +91,10 @@ public class BridgeServer(
     /** Stops listening. Requests already received are still answered; no new one is accepted. */
     public fun stop() {
         synchronized(lock) {
-            socket?.close()
+            // Cleared first: the accept that closing wakes must already see that [stop] closed it.
+            val listening = socket
             socket = null
+            listening?.close()
         }
         answering?.shutdown()
         answering = null
@@ -192,6 +194,7 @@ public class BridgeServer(
      */
     @Throws(IOException::class)
     private fun listenAgain(failed: ServerSocket, port: Int): ServerSocket? {
+        if (socket !== failed) return null // [stop] closed it meanwhile.
         val fresh = listen(port)
         synchronized(lock) {
             if (socket !== failed) {
