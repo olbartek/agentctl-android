@@ -100,6 +100,21 @@ class ScriptParserTest {
             ArgumentText.tokens("screen=x name=\"Alice Smith\"  error=none"),
         )
         assertEquals(listOf("a="), ArgumentText.tokens("a=\"\""))
+        assertEquals("", ArgumentText.unquoted("\"\""))
+        assertEquals("\"", ArgumentText.unquoted("\""))
+    }
+
+    /**
+     * Only one quoted span from end to end is unquoted: the quote that closes the first one must be the last character
+     * (CONTRACT.md §1.2). `"a"b"c"` used to come out as `abc`.
+     */
+    @Test
+    fun unquotesOnlyOneWholeQuotedSpan() {
+        for (asWritten in listOf("\"a\"b\"c\"", "\"a\"\"b\"", "\"a\"b", "a\"b\"", "\"a\\\"")) {
+            assertEquals(asWritten, ArgumentText.unquoted(asWritten))
+        }
+        assertEquals("a \"b\" c", ArgumentText.unquoted("\"a \\\"b\\\" c\""))
+        assertEquals("a\\", ArgumentText.unquoted("\"a\\\\\""))
     }
 
     @Test

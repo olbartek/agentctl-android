@@ -191,13 +191,29 @@ public class AgentDuration private constructor(
 public object ArgumentText {
     /**
      * Removes surrounding quotes and resolves escapes when the whole argument is one quoted string.
-     * `"a;b"` → `a;b`, `Alice Smith` → `Alice Smith`.
+     * `"a;b"` → `a;b`, `Alice Smith` → `Alice Smith`. Only one quoted span counts: the quote that closes the opening
+     * one must be the last character, so `"a"b"c"` and `"a" "b"` stay as written (CONTRACT.md §1.2).
      */
     public fun unquoted(text: String): String {
         val characters = Graphemes.of(text)
-        if (characters.size < 2 || characters.first() != "\"" || characters.last() != "\"") return text
-        val tokens = tokens(text)
-        return if (tokens.size == 1) tokens[0] else text
+        if (characters.firstOrNull() != "\"") return text
+        val content = StringBuilder()
+        var escaping = false
+        for (index in 1 until characters.size) {
+            val character = characters[index]
+            if (escaping) {
+                content.append(character)
+                escaping = false
+            } else if (character == "\\") {
+                escaping = true
+            } else if (character == "\"") {
+                // The closing quote: the argument is one quoted span only if nothing follows it.
+                return if (index == characters.lastIndex) content.toString() else text
+            } else {
+                content.append(character)
+            }
+        }
+        return text
     }
 
     /**
