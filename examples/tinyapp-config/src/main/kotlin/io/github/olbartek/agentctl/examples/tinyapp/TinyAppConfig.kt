@@ -13,6 +13,7 @@ import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.HelpExamples
 import io.github.olbartek.agentctl.runtime.LiveHost
+import io.github.olbartek.agentctl.toAsciiIntOrNull
 import kotlinx.coroutines.CoroutineDispatcher
 
 /**
@@ -43,8 +44,7 @@ object TinyAppConfig {
             // `tinyapp://items/<id>` opens that item, on top of whatever is shown, as tapping it in the list would.
             openUrl = { url ->
                 val path = url.path?.split("/")?.filter { it.isNotEmpty() }
-                // ASCII digits only, as Swift's `Int(_:)` reads them; `toIntOrNull` alone takes any Unicode digit.
-                val id = path?.singleOrNull()?.takeIf { it.matches(Regex("[+-]?[0-9]+")) }?.toIntOrNull()
+                val id = path?.singleOrNull()?.toAsciiIntOrNull()
                 if (url.scheme == "tinyapp" && url.host == "items" && id != null) {
                     TinyRoot.Action.Items(Items.Action.OpenTapped(id))
                 } else {

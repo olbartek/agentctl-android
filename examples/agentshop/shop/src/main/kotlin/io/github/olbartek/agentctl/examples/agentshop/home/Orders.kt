@@ -17,6 +17,7 @@ import io.github.olbartek.agentctl.examples.agentshop.models.formatCents
 import io.github.olbartek.agentctl.examples.agentshop.models.formatDay
 import io.github.olbartek.agentctl.invalidArgument
 import io.github.olbartek.agentctl.next
+import io.github.olbartek.agentctl.toAsciiIntOrNull
 
 /** The signed-in user's orders. Loads on first appearance; supports pull to refresh and retry. */
 object OrdersList {
@@ -112,7 +113,7 @@ object OrdersListAgent : AgentScreen<OrdersList.State, OrdersList.Action> {
 
     override val commands: List<AgentCommand<OrdersList.State, OrdersList.Action>> = listOf(
         AgentCommand.parsing("open", argument = "<id>", help = "Open an order, e.g. open 1003.") { text ->
-            OrdersList.Action.OrderTapped(text.toIntOrNull() ?: invalidArgument("expected an order id such as 1003"))
+            OrdersList.Action.OrderTapped(text.toAsciiIntOrNull() ?: invalidArgument("expected an order id such as 1003"))
         },
         AgentCommand.action("refresh", help = "Pull to refresh.", action = OrdersList.Action.Refresh),
         AgentCommand.action(

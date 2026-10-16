@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.runtime
 
+import io.github.olbartek.agentctl.toAsciiIntOrNull
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
@@ -45,8 +46,8 @@ public object HttpParser {
         for (line in lines.drop(1)) {
             val parts = line.split(":", limit = 2).filter { it.isNotEmpty() }
             if (parts.size != 2) return Result.Malformed
-            if (parts[0].trim().lowercase() == "content-length") {
-                val value = parts[1].trim().toIntOrNull()
+            if (parts[0].trimSwiftWhitespaces().lowercase() == "content-length") {
+                val value = parts[1].trimSwiftWhitespaces().toAsciiIntOrNull()
                 if (value == null || value < 0) return Result.Malformed
                 contentLength = value
             }
@@ -87,6 +88,10 @@ public object HttpParser {
         )).joinToString("\r\n")
         return head.toByteArray(Charsets.UTF_8) + body
     }
+
+    /** `trimmingCharacters(in: .whitespaces)`: Foundation's whitespaces are the space separators, a tab and U+200B. */
+    private fun String.trimSwiftWhitespaces(): String =
+        trim { it == '\t' || it == '\u200B' || Character.getType(it) == Character.SPACE_SEPARATOR.toInt() }
 
     private val HEADER_END = "\r\n\r\n".toByteArray(Charsets.US_ASCII)
 

@@ -26,6 +26,9 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   reference asks UIKit whether a view controller has a transition, presentation or dismissal under way. Compose's
   signal also sees endless animations; the shared rule that a UI busy for more than a second stops holding a step
   covers them.
+- A number in a command's argument, a link or a launch value is parsed with `String.toAsciiIntOrNull()`
+  (agentctl-core), which reads what Swift's `Int(_:)` reads, an optional sign and ASCII digits, where Kotlin's
+  `toIntOrNull()` also takes any Unicode digit (`٢`, `９`). The reference needs no such helper.
 - `choice`'s enum form takes the entries and how each is spelled (`of = Tab.entries, word = { it.code }`), where the
   reference takes a `String`-backed enum type and its raw values: a Kotlin enum has no raw value.
 - The wrapper has no stale-cache recovery. The reference's plans a failed SwiftPM build afresh, because SwiftPM's

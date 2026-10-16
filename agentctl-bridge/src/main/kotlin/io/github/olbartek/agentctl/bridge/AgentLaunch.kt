@@ -8,6 +8,7 @@ import io.github.olbartek.agentctl.runtime.AgentDriver
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.AgentLaunchSession
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
+import io.github.olbartek.agentctl.toAsciiIntOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -131,7 +132,7 @@ public class AgentLaunch<D : AgentDriver<A, App>, A, App>(config: AppCtlConfig<D
             return AgentLaunchOptions(
                 port = AgentLaunchOptions.portOrNull(extras.text(AgentLaunchOptions.PORT)) ?: defaults.port,
                 seed = extras.text(AgentLaunchOptions.SEED),
-                latency = extras.text(AgentLaunchOptions.MOCK_LATENCY)?.toIntOrNull()?.let(MockLatency::milliseconds),
+                latency = extras.text(AgentLaunchOptions.MOCK_LATENCY)?.toAsciiIntOrNull()?.let(MockLatency::milliseconds),
                 clearSession = extras.text(AgentLaunchOptions.CLEAR_SESSION) == "true",
             )
         }

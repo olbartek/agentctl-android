@@ -17,6 +17,7 @@ import io.github.olbartek.agentctl.examples.agentshop.models.attempt
 import io.github.olbartek.agentctl.examples.agentshop.models.trimmingWhitespaces
 import io.github.olbartek.agentctl.invalidArgument
 import io.github.olbartek.agentctl.next
+import io.github.olbartek.agentctl.toAsciiIntOrNull
 
 /**
  * The shop's home: every product, filterable by category, searchable by name and sortable by price. It loads once,
@@ -141,7 +142,7 @@ object ShopFeedAgent : AgentScreen<ShopFeed.State, ShopFeed.Action> {
             help = "Open a product, e.g. open 101.",
             gate = CommandGate("products=0") { it.visible.isNotEmpty() },
         ) { text ->
-            ShopFeed.Action.ProductTapped(text.toIntOrNull() ?: invalidArgument("expected a SKU such as 101"))
+            ShopFeed.Action.ProductTapped(text.toAsciiIntOrNull() ?: invalidArgument("expected a SKU such as 101"))
         },
         AgentCommand.action("refresh", help = "Load the catalog again.", action = ShopFeed.Action.Refresh),
         AgentCommand.action(

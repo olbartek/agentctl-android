@@ -13,6 +13,7 @@ import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.HelpExamples
 import io.github.olbartek.agentctl.runtime.LiveHost
+import io.github.olbartek.agentctl.toAsciiIntOrNull
 import kotlinx.coroutines.CoroutineDispatcher
 
 /**
@@ -29,8 +30,7 @@ object TinyMVVMConfig {
         get() = AgentDeviceConfig(
             openUrl = { url ->
                 val path = url.path?.split("/")?.filter { it.isNotEmpty() }
-                // ASCII digits only, as Swift's `Int(_:)` reads them; `toIntOrNull` alone takes any Unicode digit.
-                val id = path?.singleOrNull()?.takeIf { it.matches(Regex("[+-]?[0-9]+")) }?.toIntOrNull()
+                val id = path?.singleOrNull()?.toAsciiIntOrNull()
                 if (url.scheme == "tinyapp" && url.host == "items" && id != null) AgentIntent { it.openItem(id) } else null
             },
             pushes = listOf(

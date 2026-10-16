@@ -5,6 +5,7 @@ import io.github.olbartek.agentctl.AgentScreen
 import io.github.olbartek.agentctl.CommandGate
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.invalidArgument
+import io.github.olbartek.agentctl.toAsciiIntOrNull
 
 /**
  * What an agent can see and do on the list. This is the whole of the screen's agent surface: a path, a compact
@@ -39,7 +40,7 @@ object ItemsAgent : AgentScreen<Items.State, Items.Action> {
             help = "Open an item, e.g. open 2.",
             gate = CommandGate("items=0") { it.items.isNotEmpty() },
         ) { text ->
-            val id = text.toIntOrNull() ?: invalidArgument("expected an item id such as 2")
+            val id = text.toAsciiIntOrNull() ?: invalidArgument("expected an item id such as 2")
             Items.Action.OpenTapped(id)
         },
         AgentCommand.action("refresh", help = "Load the list again.", action = Items.Action.Refresh),

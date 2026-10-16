@@ -4,6 +4,7 @@ import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.ScreensRenderer
 import io.github.olbartek.agentctl.StepFormatter
+import io.github.olbartek.agentctl.toAsciiIntOrNull
 import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
 
@@ -41,7 +42,7 @@ public data class AgentLaunchOptions(
                     "-$PORT" -> options = options.copy(port = portOrNull(iterator.nextOrNull()) ?: options.port)
                     "-$SEED" -> options = options.copy(seed = iterator.nextOrNull())
                     "-$MOCK_LATENCY" -> options = options.copy(
-                        latency = iterator.nextOrNull()?.toIntOrNull()?.let(MockLatency::milliseconds),
+                        latency = iterator.nextOrNull()?.toAsciiIntOrNull()?.let(MockLatency::milliseconds),
                     )
                     "-$CLEAR_SESSION" -> options = options.copy(clearSession = true)
                 }
@@ -55,8 +56,11 @@ public data class AgentLaunchOptions(
          */
         public fun isRequested(arguments: List<String>): Boolean = "-$PORT" in arguments
 
-        /** 0–65535, or `null`: a value that is not a port is ignored (CONTRACT.md §8.2). */
-        public fun portOrNull(text: String?): Int? = text?.toIntOrNull()?.takeIf { it in 0..65535 }
+        /**
+         * 0–65535, or `null`: a value that is not a port is ignored (CONTRACT.md §8.2). Read as Swift's `UInt16(_:)`
+         * reads it: a sign, then ASCII digits only.
+         */
+        public fun portOrNull(text: String?): Int? = text?.toAsciiIntOrNull()?.takeIf { it in 0..65535 }
 
         private fun Iterator<String>.nextOrNull(): String? = if (hasNext()) next() else null
     }
