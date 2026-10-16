@@ -52,7 +52,7 @@ class AppCommandLineTest {
 
     @Test
     fun aStepDelayOutsideZeroToAnHourIsAUsageError() {
-        for ((value, shown) in listOf("Infinity" to "inf", "inf" to "inf", "-INF" to "-inf", "NaN" to "nan", "nan" to "nan", "-1" to "-1.0", "3601" to "3601.0")) {
+        for ((value, shown) in listOf("Infinity" to "inf", "inf" to "inf", "-INF" to "-inf", "NaN" to "nan", "nan" to "nan", "-1" to "-1.0", "3601" to "3601.0", "1e7" to "10000000.0", "-0.0001" to "-0.0001", "1e300" to "1e+300")) {
             val result = run("app", "test", "--no-build", "--step-delay", value)
             assertEquals(2, result.status, "$value: ${result.combined}")
             assertTrue(result.err.startsWith("Usage: "), result.err)

@@ -533,17 +533,11 @@ internal fun swiftDouble(text: String): Double? {
 
 /**
  * `--step-delay` must be finite and 0-3600 seconds: a usage error while the command line is parsed, before anything is
- * built, as agentctl-ios checks it. The value is shown as Swift prints a `Double` (`inf`, `nan`, `-1.0`).
+ * built, as agentctl-ios checks it. The value is shown as Swift prints a `Double` ([SwiftNumbers.description]).
  */
 private fun validateStepDelay(seconds: Double) {
     if (seconds.isFinite() && seconds in 0.0..3600.0) return
-    val shown = when {
-        seconds.isNaN() -> "nan"
-        seconds == Double.POSITIVE_INFINITY -> "inf"
-        seconds == Double.NEGATIVE_INFINITY -> "-inf"
-        else -> seconds.toString()
-    }
-    throw UsageError("--step-delay must be between 0 and 3600 seconds, not '$shown'")
+    throw UsageError("--step-delay must be between 0 and 3600 seconds, not '${SwiftNumbers.description(seconds)}'")
 }
 
 /**
