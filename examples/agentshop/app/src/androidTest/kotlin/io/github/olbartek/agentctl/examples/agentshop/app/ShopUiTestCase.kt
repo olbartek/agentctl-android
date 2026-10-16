@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.olbartek.agentctl.bridge.AgentLaunchArguments
 import io.github.olbartek.agentctl.examples.agentshop.app.design.UiTestValue
 import io.github.olbartek.agentctl.examples.agentshop.app.design.UiTesting
 import io.github.olbartek.agentctl.examples.agentshop.models.ScheduledFaults
@@ -40,7 +41,9 @@ import org.junit.runner.RunWith
  * The app is launched the way `app test` launches it for the bridge: no saved session, no mock latency. A scenario's
  * `mock` lines become `mock-fault` extras (`<method>#<n>=<code>`), since a UI test cannot send them later. The debug
  * app's bridge is present but idle: it listens on an ephemeral port (`agent-port 0`), so it never clashes with another
- * copy's. `ui-testing` gives every launch a fresh store (the tests share a process) and turns off autofill hints.
+ * copy's. The launch carries a fresh `agent-token`, as `app launch`'s does: without one the debug app would ignore its
+ * extras and run as the plain app. `ui-testing` gives every launch a fresh store (the tests share a process) and turns
+ * off autofill hints.
  *
  * Each test's duration is logged under the tag `ShopUiTiming` (`<class>#<test> <ms> ms <passed|failed>`), which the
  * benchmark reads from logcat.
@@ -79,6 +82,7 @@ abstract class ShopUiTestCase {
             .putExtra("clear-session", true)
             .putExtra("mock-latency", 0)
             .putExtra("agent-port", 0)
+            .putExtra(AgentLaunchArguments.TOKEN, AgentLaunchArguments.makeToken())
             .putExtra(ScheduledFaults.ARGUMENT, faults.toTypedArray())
         scenario = ActivityScenario.launch(intent)
     }

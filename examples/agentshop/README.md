@@ -81,8 +81,10 @@ reference's `DesignSystem`), rendering the logic in `shop/` and sending it the s
 depends on `:shop` only; the agent bridge and `AgentShopConfig` are `debugImplementation` dependencies, and the
 debug and release builds each have their own `AppStore` (`src/debug`, `src/release`):
 
-- **debug**: `AgentLaunch(AgentShopConfig.appCtl(SessionStorage.file(…), ScheduledFaults(<mock-fault extras>)), intent)`:
+- **debug**: `AgentLaunch(AgentShopConfig.appCtl(SessionStorage.file(…), ScheduledFaults(<mock-fault extras>)), intent)`
+  when an agent launched it (`AgentLaunchArguments.isRequested(intent)`: the intent carries the launch's `agent-token`):
   the bridge, launch seeding, `clear-session` (which deletes the app's session file), `mock-latency` and live `advance`.
+  Launched any other way, it builds the release build's store.
 - **release**: `AgentShop.store(AgentEnvironment.system(MainScope()), SessionStorage.file(…))`, and none of AgentCtl
   but `agentctl-core`. `./gradlew build` checks that on the release APK (`verifyReleaseLeavesOutAgentCtl`, from
   build-logic's `agentctl.release.check`, shared with TinyApp).
@@ -140,7 +142,8 @@ python3 bench/gen_uitests.py --check  # CI: fails if the generated tests are sta
 ```
 
 The tests run on the debug app (`createEmptyComposeRule` and `ActivityScenario`), launched with `clear-session`,
-`mock-latency 0`, `agent-port 0` (the idle bridge takes any free port) and `ui-testing`, which gives each launch a
+`mock-latency 0`, `agent-port 0` (the idle bridge takes any free port), a fresh `agent-token`
+(`AgentLaunchArguments.makeToken()`, without which the debug app would ignore the other extras) and `ui-testing`, which gives each launch a
 fresh store (the tests share one process) and drops the fields' autofill hints. Compose's test APIs set a field's text
 and click by semantics, so the keyboard never covers anything; `performScrollTo` brings rows and chips into view.
 Each test logs its duration under the logcat tag `ShopUiTiming`. On a Pixel 7 emulator (API 36) all 99 pass in about

@@ -1,6 +1,5 @@
 package io.github.olbartek.agentctl.runtime
 
-import io.github.olbartek.agentctl.AgentNumbers
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
@@ -16,8 +15,17 @@ public object HttpParser {
     /** The bridge's platform (`android`, `ios`) on every response, beside [APP_HEADER] (CONTRACT.md §8.4). */
     public const val PLATFORM_HEADER: String = "X-Appctl-Platform"
 
+    /** The header every request carries the launch's token in (the `agent-token` launch argument). */
+    public const val TOKEN_HEADER: String = "X-Appctl-Token"
+
     /** The largest header block a request may have, with the blank line that ends it (CONTRACT.md §8.1). */
     public const val MAX_HEADER_BYTES: Int = 64 * 1024
+
+    /**
+     * The largest body a request may have, 1 MiB: a request whose `Content-Length` is larger is malformed, decided
+     * from its headers alone, before any of the body is read.
+     */
+    public const val MAX_BODY_BYTES: Int = 1024 * 1024
 
     /** What [parse] makes of the bytes received so far. */
     public sealed interface Result {
@@ -33,33 +41,89 @@ public object HttpParser {
 
     /** Parses the first [length] bytes of [data]. */
     public fun parse(data: ByteArray, length: Int = data.size): Result {
+        val head = when (val parsed = parseHead(data, length)) {
+            Head.Incomplete -> return Result.Incomplete
+            Head.Malformed -> return Result.Malformed
+            is Head.Complete -> parsed
+        }
+        if (length - head.bodyStart < head.contentLength) return Result.Incomplete
+        val body = String(data, head.bodyStart, head.contentLength, Charsets.UTF_8)
+        return Result.Request(head.request.copy(body = body))
+    }
+
+    /** What [parseHead] makes of the bytes received so far: whether the request line and headers are all there. */
+    internal sealed interface Head {
+        /** The header block has not ended yet. */
+        data object Incomplete : Head
+
+        /**
+         * Not a request this parser accepts: one whose body would be over [MAX_BODY_BYTES], with any
+         * `Transfer-Encoding`, more than one `Content-Length` or one that is not ASCII digits, a folded header line, or
+         * whitespace before a header's colon.
+         */
+        data object Malformed : Head
+
+        /** The request without its body ([request]'s is empty), which starts at [bodyStart] and has [contentLength]. */
+        data class Complete(val request: BridgeRequest, val bodyStart: Int, val contentLength: Int) : Head
+    }
+
+    /**
+     * The request line and headers in the first [length] bytes of [data], as soon as they are all there: the bridge
+     * decides whether to answer a request from them, before it reads the body.
+     */
+    internal fun parseHead(data: ByteArray, length: Int): Head {
         val headerEnd = indexOf(data, length, HEADER_END)
-        if (headerEnd < 0) return if (length > MAX_HEADER_BYTES) Result.Malformed else Result.Incomplete
+        if (headerEnd < 0) return if (length > MAX_HEADER_BYTES) Head.Malformed else Head.Incomplete
         // However it arrived: the header block, with the blank line that ends it, holds at most MAX_HEADER_BYTES.
-        if (headerEnd + HEADER_END.size > MAX_HEADER_BYTES) return Result.Malformed
-        val head = decodeStrictly(data, headerEnd) ?: return Result.Malformed
+        if (headerEnd + HEADER_END.size > MAX_HEADER_BYTES) return Head.Malformed
+        val head = decodeStrictly(data, headerEnd) ?: return Head.Malformed
         val lines = head.split("\r\n")
         val requestLine = lines[0].split(" ").filter { it.isNotEmpty() }
-        if (requestLine.size != 3 || !requestLine[2].startsWith("HTTP/1.")) return Result.Malformed
+        if (requestLine.size != 3 || !requestLine[2].startsWith("HTTP/1.")) return Head.Malformed
 
-        var contentLength = 0
+        var contentLength: Int? = null
+        val headers = linkedMapOf<String, String>()
         for (line in lines.drop(1)) {
+            // A line folded onto the one before it (obs-fold) is not accepted.
+            if (line.startsWith(" ") || line.startsWith("\t")) return Head.Malformed
             val parts = line.split(":", limit = 2).filter { it.isNotEmpty() }
-            if (parts.size != 2) return Result.Malformed
-            if (parts[0].trimSwiftWhitespaces().lowercase() == "content-length") {
-                val value = AgentNumbers.int(parts[1].trimSwiftWhitespaces())
-                if (value == null || value < 0) return Result.Malformed
-                contentLength = value
+            if (parts.size != 2) return Head.Malformed
+            // Nor is whitespace between a header's name and its colon.
+            if (parts[0] != parts[0].trimSwiftWhitespaces()) return Head.Malformed
+            val name = asciiLowercase(parts[0])
+            val value = parts[1].trimSwiftWhitespaces()
+            when (name) {
+                // The body is framed by one Content-Length alone: no chunking, whatever the encoding named.
+                "transfer-encoding" -> return Head.Malformed
+                "content-length" -> {
+                    if (contentLength != null) return Head.Malformed
+                    contentLength = contentLength(parts[1]) ?: return Head.Malformed
+                }
             }
+            // A repeated header is one, its values joined as HTTP joins them (RFC 9110 §5.3).
+            headers[name] = headers[name]?.let { "$it, $value" } ?: value
         }
-        val bodyStart = headerEnd + HEADER_END.size
-        if (length - bodyStart < contentLength) return Result.Incomplete
-        val body = String(data, bodyStart, contentLength, Charsets.UTF_8)
-
         val target = requestLine[1]
         val (path, query) = RequestTarget.parse(target) ?: (target to emptyMap())
-        return Result.Request(BridgeRequest(requestLine[0], path, query, body))
+        return Head.Complete(BridgeRequest(requestLine[0], path, query, "", headers), headerEnd + HEADER_END.size, contentLength ?: 0)
     }
+
+    /**
+     * A `Content-Length` value: one or more ASCII digits between optional spaces and tabs, at most [MAX_BODY_BYTES];
+     * `null` for anything else (a sign, other whitespace, other digits, too large).
+     */
+    private fun contentLength(raw: String): Int? {
+        val value = raw.trim { it == ' ' || it == '\t' }
+        if (value.isEmpty() || value.any { it !in '0'..'9' }) return null
+        val digits = value.trimStart('0')
+        if (digits.length > 7) return null
+        val number = if (digits.isEmpty()) 0 else digits.toInt()
+        return number.takeIf { it <= MAX_BODY_BYTES }
+    }
+
+    /** [text] with ASCII `A`–`Z` lowercased and nothing else changed: header names, host names. */
+    internal fun asciiLowercase(text: String): String =
+        if (text.none { it in 'A'..'Z' }) text else String(CharArray(text.length) { text[it].let { c -> if (c in 'A'..'Z') c + 32 else c } })
 
     /**
      * The response on the wire. [appId] — the app's application id — goes out as `X-Appctl-App` on every response, and
@@ -72,6 +136,8 @@ public object HttpParser {
         val reason = when (response.status) {
             200 -> "OK"
             400 -> "Bad Request"
+            401 -> "Unauthorized"
+            403 -> "Forbidden"
             404 -> "Not Found"
             405 -> "Method Not Allowed"
             else -> "Error"

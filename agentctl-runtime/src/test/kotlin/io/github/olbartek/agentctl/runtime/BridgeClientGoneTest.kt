@@ -33,7 +33,7 @@ class BridgeClientGoneTest {
         executor.shutdownNow()
     }
 
-    private val get = "GET /snapshot HTTP/1.1\r\nHost: x\r\n\r\n"
+    private val get = "GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
 
     private fun start(handler: suspend () -> BridgeResponse): Int {
         val server = BridgeServer(executor.asCoroutineDispatcher(), "app", "android") { handler() }

@@ -72,6 +72,11 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   U+0301 for `é`) reach the app in the app's own declared spelling, where the reference passes them as typed: a Swift
   `switch` on them is canonical too, a Kotlin `when` compares code units, so only the declared spelling matches the
   same way.
+- The launch token reaches the app as the `agent-token` string extra, beside the other extras, where the reference
+  passes `-agent-token <token>` on the command line; `AgentLaunchArguments.isRequested(intent)` and
+  `AgentLaunchArguments.makeToken()` read and make it for an instrumented test's `Intent`. Requests reach the bridge
+  through `adb forward`, so the `Host` they carry is the Mac's `127.0.0.1:<port>`, which the bridge accepts as it
+  would on a simulator.
 - `--latency` is read as a 64-bit number, as the reference's `Int`, but reaches the app as an intent extra, which is
   32-bit: a value past about 25 days is clamped to the largest one, where the reference passes it on as it is.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,

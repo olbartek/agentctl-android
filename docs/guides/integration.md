@@ -499,3 +499,26 @@ changes as follows:
 - The bridge cancels a run whose client went away; a `ScriptRunner.run` cancelled that way throws
   `CancellationException` before its next line, as any suspend call does: its signature is unchanged (the
   reference's `run` now `throws(CancellationError)`).
+### Moving a host to 0.9
+
+0.9 binds the debug bridge's requests to whoever launched the app, with a token per launch. A host's types and scripts are unchanged;
+what it changes:
+
+- **A 0.9 app needs a 0.9 `app launch`.** The app starts its bridge only when the launch passes a well-formed
+  `agent-token` extra (32 lowercase hex characters), and it ignores every other launch extra without one (`agent-port`,
+  `appctl-seed`, `mock-latency`, `clear-session`). A 0.8 CLI sends no token, so a 0.9 app it launches has no bridge
+  and `app launch` times out. Update both together.
+- **Gate `AgentLaunch` on `AgentLaunchArguments.isRequested(intent)`**, which now means "a well-formed token is
+  present" (`AgentLaunch.isRequested` and the JVM's `AgentLaunchOptions.isRequested(arguments)` likewise). A launch by
+  hand then builds the plain app, as the release build does, instead of a live store with no bridge
+  ([the bridge guide](bridge.md) shows the debug `AppStore`).
+- **Test runners that launch the app themselves pass a token**: `intent.putExtra(AgentLaunchArguments.TOKEN,
+  AgentLaunchArguments.makeToken())`, a new one per launch, sent as `X-Appctl-Token` with any request they make to
+  the bridge. An instrumented test of the debug build has `agentctl-bridge` on its classpath already.
+- **Every request carries the token** in `X-Appctl-Token`; the CLI sends it from `.appctl/bridge.json` (now mode
+  0600, with a `token` key) or from `APPCTL_TOKEN`. A script or tool of your own that calls the bridge with `curl`
+  sends it too: `curl -H "X-Appctl-Token: $(jq -r .token .appctl/bridge.json)" http://127.0.0.1:<port>/snapshot`.
+  Without it the bridge answers `401 unauthorized`; a request naming another `Host`, or with an `Origin`, gets
+  `403 forbidden`; a body over 1 MiB gets `400 bad request`.
+- `BridgeRequest` has a `headers` map, and `BridgeServer` a constructor that takes the expected token. Code built
+  against 0.8's constructors still links; a `BridgeServer` built with them checks no token.

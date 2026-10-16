@@ -58,7 +58,7 @@ class BridgeConnectionsTest {
 
     private fun idle(port: Int): Socket = Socket("127.0.0.1", port).also { sockets += it }
 
-    private val get = "GET /snapshot HTTP/1.1\r\nHost: x\r\n\r\n"
+    private val get = "GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
 
     @Test
     fun anIdleConnectionHoldsUpNoOtherRequest() {
@@ -88,7 +88,7 @@ class BridgeConnectionsTest {
     @Test
     fun aHeaderBlockOverTheLimitIsMalformedEvenWhenItArrivesWhole() {
         val padding = "X-Pad: " + "a".repeat(HttpParser.MAX_HEADER_BYTES) + "\r\n"
-        val request = "GET /snapshot HTTP/1.1\r\nHost: x\r\n$padding\r\n".toByteArray()
+        val request = "GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n$padding\r\n".toByteArray()
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse(request))
         val atTheLimit = "GET / HTTP/1.1\r\nX: ".toByteArray().let { head ->
             head + ByteArray(HttpParser.MAX_HEADER_BYTES - head.size - 4) { 'a'.code.toByte() } + "\r\n\r\n".toByteArray()
@@ -117,7 +117,7 @@ class BridgeConnectionsTest {
         getOutputStream().apply { write(request.toByteArray()); flush() }
     }
 
-    private fun post(script: String) = "POST /run HTTP/1.1\r\nHost: x\r\nContent-Length: ${script.length}\r\n\r\n$script"
+    private fun post(script: String) = "POST /run HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: ${script.length}\r\n\r\n$script"
 
     @Test
     fun aRequestWhoseClientGoesAwayIsCancelled() {

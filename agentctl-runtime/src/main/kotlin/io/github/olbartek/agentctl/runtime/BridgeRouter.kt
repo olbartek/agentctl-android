@@ -8,7 +8,22 @@ public data class BridgeRequest(
     val path: String,
     val query: Map<String, String> = emptyMap(),
     val body: String = "",
-)
+    /**
+     * The request's headers, by name in ASCII lowercase (`host`, `x-appctl-token`), each value trimmed; a header sent
+     * more than once has its values joined with `, `. Empty for a request made in code.
+     */
+    val headers: Map<String, String> = emptyMap(),
+) {
+    /** The request, with the `X-Appctl-Token` header's value shown as `<token>`: it is not for logs. */
+    override fun toString(): String {
+        val shown = headers.mapValues { (name, value) -> if (HttpParser.asciiLowercase(name) == "x-appctl-token") "<token>" else value }
+        return "BridgeRequest(method=$method, path=$path, query=$query, body=$body, headers=$shown)"
+    }
+
+    /** A request without headers: the constructor before 0.9, kept so code built against it still links. */
+    public constructor(method: String, path: String, query: Map<String, String> = emptyMap(), body: String = "") :
+        this(method, path, query, body, emptyMap())
+}
 
 /** An answer of the agent bridge: an HTTP status, a body and its content type, and the exit code the CLI exits with. */
 public data class BridgeResponse(

@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        UiTesting.isOn = intent.getBooleanExtra(UiTesting.EXTRA, false)
+        UiTesting.isOn = AppStore.isUiTesting(intent)
         app = AppStore.get(this, isFreshLaunch = savedInstanceState == null)
         // Not again when the activity is only recreated (a rotation): the link was opened the first time.
         if (savedInstanceState == null) open(intent)

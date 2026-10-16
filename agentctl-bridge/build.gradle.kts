@@ -29,6 +29,9 @@ dependencies {
     // Whether a Compose UI is idle (ComposeUI): used only when the app has Compose, so never a dependency of the app.
     compileOnly(platform(libs.compose.bom))
     compileOnly(libs.compose.runtime)
+
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.junit)
 }
 
 // Published like the JVM modules (JitPack builds `publishToMavenLocal`), from the release variant.

@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import java.io.File
 import java.io.IOException
 import java.util.Properties
@@ -26,7 +27,8 @@ internal object Shell {
         environment: Map<String, String> = emptyMap(),
         timeoutSeconds: Long = 3600,
     ): Int {
-        log.parentFile?.mkdirs()
+        // The log may hold a launch's command line: its owner's alone.
+        PrivateFiles.prepareLog(log)
         val builder = ProcessBuilder(command)
             .directory(directory)
             .redirectErrorStream(true)
@@ -35,13 +37,21 @@ internal object Shell {
         return try {
             finish(builder.start(), timeoutSeconds) ?: run {
                 // Said where the command's own output ends, so a log that stops short explains itself.
-                log.appendText("\nagentctl: ${command.joinToString(" ")} did not finish within $timeoutSeconds s; stopped it\n")
+                log.appendText("\nagentctl: ${shown(command)} did not finish within $timeoutSeconds s; stopped it\n")
                 NOT_RUN
             }
         } catch (_: IOException) {
             NOT_RUN
         }
     }
+
+    /**
+     * [command] as a log or a message shows it: its words joined with spaces, and the value after `agent-token` (a
+     * launch's token, in `am start`'s extras) as `<token>`.
+     */
+    fun shown(command: List<String>): String =
+        command.mapIndexed { index, word -> if (index > 0 && command[index - 1] == AgentLaunchOptions.TOKEN) "<token>" else word }
+            .joinToString(" ")
 
     /**
      * Runs a command and returns its standard output (standard error is discarded), or `null` if it failed to run or

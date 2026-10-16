@@ -98,7 +98,7 @@ class BridgeRouterTest {
     fun httpParsing() {
         val request = "POST /run?format=json HTTP/1.1\r\nHost: x\r\nContent-Length: 6\r\n\r\nsubmit"
         assertEquals(
-            HttpParser.Result.Request(BridgeRequest("POST", "/run", mapOf("format" to "json"), "submit")),
+            HttpParser.Result.Request(BridgeRequest("POST", "/run", mapOf("format" to "json"), "submit", mapOf("host" to "x", "content-length" to "6"))),
             HttpParser.parse(request.toByteArray()),
         )
         assertEquals(HttpParser.Result.Incomplete, HttpParser.parse("POST /run HTTP/1.1\r\nContent-Length: 6\r\n\r\nsub".toByteArray()))
@@ -106,17 +106,14 @@ class BridgeRouterTest {
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("GARBAGE\r\n\r\n".toByteArray()))
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("GET / HTTP/1.1\r\nContent-Length: -1\r\n\r\n".toByteArray()))
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("GET / HTTP/1.1\r\nNoColon\r\n\r\n".toByteArray()))
-        // Content-Length as Swift's `Int(_:)` reads it, after trimming `CharacterSet.whitespaces`: the space separators,
-        // a tab and U+200B, but not a vertical tab.
+        // Content-Length is ASCII digits only, between optional spaces and tabs: no sign, no other whitespace.
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("POST / HTTP/1.1\r\nContent-Length: ٣\r\n\r\nabc".toByteArray()))
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("POST / HTTP/1.1\r\nContent-Length: 3\u000B\r\n\r\nabc".toByteArray()))
+        assertEquals(HttpParser.Result.Malformed, HttpParser.parse("POST / HTTP/1.1\r\nContent-Length:\t+3\r\n\r\nabc".toByteArray()))
+        assertEquals(HttpParser.Result.Malformed, HttpParser.parse("POST / HTTP/1.1\r\nContent-Length: 3\u200B\r\n\r\nabc".toByteArray()))
         assertEquals(
-            HttpParser.Result.Request(BridgeRequest("POST", "/", emptyMap(), "abc")),
-            HttpParser.parse("POST / HTTP/1.1\r\nContent-Length:\t+3\u2003\r\n\r\nabc".toByteArray()),
-        )
-        assertEquals(
-            HttpParser.Result.Request(BridgeRequest("POST", "/", emptyMap(), "abc")),
-            HttpParser.parse("POST / HTTP/1.1\r\nContent-Length: 3\u200B\r\n\r\nabc".toByteArray()),
+            HttpParser.Result.Request(BridgeRequest("POST", "/", emptyMap(), "abc", mapOf("content-length" to "3"))),
+            HttpParser.parse("POST / HTTP/1.1\r\nContent-Length:\t3 \r\n\r\nabc".toByteArray()),
         )
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse(ByteArray(64 * 1024 + 1) { 'a'.code.toByte() }))
         val response = String(HttpParser.serialize(BridgeResponse(200, "ok", exitCode = 1)), Charsets.UTF_8)
@@ -156,7 +153,7 @@ class BridgeServerTest {
             val runner = app.makeRunner(synthesizesAppearance = true)
             runner.launch()
             val router = BridgeRouter(runner) { ScreensRenderer.render(TinyAppConfig.screens, TinyAppConfig.docsText.mockExample) }
-            val server = BridgeServer(dispatcher, appId, platform) { router.handle(it) }
+            val server = BridgeServer(dispatcher, appId, platform, TOKEN) { router.handle(it) }
             this@BridgeServerTest.server = server
             server.start(0)
         }
@@ -164,9 +161,10 @@ class BridgeServerTest {
 
     private data class Answer(val status: Int, val body: String, val exit: String?)
 
-    private fun request(method: String, path: String, port: Int, body: String? = null): Answer {
+    private fun request(method: String, path: String, port: Int, body: String? = null, token: String? = TOKEN): Answer {
         val connection = URI("http://127.0.0.1:$port$path").toURL().openConnection() as HttpURLConnection
         connection.requestMethod = method
+        token?.let { connection.setRequestProperty("X-Appctl-Token", it) }
         if (body != null) {
             connection.doOutput = true
             connection.outputStream.use { it.write(body.toByteArray()) }
@@ -207,13 +205,17 @@ class BridgeServerTest {
         assertFalse("pending=" in popped.body, "the countdown outlived the screen: ${popped.body}")
     }
 
-    /** A root whose `.appctl/bridge.json` records [port] and [appId], written as agentctl-ios writes it. */
-    private fun rootWithLaunchState(port: Int, appId: String = "io.github.olbartek.agentctl.examples.tinyapp"): File {
+    /**
+     * A root whose `.appctl/bridge.json` records [port], [appId] and [token] (`null`: none, as before 0.9), written as
+     * agentctl-ios writes it.
+     */
+    private fun rootWithLaunchState(port: Int, appId: String = "io.github.olbartek.agentctl.examples.tinyapp", token: String? = TOKEN): File {
         val root = Files.createTempDirectory("launch-state").toFile()
         File(root, ".appctl").mkdirs()
         File(root, ".appctl/bridge.json").writeText(
             "{\n  \"appId\" : \"$appId\",\n  \"device\" : \"emulator-5556\",\n" +
-                "  \"launchedAt\" : \"2026-09-30T10:00:00Z\",\n  \"platform\" : \"android\",\n  \"port\" : $port\n}\n",
+                "  \"launchedAt\" : \"2026-09-30T10:00:00Z\",\n  \"platform\" : \"android\",\n  \"port\" : $port" +
+                (token?.let { ",\n  \"token\" : \"$it\"" } ?: "") + "\n}\n",
         )
         return root
     }
@@ -285,11 +287,83 @@ class BridgeServerTest {
         }
     }
 
+    /** `app run` sends the token `app launch` recorded: without it, or with another, the bridge refuses (exit 3). */
+    @Test
+    fun theRecordedTokenIsSent() {
+        val port = startBridge()
+        val refusal = "error: the app's agent bridge on 127.0.0.1:$port refused the token (relaunch it: ./tinyctl app launch)\n"
+        for (token in listOf(null, "0".repeat(32))) {
+            val root = rootWithLaunchState(port, token = token)
+            val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path))
+            assertEquals(3, result.status, result.combined)
+            assertEquals("", result.out)
+            assertEquals(refusal, result.err)
+        }
+        assertTrue(request("GET", "/snapshot", port).body.contains("screen=items "), "the script ran")
+        // The recorded token goes with the port it was recorded for, however the port was named.
+        val recorded = rootWithLaunchState(port).path
+        assertEquals(0, cli("app", "state", "--port", "$port", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to recorded)).status)
+        assertEquals(0, cli("app", "state", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to recorded, "APPCTL_PORT" to "$port")).status)
+        val elsewhere = rootWithLaunchState(deadPort()).path
+        val unrecorded = cli("app", "state", "--port", "$port", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to elsewhere))
+        assertEquals(3, unrecorded.status)
+        assertEquals(refusal, unrecorded.err)
+    }
+
+    /** `APPCTL_TOKEN` overrides the recorded token, as `APPCTL_PORT` overrides the port; an empty one is unset. */
+    @Test
+    fun appctlTokenOverridesTheRecordedOne() {
+        val port = startBridge()
+        fun run(recorded: String?, environment: String): CliResult = cli(
+            "app", "run", "expect screen=items", config = TinyAppConfig.appCtl,
+            environment = mapOf("APPCTL_ROOT" to rootWithLaunchState(port, token = recorded).path, "APPCTL_TOKEN" to environment),
+        )
+        assertEquals(0, run(recorded = "0".repeat(32), environment = TOKEN).status)
+        assertEquals(0, run(recorded = null, environment = TOKEN).status)
+        assertEquals(0, run(recorded = TOKEN, environment = "").status)
+        // One that is not a token at all is a usage error, which does not echo it.
+        for (bad in listOf("abc", "$TOKEN\r\nX-Evil: 1")) {
+            val malformed = run(recorded = TOKEN, environment = bad)
+            assertEquals(2, malformed.status, malformed.combined)
+            assertEquals("", malformed.out)
+            assertEquals("error: APPCTL_TOKEN is not a token (32 lowercase hex characters)\n", malformed.err)
+        }
+        val wrong = run(recorded = TOKEN, environment = "0".repeat(32))
+        assertEquals(3, wrong.status)
+        assertEquals("error: the app's agent bridge on 127.0.0.1:$port refused the token (relaunch it: ./tinyctl app launch)\n", wrong.err)
+    }
+
+    /** A bridge that refuses the request itself (403: a check the CLI should never fail) says so, exit 3. */
+    @Test
+    fun aForbiddenRequestSaysSo() {
+        ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1")).use { fake ->
+            val answering = Thread {
+                runCatching {
+                    fake.accept().use { connection ->
+                        val input = connection.getInputStream()
+                        val head = StringBuilder()
+                        while (!head.endsWith("\r\n\r\n")) head.append(input.read().toChar())
+                        connection.getOutputStream().write(
+                            ("HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 10\r\nX-Appctl-Exit: 3\r\n" +
+                                "X-Appctl-App: ${TinyAppConfig.appCtl.applicationId}\r\nX-Appctl-Platform: android\r\nConnection: close\r\n\r\nforbidden\n").toByteArray(),
+                        )
+                    }
+                }
+            }.apply { start() }
+            val port = fake.localPort
+            val result = cli("app", "state", "--port", "$port", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to rootWithLaunchState(port).path))
+            answering.join(5_000)
+            assertEquals(3, result.status, result.combined)
+            assertEquals("", result.out)
+            assertEquals("error: the app's agent bridge on 127.0.0.1:$port refused the request (forbidden)\n", result.err)
+        }
+    }
+
     @Test
     fun anExplicitPortIsNotChecked() {
         val port = startBridge()
         val root = rootWithLaunchState(deadPort(), appId = "dev.other")
-        val result = cli("app", "state", "--port", "$port", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path))
+        val result = cli("app", "state", "--port", "$port", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root.path, "APPCTL_TOKEN" to TOKEN))
         assertEquals(0, result.status, result.err)
     }
 
@@ -297,9 +371,14 @@ class BridgeServerTest {
     fun theFlagAndTheEnvironmentOverrideTheLaunchState() {
         val port = startBridge()
         val root = rootWithLaunchState(deadPort()).path
-        val byEnvironment = cli("app", "state", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root, "APPCTL_PORT" to "$port"))
+        val byEnvironment = cli(
+            "app", "state", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root, "APPCTL_PORT" to "$port", "APPCTL_TOKEN" to TOKEN),
+        )
         assertEquals(0, byEnvironment.status, byEnvironment.err)
-        val byFlag = cli("app", "screens", "--port", "$port", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to root, "APPCTL_PORT" to "${deadPort()}"))
+        val byFlag = cli(
+            "app", "screens", "--port", "$port", config = TinyAppConfig.appCtl,
+            environment = mapOf("APPCTL_ROOT" to root, "APPCTL_PORT" to "${deadPort()}", "APPCTL_TOKEN" to TOKEN),
+        )
         assertEquals(0, byFlag.status, byFlag.err)
     }
 
@@ -456,7 +535,7 @@ class BridgeServerTest {
         assertTrue(bad.startsWith("HTTP/1.1 400 Bad Request\r\n") && bad.endsWith("\r\n\r\nbad request\n"), bad)
         // Even a request it cannot read is answered with the app's identity.
         assertTrue(bad.contains("X-Appctl-App: io.github.olbartek.agentctl.examples.tinyapp\r\n"), bad)
-        val incomplete = raw("POST /run HTTP/1.1\r\nContent-Length: 10\r\n\r\nabc", close = true)
+        val incomplete = raw("POST /run HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Appctl-Token: $TOKEN\r\nContent-Length: 10\r\n\r\nabc", close = true)
         assertTrue(incomplete.contains("X-Appctl-Exit: 2\r\n") && incomplete.endsWith("incomplete request\n"), incomplete)
     }
 
@@ -475,7 +554,7 @@ class BridgeServerTest {
     @Test
     fun aLaunchSessionAppliesItsSeedBeforeListening() = runBlocking(dispatcher) {
         val logs = mutableListOf<String>()
-        val session = AgentLaunchSession(TinyAppConfig.appCtl, AgentLaunchOptions(port = 0, seed = "open 2", latency = MockLatency.ZERO), dispatcher) {
+        val session = AgentLaunchSession(TinyAppConfig.appCtl, AgentLaunchOptions(port = 0, seed = "open 2", latency = MockLatency.ZERO, token = TOKEN), dispatcher) {
             logs.add(it)
         }
         val port = session.start()!!
@@ -508,7 +587,7 @@ class BridgeServerTest {
                 LiveHost(TinyRootAgent, base.mockMethods, latency, dispatcher, AgentDeviceConfig(relaunch = true), TinyApp::store)
             },
         )
-        val session = AgentLaunchSession(config, AgentLaunchOptions(port = 0, seed = "open 2; device relaunch", latency = MockLatency.ZERO), dispatcher) {}
+        val session = AgentLaunchSession(config, AgentLaunchOptions(port = 0, seed = "open 2; device relaunch", latency = MockLatency.ZERO, token = TOKEN), dispatcher) {}
         val first = session.host.store
         val relaunched = mutableListOf<Any>()
         session.host.driver.onRelaunch = { relaunched.add(session.host.store) }
@@ -527,21 +606,103 @@ class BridgeServerTest {
     @Test
     fun launchArguments() {
         val options = AgentLaunchOptions.parse(
-            listOf("TinyApp", "-agent-port", "9000", "-appctl-seed", "open 2; save", "-mock-latency", "0", "-clear-session"),
+            listOf("TinyApp", "-agent-port", "9000", "-appctl-seed", "open 2; save", "-mock-latency", "0", "-clear-session", "-agent-token", TOKEN),
         )
-        assertEquals(AgentLaunchOptions(9000, "open 2; save", MockLatency.ZERO, true), options)
+        assertEquals(AgentLaunchOptions(9000, "open 2; save", MockLatency.ZERO, true, TOKEN), options)
         assertEquals(AgentLaunchOptions.parse(listOf("TinyApp")), AgentLaunchOptions.parse(emptyList()))
         assertEquals(BridgeDefaults.PORT, AgentLaunchOptions.parse(emptyList()).port)
+        fun parse(vararg arguments: String) = AgentLaunchOptions.parse(listOf("App", "-agent-token", TOKEN) + arguments)
         // A value that is not a port is ignored.
-        assertEquals(BridgeDefaults.PORT, AgentLaunchOptions.parse(listOf("App", "-agent-port", "70000")).port)
-        assertEquals(0, AgentLaunchOptions.parse(listOf("App", "-agent-port", "0")).port)
+        assertEquals(BridgeDefaults.PORT, parse("-agent-port", "70000").port)
+        assertEquals(0, parse("-agent-port", "0").port)
         // Numbers as Swift's `UInt16(_:)` and `Int(_:)` read them: a sign, then ASCII digits only.
-        assertEquals(BridgeDefaults.PORT, AgentLaunchOptions.parse(listOf("App", "-agent-port", "٩٠٠٠")).port)
-        assertEquals(BridgeDefaults.PORT, AgentLaunchOptions.parse(listOf("App", "-agent-port", "９０００")).port)
-        assertEquals(9000, AgentLaunchOptions.parse(listOf("App", "-agent-port", "+9000")).port)
-        assertEquals(0, AgentLaunchOptions.parse(listOf("App", "-agent-port", "-0")).port)
+        assertEquals(BridgeDefaults.PORT, parse("-agent-port", "٩٠٠٠").port)
+        assertEquals(BridgeDefaults.PORT, parse("-agent-port", "９０００").port)
+        assertEquals(9000, parse("-agent-port", "+9000").port)
+        assertEquals(0, parse("-agent-port", "-0").port)
         assertEquals(null, AgentLaunchOptions.portOrNull("٩٠٠٠"))
-        assertEquals(null, AgentLaunchOptions.parse(listOf("App", "-mock-latency", "٥")).latency)
-        assertEquals(MockLatency.milliseconds(5), AgentLaunchOptions.parse(listOf("App", "-mock-latency", "+5")).latency)
+        assertEquals(null, parse("-mock-latency", "٥").latency)
+        assertEquals(MockLatency.milliseconds(5), parse("-mock-latency", "+5").latency)
+    }
+
+    /** Without a well-formed token every launch argument is ignored: a launch nobody made with the CLI is a plain one. */
+    @Test
+    fun withoutAWellFormedTokenEveryLaunchArgumentIsIgnored() {
+        val others = listOf("-agent-port", "9000", "-appctl-seed", "open 2", "-mock-latency", "0", "-clear-session")
+        for (token in listOf(null, "", TOKEN.uppercase(), TOKEN.dropLast(1), TOKEN + "0", "g" + TOKEN.drop(1), " $TOKEN")) {
+            val arguments = listOf("App") + others + (token?.let { listOf("-agent-token", it) } ?: emptyList())
+            assertEquals(AgentLaunchOptions(), AgentLaunchOptions.parse(arguments), "token $token")
+            assertFalse(AgentLaunchOptions.isRequested(arguments), "token $token")
+        }
+        assertFalse(AgentLaunchOptions.isToken(null))
+        assertTrue(AgentLaunchOptions.isToken(TOKEN))
+    }
+
+    /**
+     * A session whose options carry no well-formed token starts no bridge, and ignores the rest of its options: no
+     * seed, no session cleared. It logs one line.
+     */
+    @Test
+    fun aLaunchSessionWithoutATokenStartsNoBridge() = runBlocking(dispatcher) {
+        for (token in listOf(null, "not-a-token", TOKEN.uppercase())) {
+            var cleared = 0
+            val base = TinyAppConfig.appCtl
+            val config = AppCtlConfig(
+                name = base.name,
+                applicationId = base.applicationId,
+                mockMethods = base.mockMethods,
+                docsText = base.docsText,
+                screens = base.screens,
+                makeHeadless = base.makeHeadless,
+                makeLive = base.makeLive,
+                clearSession = { cleared++ },
+            )
+            val logs = mutableListOf<String>()
+            val port = ServerSocket(0).use { it.localPort }
+            val options = AgentLaunchOptions(port = port, seed = "open 2", latency = MockLatency.ZERO, clearSession = true, token = token)
+            val session = AgentLaunchSession(config, options, dispatcher) { logs.add(it) }
+            try {
+                assertEquals(AgentLaunchOptions(), session.options)
+                assertEquals(null, session.start())
+                assertEquals(listOf("AgentCtlBridge: no agent-token; not listening"), logs)
+                assertEquals(0, cleared)
+                assertEquals("items", TinyRootAgent.activeScreen(session.host.store.state).path)
+                val refused = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { Socket("127.0.0.1", port).close() }.isFailure
+                }
+                assertTrue(refused, "something listens on $port")
+            } finally {
+                session.stop()
+            }
+        }
+    }
+
+    /** The token goes to the server: a session's bridge refuses a request without it. */
+    @Test
+    fun aLaunchSessionsBridgeWantsItsToken() = runBlocking(dispatcher) {
+        val session = AgentLaunchSession(TinyAppConfig.appCtl, AgentLaunchOptions(port = 0, latency = MockLatency.ZERO, token = TOKEN), dispatcher) {}
+        val port = session.start()!!
+        try {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                assertEquals(401, request("GET", "/snapshot", port, token = null).status)
+                assertEquals(401, request("GET", "/snapshot", port, token = "0".repeat(32)).status)
+                assertEquals(200, request("GET", "/snapshot", port).status)
+            }
+        } finally {
+            session.stop()
+        }
+    }
+
+    @Test
+    fun tokensAreFreshLowercaseHex() {
+        val tokens = (1..1000).map { AgentLaunchOptions.makeToken() }
+        tokens.forEach { assertTrue(Regex("[0-9a-f]{32}").matches(it), it) }
+        assertTrue(tokens.all(AgentLaunchOptions::isToken))
+        assertEquals(tokens.size, tokens.toSet().size)
+    }
+
+    private companion object {
+        /** The token the test bridges expect, as `app launch` would have passed it. */
+        const val TOKEN = "0123456789abcdef0123456789abcdef"
     }
 }

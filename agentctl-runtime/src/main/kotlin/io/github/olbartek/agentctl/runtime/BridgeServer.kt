@@ -38,19 +38,41 @@ import kotlinx.coroutines.runBlocking
  * after a short wait: on the same socket while it is open (out of file descriptors, say), on a new one on the same port
  * once it has closed. After a few failures in a row it gives up and closes, so clients are refused rather than left
  * hanging.
+ *
+ * **Who it answers.** A request is checked before it is queued, from its headers alone, and refused with the
+ * connection closed: a malformed one, or one whose body would be over [HttpParser.MAX_BODY_BYTES], with `400 bad
+ * request` (exit 2); one whose `Host` does not name the loopback (`127.0.0.1` or `localhost`, any port), that has no
+ * `Host`, or that has an `Origin`, with `403 forbidden` (exit 3); and one without the expected token in
+ * `X-Appctl-Token`, with `401 unauthorized` (exit 3). Only the token check depends on how the server was made: one
+ * made with a token (as [AgentLaunchSession] makes it, with the launch's `agent-token`) checks it, and one made
+ * without (`token` `null`, or the constructors from before 0.9) checks none, for a host or a test that runs the bridge
+ * itself. The other checks always apply.
  */
 public class BridgeServer(
     /** Where [handler] runs: the store's own thread. */
     private val dispatcher: CoroutineDispatcher,
     /** The app's application id, sent as `X-Appctl-App` on every response; `null` sends no such header. */
-    private val appId: String? = null,
+    private val appId: String?,
     /** The platform, sent as `X-Appctl-Platform` on every response; `null` sends no such header. */
-    private val platform: String? = BridgeDefaults.PLATFORM,
+    private val platform: String?,
+    /**
+     * The token every request must carry in `X-Appctl-Token` (compared in constant time), or `null` to check none: the
+     * launch's `agent-token`.
+     */
+    private val token: String?,
     private val handler: suspend (BridgeRequest) -> BridgeResponse,
 ) {
+    /** A server that checks no token, as before 0.9 (kept so code built against 0.8 still links). */
+    public constructor(
+        dispatcher: CoroutineDispatcher,
+        appId: String? = null,
+        platform: String? = BridgeDefaults.PLATFORM,
+        handler: suspend (BridgeRequest) -> BridgeResponse,
+    ) : this(dispatcher, appId, platform, null, handler)
+
     /** A server that sends no `X-Appctl-App`, as before 0.5 (kept so code built against 0.4 still links). */
     public constructor(dispatcher: CoroutineDispatcher, handler: suspend (BridgeRequest) -> BridgeResponse) :
-        this(dispatcher, null, null, handler)
+        this(dispatcher, null, null, null, handler)
 
     /** How long a connection has, from its accept, to send its whole request. */
     @Volatile public var requestDeadline: Duration = 10.seconds
@@ -158,8 +180,12 @@ public class BridgeServer(
                 continue
             }
             thread(name = "AgentCtlBridge-read", isDaemon = true) {
-                val parsed = try {
-                    read(connection)
+                val read = try {
+                    read(connection).also {
+                        // Not routed, so not queued: answered here, and closed, while this connection still counts
+                        // among those being read.
+                        if (it is Read.Refused) refuse(connection, it.response)
+                    }
                 } catch (_: IOException) {
                     null
                 } catch (e: VirtualMachineError) {
@@ -170,17 +196,19 @@ public class BridgeServer(
                 } finally {
                     reading.release()
                 }
-                if (parsed == null) {
-                    connection.close()
-                } else {
-                    val exchange = Exchange(connection)
-                    // This thread then waits for the client to go away, until the answer closes the connection. Past
-                    // the limit, a request is answered without being watched.
-                    if (queue(answering, exchange, parsed) && parsed is HttpParser.Result.Request && watching.tryAcquire()) {
-                        try {
-                            watch(exchange)
-                        } finally {
-                            watching.release()
+                when (read) {
+                    null -> connection.close()
+                    is Read.Refused -> Unit
+                    is Read.Routed -> {
+                        val exchange = Exchange(connection)
+                        // This thread then waits for the client to go away, until the answer closes the connection.
+                        // Past the limit, a request is answered without being watched.
+                        if (queue(answering, exchange, read.request) && watching.tryAcquire()) {
+                            try {
+                                watch(exchange)
+                            } finally {
+                                watching.release()
+                            }
                         }
                     }
                 }
@@ -217,8 +245,8 @@ public class BridgeServer(
     }
 
     /** Queues [exchange]'s answer; `false` (the connection closed) once [stop] has shut the queue. */
-    private fun queue(answering: ExecutorService, exchange: Exchange, parsed: HttpParser.Result): Boolean = try {
-        answering.execute { exchange.connection.use { answer(exchange, parsed) } }
+    private fun queue(answering: ExecutorService, exchange: Exchange, request: BridgeRequest): Boolean = try {
+        answering.execute { exchange.connection.use { answer(exchange, request) } }
         true
     } catch (_: RejectedExecutionException) {
         exchange.connection.close()
@@ -247,32 +275,69 @@ public class BridgeServer(
         exchange.abandon()
     }
 
-    private fun answer(exchange: Exchange, parsed: HttpParser.Result) {
+    private fun answer(exchange: Exchange, request: BridgeRequest) {
         val connection = exchange.connection
-        val response = when (parsed) {
-            is HttpParser.Result.Request -> try {
-                runBlocking {
-                    // Started by await, after begin: if its client went away while it waited, it never starts.
-                    val handling = async(dispatcher, CoroutineStart.LAZY) { handler(parsed.request) }
-                    exchange.begin(handling)
-                    handling.await()
-                }
-            } catch (e: VirtualMachineError) {
-                throw e
-            } catch (e: Throwable) {
-                if (e is CancellationException && exchange.isAbandoned) {
-                    System.err.println("AgentCtl bridge: ${parsed.request.method} ${parsed.request.path} cancelled: its client went away")
-                    events("cancelled")
-                    return
-                }
-                // Cancellation included: there is no coroutine here to pass it on to, only this request to give up.
-                System.err.println("AgentCtl bridge: ${parsed.request.method} ${parsed.request.path} failed")
-                e.printStackTrace()
+        val response = try {
+            runBlocking {
+                // Started by await, after begin: if its client went away while it waited, it never starts.
+                val handling = async(dispatcher, CoroutineStart.LAZY) { handler(request) }
+                exchange.begin(handling)
+                handling.await()
+            }
+        } catch (e: VirtualMachineError) {
+            throw e
+        } catch (e: Throwable) {
+            if (e is CancellationException && exchange.isAbandoned) {
+                System.err.println("AgentCtl bridge: ${request.method} ${request.path} cancelled: its client went away")
+                events("cancelled")
                 return
             }
-            HttpParser.Result.Malformed -> BridgeResponse(400, "bad request\n", exitCode = RunStatus.USAGE.code)
-            HttpParser.Result.Incomplete -> BridgeResponse(400, "incomplete request\n", exitCode = RunStatus.USAGE.code)
+            // Cancellation included: there is no coroutine here to pass it on to, only this request to give up.
+            System.err.println("AgentCtl bridge: ${request.method} ${request.path} failed")
+            e.printStackTrace()
+            return
         }
+        write(connection, response)
+    }
+
+    /**
+     * Answers a request that is not routed with [response], and closes its connection. A client may still be sending
+     * (a body the bridge refused from its headers): closing with its bytes unread would reset the connection, and the
+     * reset can discard the answer before the client reads it. So after the answer the bridge ends its side, then reads
+     * and drops what still comes, for [LINGER] or [LINGER_BYTES] at most, before it closes.
+     */
+    private fun refuse(connection: Socket, response: BridgeResponse) {
+        connection.use {
+            write(it, response)
+            try {
+                it.shutdownOutput()
+                drain(it)
+            } catch (_: IOException) {
+                // Gone already.
+            }
+        }
+    }
+
+    private fun drain(connection: Socket) {
+        val deadline = TimeSource.Monotonic.markNow() + LINGER
+        val input = connection.getInputStream()
+        val scrap = ByteArray(8 * 1024)
+        var dropped = 0
+        while (dropped < LINGER_BYTES) {
+            val left = -deadline.elapsedNow()
+            if (left <= Duration.ZERO) return
+            connection.soTimeout = left.inWholeMilliseconds.coerceIn(1, Int.MAX_VALUE.toLong()).toInt()
+            val count = try {
+                input.read(scrap)
+            } catch (_: SocketTimeoutException) {
+                return
+            }
+            if (count < 0) return
+            dropped += count
+        }
+    }
+
+    private fun write(connection: Socket, response: BridgeResponse) {
         try {
             connection.getOutputStream().apply {
                 write(HttpParser.serialize(response, appId, platform))
@@ -283,26 +348,50 @@ public class BridgeServer(
         }
     }
 
-    /** The request on [connection], [HttpParser.Result.Incomplete] if it is not all there by [requestDeadline]. */
-    private fun read(connection: Socket): HttpParser.Result {
+    /** What [read] makes of a connection: a request to route, or the answer it gets instead. */
+    private sealed interface Read {
+        data class Routed(val request: BridgeRequest) : Read
+
+        data class Refused(val response: BridgeResponse) : Read
+    }
+
+    /**
+     * The request on [connection], or its refusal: decided from the headers as soon as they are all there (a body over
+     * the cap, another host, no token), so a refused request's body is never read; `400 incomplete request` if it is
+     * not all there by [requestDeadline].
+     */
+    private fun read(connection: Socket): Read {
         val deadline = TimeSource.Monotonic.markNow() + requestDeadline
         val input = connection.getInputStream()
         var buffer = ByteArray(8 * 1024)
         var length = 0
+        var checked = false
         while (true) {
             if (length == buffer.size) buffer = buffer.copyOf(buffer.size * 2)
             val left = -deadline.elapsedNow()
-            if (left <= Duration.ZERO) return HttpParser.Result.Incomplete
+            if (left <= Duration.ZERO) return Read.Refused(INCOMPLETE)
             connection.soTimeout = left.inWholeMilliseconds.coerceIn(1, Int.MAX_VALUE.toLong()).toInt()
             val count = try {
                 input.read(buffer, length, buffer.size - length)
             } catch (_: SocketTimeoutException) {
-                return HttpParser.Result.Incomplete
+                return Read.Refused(INCOMPLETE)
             }
-            if (count < 0) return HttpParser.parse(buffer, length).let { if (it is HttpParser.Result.Request) it else HttpParser.Result.Incomplete }
-            length += count
-            val result = HttpParser.parse(buffer, length)
-            if (result != HttpParser.Result.Incomplete) return result
+            if (count > 0) length += count
+            if (!checked) {
+                when (val head = HttpParser.parseHead(buffer, length)) {
+                    HttpParser.Head.Malformed -> return Read.Refused(MALFORMED)
+                    HttpParser.Head.Incomplete -> Unit
+                    is HttpParser.Head.Complete -> {
+                        BridgeAccess.refusal(head.request, token)?.let { return Read.Refused(it) }
+                        checked = true
+                    }
+                }
+            }
+            when (val result = HttpParser.parse(buffer, length)) {
+                is HttpParser.Result.Request -> return Read.Routed(result.request)
+                HttpParser.Result.Malformed -> return Read.Refused(MALFORMED)
+                HttpParser.Result.Incomplete -> if (count < 0) return Read.Refused(INCOMPLETE)
+            }
         }
     }
 
@@ -331,6 +420,15 @@ public class BridgeServer(
     }
 
     private companion object {
+        val MALFORMED = BridgeResponse(400, "bad request\n", exitCode = RunStatus.USAGE.code)
+        val INCOMPLETE = BridgeResponse(400, "incomplete request\n", exitCode = RunStatus.USAGE.code)
+
+        /** How long a refused connection is read and dropped from, at most, before it closes. */
+        val LINGER: Duration = 1.seconds
+
+        /** How much of a refused connection is read and dropped, at most, before it closes. */
+        const val LINGER_BYTES = 64 * 1024
+
         /** At most this many connections are sending their request at once. */
         const val MAX_READING = 16
 

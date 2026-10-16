@@ -223,13 +223,17 @@ class HelpersTest {
     }
 
     @Test
-    fun theBridgeIsRequestedByAnAgentPort() {
-        assertTrue(AgentLaunchOptions.isRequested(listOf("/path/App", "-agent-port", "8799")))
-        assertTrue(AgentLaunchOptions.isRequested(listOf("/path/App", "-agent-port")))
+    fun theBridgeIsRequestedByAWellFormedToken() {
+        val token = "0123456789abcdef0123456789abcdef"
+        assertTrue(AgentLaunchOptions.isRequested(listOf("/path/App", "-agent-port", "8799", "-agent-token", token)))
+        assertTrue(AgentLaunchOptions.isRequested(listOf("/path/App", "-agent-token", token)))
         assertFalse(AgentLaunchOptions.isRequested(listOf("/path/App")))
-        // Seeding or latency alone is not an opt-in: only `app launch` passes `-agent-port`, and it always does.
+        // A port, a seed or a latency alone is not an opt-in: only `app launch` passes `-agent-token`, and it always does.
+        assertFalse(AgentLaunchOptions.isRequested(listOf("/path/App", "-agent-port", "8799")))
         assertFalse(AgentLaunchOptions.isRequested(listOf("/path/App", "-appctl-seed", "open 1", "-mock-latency", "0")))
-        assertFalse(AgentLaunchOptions.isRequested(listOf("/path/App", "-agent-port=8799")))
+        assertFalse(AgentLaunchOptions.isRequested(listOf("/path/App", "-agent-token")))
+        assertFalse(AgentLaunchOptions.isRequested(listOf("/path/App", "-agent-token", token.uppercase())))
+        assertFalse(AgentLaunchOptions.isRequested(listOf("/path/App", "-agent-token=$token")))
     }
 
     /** The helpers' texts as a script sees them: the failed step's message, which is what an agent reads. */

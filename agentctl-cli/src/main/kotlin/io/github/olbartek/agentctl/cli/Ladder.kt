@@ -131,7 +131,7 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
             val port = Ports.explicit(null, cli.environment)
             val launched = launcher.launch(check.seed, device, latency = 0, clearSession = true, build = true, port = port)
             val script = ScriptParser.read(file)
-            val bridge = BridgeClient(launched.port)
+            val bridge = BridgeClient(launched.port, launched.token)
             val run = bridge.send("POST", "/run", script)
             // Every response is checked, as `app test` checks them (CONTRACT.md §8.6): another app's is not this one's.
             anotherAppAnswered(run, launched.port, start)?.let { return it }
@@ -163,6 +163,12 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
             report("L4 app", false, "error", start)
             io.print("  ${error.message ?: error}")
             RunStatus.USAGE.code
+        } catch (error: BridgeClient.Refused) {
+            // Another app's refusal is another app's answer; our app's, a refusal.
+            anotherAppAnswered(error.response, error.port, start)?.let { return it }
+            report("L4 app", false, "error", start)
+            io.print("  ${Message.bridgeUnreachable(cli, error.port, error)}")
+            RunStatus.INTERNAL_ERROR.code
         } catch (error: Exception) {
             // The bridge did not answer, or the scenario could not be read.
             report("L4 app", false, "error", start)
