@@ -62,6 +62,7 @@ public class HeadlessHost<D : AgentDriver<A, *>, A>(
     public val deviceConfig: AgentDeviceConfig<A>,
     makeDriver: (AgentEnvironment) -> D,
 ) {
+    /** Where every headless effect runs, one at a time in a fixed order, on virtual time that `advance` moves. */
     public val dispatcher: VirtualTimeDispatcher = VirtualTimeDispatcher()
 
     /** The host's scope. Each launch of the app runs its work in a child of it, which `device relaunch` cancels. */
@@ -97,6 +98,7 @@ public class HeadlessHost<D : AgentDriver<A, *>, A>(
     /** The app, as the engine sees it. */
     public val driver: D = makeDriver(environment)
 
+    /** Runs the due work until the app has gone quiet (CONTRACT.md §6), or until settling's real-time limit passes. */
     public fun settle(): SettleResult = settleHeadless(
         dispatcher = dispatcher,
         fingerprint = driver::fingerprint,
@@ -104,6 +106,10 @@ public class HeadlessHost<D : AgentDriver<A, *>, A>(
         pending = { clock.activeSleeps },
     )
 
+    /**
+     * A [ScriptRunner] on this host's driver: it settles in virtual time, can `advance` the clock, and sends each
+     * screen's appearance itself.
+     */
     public fun makeRunner(): ScriptRunner<A> = ScriptRunner(
         driver = driver,
         callLog = callLog,
@@ -132,6 +138,7 @@ public class HeadlessHost<D : AgentDriver<A, *>, A>(
         /** The seed of `random`: every headless run draws the same numbers in the same order. */
         public const val RANDOM_SEED: Long = 0
 
+        /** UTC, the zone every headless run reads. */
         public val FIXED_ZONE: ZoneId = ZoneOffset.UTC
 
         /** `en_US_POSIX`, the locale that follows no user setting. */
@@ -210,7 +217,11 @@ public class LiveHost<D : AgentDriver<A, *>, A>(
 
     /** The app's clock: real time that `advance` moves forward, with its sleeps counted for `pending`. */
     public val clock: AdvanceableClock = AdvanceableClock()
+
+    /** Every mock call, in order: what a step prints as `calls=`. */
     public val callLog: MockCallLog = MockCallLog()
+
+    /** The one-shot failures `mock` arms. */
     public val faults: MockFaults = MockFaults()
 
     /** The simulated device, which `device` changes. */

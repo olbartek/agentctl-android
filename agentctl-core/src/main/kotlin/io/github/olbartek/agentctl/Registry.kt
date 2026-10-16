@@ -52,6 +52,10 @@ public object AgentRegistry {
  * the same host-supplied [DocsText.mockExample].
  */
 public object ScreensRenderer {
+    /**
+     * Every screen with its commands and summary keys, then the runtime commands every screen has, as `<cli> screens`
+     * prints them.
+     */
     public fun render(
         screens: List<ScreenDoc>,
         mockExample: String = AgentRegistry.DEFAULT_MOCK_EXAMPLE,
@@ -97,5 +101,6 @@ public object BridgeDefaults {
  * without one it is `appctl`. The default for [DocsText.invocation] and the CLI's help examples.
  */
 public object CLIName {
+    /** The `agentctl.cli.name` system property, or `appctl` when it is unset or blank. */
     public val current: String get() = System.getProperty("agentctl.cli.name")?.takeIf { it.isNotBlank() } ?: "appctl"
 }

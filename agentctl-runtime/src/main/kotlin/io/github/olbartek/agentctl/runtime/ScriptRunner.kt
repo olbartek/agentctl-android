@@ -42,6 +42,7 @@ public enum class RunStatus(public val code: Int) {
     INTERNAL_ERROR(3),
 }
 
+/** What a script run returns: its steps and the exit status it earned. */
 public data class RunResult(
     val steps: List<StepRecord>,
     val status: RunStatus,
@@ -110,6 +111,7 @@ public class ScriptRunner<A>(
         return run(lines)
     }
 
+    /** Runs parsed lines in order, stopping at the first failure. */
     public suspend fun run(lines: List<ScriptLine>): RunResult {
         val steps = mutableListOf<StepRecord>()
         val executed = mutableListOf<ScriptLine>()
@@ -122,6 +124,10 @@ public class ScriptRunner<A>(
         return RunResult(steps, RunStatus.OK, executed)
     }
 
+    /**
+     * Runs one command (`expect`, `advance`, `mock`, `device`, or one the current screen offers) and returns its step
+     * and status.
+     */
     public suspend fun execute(line: ScriptLine): StepOutcome = when (line.name) {
         "expect" -> expect(line)
         "advance" -> advance(line)

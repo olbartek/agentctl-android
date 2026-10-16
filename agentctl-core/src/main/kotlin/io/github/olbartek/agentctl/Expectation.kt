@@ -20,6 +20,7 @@ public data class StepSnapshot(
  * [CountingClock.activeSleeps]) and `prompt` (the system prompt the app is waiting on; `none` = no prompt).
  */
 public data class Expectation(val pairs: List<Pair>) {
+    /** One `key=value` of an `expect`. */
     public data class Pair(val key: String, val value: String)
 
     /** Returns one failure message per unmet pair; empty when everything matches. */
@@ -61,6 +62,7 @@ public data class Expectation(val pairs: List<Pair>) {
     private fun mismatch(pair: Pair, actual: String): String = "expected ${pair.key}=${pair.value}, got ${pair.key}=$actual"
 
     public companion object {
+        /** The keys that are not summary keys, listed first when an `expect` names a key the screen does not have. */
         public val RESERVED_KEYS: List<String> = listOf("screen", "call", "error", "pending", "prompt")
 
         /** Parses the argument of `expect`. Values containing spaces must be quoted: `name="Alice Smith"`. */
@@ -78,4 +80,5 @@ public data class Expectation(val pairs: List<Pair>) {
     }
 }
 
+/** An `expect` argument that is not a list of `key=value` pairs. Maps to exit code 2. */
 public class ExpectationSyntaxError(message: String) : Exception(message)

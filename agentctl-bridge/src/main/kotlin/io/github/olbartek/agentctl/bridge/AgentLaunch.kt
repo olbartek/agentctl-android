@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * settle — and one tied to it would cancel a seed half-way, or start a second bridge on a port already taken.
  */
 public class AgentLaunch<D : AgentDriver<A, App>, A, App>(config: AppCtlConfig<D, A>, intent: Intent?) {
+    /** The launch arguments read from the intent's extras; the defaults for an intent without them. */
     public val options: AgentLaunchOptions = options(intent?.extras)
 
     private val session = AgentLaunchSession(config, options, Dispatchers.Main.immediate) { message ->

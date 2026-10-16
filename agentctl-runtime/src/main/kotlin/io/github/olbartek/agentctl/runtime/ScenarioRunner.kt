@@ -7,6 +7,10 @@ import java.io.File
 import java.io.IOException
 import kotlin.time.TimeSource
 
+/**
+ * One scenario's run: its steps (the `(launch)` step first), its exit status, the failing line and message if any, and
+ * how long it took in real time.
+ */
 public data class ScenarioResult(
     val name: String,
     val steps: List<StepRecord>,
@@ -30,6 +34,10 @@ public data class ScenarioResult(
 
 /** Runs `scenarios/<name>.appctl` files, each against a fresh [ScriptRunner] from `make`. */
 public object ScenarioRunner {
+    /**
+     * Runs [source] as the scenario [name] on a fresh runner from [make]: the launch, then the script. A launch that
+     * did not settle fails the scenario before its first line.
+     */
     public suspend fun <A> run(name: String, source: String, make: () -> ScriptRunner<A>): ScenarioResult {
         val start = TimeSource.Monotonic.markNow()
         val runner = make()
@@ -49,6 +57,10 @@ public object ScenarioRunner {
         )
     }
 
+    /**
+     * Runs [file] as the scenario named after it. A file that cannot be read fails with exit code 3, an environment
+     * problem rather than the script's.
+     */
     public suspend fun <A> run(file: File, make: () -> ScriptRunner<A>): ScenarioResult {
         val name = file.nameWithoutExtension
         // A missing or unreadable file is an environment problem, not a script's: exit code 3 (CONTRACT.md §5).

@@ -19,6 +19,7 @@ public interface AgentScreen<S, A> {
     /** Every path this screen can report, for the docs (`<id>` stands for a variable part). */
     public val screenPaths: List<String>
 
+    /** The path this screen reports in [state]: one of [screenPaths], with any `<id>` filled in. */
     public fun screenPath(state: S): String
 
     /** Every key [summary] can emit, for the docs and `expect` error messages. */
@@ -33,8 +34,10 @@ public interface AgentScreen<S, A> {
     /** Sent by the headless runtime when the screen appears, standing in for the view's own appearance. */
     public val onAppear: A? get() = null
 
+    /** The commands this screen offers. A command with `paths` is offered only on those of [screenPaths]. */
     public val commands: List<AgentCommand<S, A>>
 
+    /** This screen in [state], with the commands offered on its current path resolved against it. */
     public fun activeScreen(state: S): ActiveScreen<A> {
         val path = screenPath(state)
         return ActiveScreen(
@@ -47,6 +50,7 @@ public interface AgentScreen<S, A> {
         )
     }
 
+    /** Each of [screenPaths] with the commands offered there, for the generated docs and `<cli> screens`. */
     public val screenDocs: List<ScreenDoc>
         get() = screenPaths.map { path ->
             ScreenDoc(
@@ -63,6 +67,10 @@ public interface AgentScreen<S, A> {
  * and appends its own commands (`back`, `tab`, …).
  */
 public interface AgentContainer<S, A> {
+    /**
+     * The screen active beneath this container in [state], its actions lifted into the container's, with the
+     * container's own commands appended.
+     */
     public fun activeScreen(state: S): ActiveScreen<A>
 
     /** Every screen reachable through this container, with inherited commands appended. */
@@ -120,6 +128,7 @@ public data class ActiveScreen<out A>(
     /** Leaf commands first, then ancestors'. */
     val commands: List<ResolvedCommand<A>>,
 ) {
+    /** This screen with its appearance action and commands lifted into an ancestor's action type by [embed]. */
     public fun <P> map(embed: (A) -> P): ActiveScreen<P> = ActiveScreen(
         path = path,
         identity = identity,
@@ -132,6 +141,7 @@ public data class ActiveScreen<out A>(
     /** Prefixes the identity, e.g. with a stack element id, so re-pushing the same path counts as a new appearance. */
     public fun identified(component: String): ActiveScreen<A> = copy(identity = "$component/$identity")
 
+    /** The command named [name] on this screen, or `null` if it offers none. */
     public fun command(name: String): ResolvedCommand<A>? = commands.firstOrNull { it.name == name }
 }
 
@@ -174,6 +184,7 @@ public data class ScreenDoc(
     val commands: List<CommandDoc>,
     val summaryKeys: List<String>,
 ) {
+    /** This screen with [extra] appended. A command it already has keeps its own version. */
     public fun inheriting(extra: List<CommandDoc>): ScreenDoc {
         val existing = commands.map { it.name }.toSet()
         return copy(commands = commands + extra.filter { it.name !in existing })

@@ -36,6 +36,7 @@ public interface AgentStore<S, A> {
 
 /** Turns a state and an action into the next state and the work to do next. Pure: no I/O, no time. */
 public fun interface Reducer<S, A> {
+    /** The state after [action] in [state], and the effect to run next. */
     public fun reduce(state: S, action: A): Next<S, A>
 }
 
@@ -101,12 +102,16 @@ public sealed class Effect<out A> {
     }
 
     public companion object {
+        /** Runs [block] in the store's scope, sending actions back with its `send`: a [Run] without an id. */
         public fun <A> run(block: suspend (send: suspend (A) -> Unit) -> Unit): Effect<A> = Run(block = block)
 
+        /** Sends [action] right after the action that returned it, before any other effect runs: a [Send]. */
         public fun <A> send(action: A): Effect<A> = Send(action)
 
+        /** Cancels the running effects started with [id]: a [Cancel]. */
         public fun cancel(id: Any): Effect<Nothing> = Cancel(id)
 
+        /** Starts [effects] in order: a [Merge]. */
         public fun <A> merge(vararg effects: Effect<A>): Effect<A> = Merge(effects.toList())
     }
 }

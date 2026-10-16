@@ -20,9 +20,16 @@ public data class AgentLaunchOptions(
     val clearSession: Boolean = false,
 ) {
     public companion object {
+        /** The bridge port's name: the `agent-port` extra, `-agent-port` on a command line. */
         public const val PORT: String = "agent-port"
+
+        /** The seed's name: the `appctl-seed` extra, `-appctl-seed` on a command line. */
         public const val SEED: String = "appctl-seed"
+
+        /** The mock latency's name, in ms: the `mock-latency` extra, `-mock-latency` on a command line. */
         public const val MOCK_LATENCY: String = "mock-latency"
+
+        /** The session-clearing flag's name: the `clear-session` extra, `-clear-session` on a command line. */
         public const val CLEAR_SESSION: String = "clear-session"
 
         /** The command-line form: `-agent-port <n>`, `-appctl-seed "<script>"`, … after the executable's name. */
@@ -68,6 +75,7 @@ public class AgentLaunchSession<D : AgentDriver<A, *>, A>(
     /** Where the outcome of the seed and the server goes: logcat in an app. */
     private val log: (String) -> Unit = ::println,
 ) {
+    /** The live host built from the config: the app the seed and the bridge drive. */
     public val host: LiveHost<D, A>
     private val server: BridgeServer
     private val screensText: () -> String
@@ -132,4 +140,5 @@ public class AgentLaunchSession<D : AgentDriver<A, *>, A>(
     }
 }
 
+/** What [AgentLaunchSession.applySeed] returns: the seed's exit status and the block the app logs. */
 public data class SeedOutcome(val status: RunStatus, val log: String)

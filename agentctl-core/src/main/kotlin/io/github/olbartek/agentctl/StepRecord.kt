@@ -46,6 +46,7 @@ public object StepFormatter {
         return lines.joinToString("\n")
     }
 
+    /** Each of [steps] in the text format, one after another, separated by newlines. */
     public fun text(steps: List<StepRecord>): String = steps.joinToString("\n") { text(it) }
 
     /**
