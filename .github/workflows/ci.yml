@@ -5,13 +5,19 @@ on:
     branches: [main]
   pull_request:
 
+# A new push to a pull request replaces its running check; every commit on main gets a complete run.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    # A full run takes about five minutes; a hung socket or bridge test fails here, not after GitHub's six hours.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 
@@ -28,7 +34,7 @@ jobs:
       - name: Build and test
         run: ./gradlew build
 
-      # The example app is also the end-to-end fixture: three scenario files through the real CLI, built from the
+      # The example app is also the end-to-end fixture: its scenario files through the real CLI, built from the
       # same agentctl-cli a host app would use.
       - name: Example scenarios
         run: ./tinyctl test
@@ -50,7 +56,7 @@ jobs:
       - name: Release build leaves out AgentCtl
         run: ./gradlew :examples:tinyapp-android:verifyReleaseLeavesOutAgentCtl :examples:agentshop:app:verifyReleaseLeavesOutAgentCtl
 
-      # AgentShop, the showcase: its 105 scenarios (the reference's, byte for byte) through its own CLI, run from
+      # AgentShop, the showcase: its scenarios (the reference's, byte for byte) through its own CLI, run from
       # examples/agentshop, its root.
       - name: AgentShop scenarios
         run: examples/agentshop/appctl test
