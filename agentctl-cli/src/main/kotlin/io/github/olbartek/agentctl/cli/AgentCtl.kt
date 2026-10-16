@@ -343,7 +343,7 @@ public object AgentCtl {
         private val stepDelay by option(
             "--step-delay",
             help = "Send the scenario one line at a time, this many seconds apart, so a recording can be followed.",
-        ).convert { swiftDouble(it) ?: fail(context.localization.floatConversionError(it)) }.validate { validateStepDelay(it) }
+        ).convert { SwiftNumbers.double(it) ?: fail(context.localization.floatConversionError(it)) }.validate { validateStepDelay(it) }
         private val port by launchPortOption()
 
         override fun execute(): Int = cli.appTest(
@@ -516,19 +516,6 @@ private fun CoreCliktCommand.launchPortOption() = option(
  */
 private fun validatePort(port: Int) {
     Ports.flagError(port)?.let { throw UsageError(it) }
-}
-
-/**
- * A number as Swift's `Double(_:)` reads it, for decimal and hex input: Kotlin's [toDoubleOrNull] also takes
- * surrounding whitespace and a Java `f`/`d` suffix (`0.5d`), which Swift refuses.
- */
-internal fun swiftDouble(text: String): Double? {
-    // Swift also reads inf, infinity and nan in any case, with a sign; Java only Infinity and NaN.
-    val unsigned = (if (text.startsWith("+") || text.startsWith("-")) text.drop(1) else text).lowercase()
-    if (unsigned == "inf" || unsigned == "infinity") return if (text.startsWith("-")) Double.NEGATIVE_INFINITY else Double.POSITIVE_INFINITY
-    if (unsigned == "nan") return Double.NaN
-    if (text.isEmpty() || text.first().isWhitespace() || text.last().isWhitespace() || text.last() in "fFdD") return null
-    return text.toDoubleOrNull()
 }
 
 /**

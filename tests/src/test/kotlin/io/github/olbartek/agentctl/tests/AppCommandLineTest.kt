@@ -52,7 +52,7 @@ class AppCommandLineTest {
 
     @Test
     fun aStepDelayOutsideZeroToAnHourIsAUsageError() {
-        for ((value, shown) in listOf("Infinity" to "inf", "inf" to "inf", "-INF" to "-inf", "NaN" to "nan", "nan" to "nan", "-1" to "-1.0", "3601" to "3601.0", "1e7" to "10000000.0", "-0.0001" to "-0.0001", "1e300" to "1e+300")) {
+        for ((value, shown) in listOf("Infinity" to "inf", "inf" to "inf", "-INF" to "-inf", "NaN" to "nan", "nan" to "nan", "-1" to "-1.0", "3601" to "3601.0", "1e7" to "10000000.0", "-0.0001" to "-0.0001", "1e300" to "1e+300", "-nan" to "-nan", "snan" to "snan")) {
             val result = run("app", "test", "--no-build", "--step-delay", value)
             assertEquals(2, result.status, "$value: ${result.combined}")
             assertTrue(result.err.startsWith("Usage: "), result.err)
@@ -101,14 +101,14 @@ class AppCommandLineTest {
     /** `--step-delay` reads what Swift's `Double(_:)` reads: no surrounding space, no Java `d`/`f` suffix. */
     @Test
     fun aStepDelayIsReadAsSwiftReadsADouble() {
-        for (value in listOf("0.5d", "0.5F", " 0.5", "0.5 ")) {
+        for (value in listOf("0.5d", "0.5F", " 0.5", "0.5 ", "\u00010.5", "0.5\u0001")) {
             val result = run("app", "test", "--no-build", "--step-delay", value)
             assertEquals(2, result.status, "'$value': ${result.combined}")
             assertTrue("Error: invalid value for --step-delay: $value is not a valid floating point value\n" in result.err, result.err)
         }
         // Read: the run goes on to the device, here an adb that fails.
         File(sdk, "platform-tools/adb").writeText("#!/bin/sh\nexit 1\n")
-        for (value in listOf("0.5", "0x1p-1", "1e1")) {
+        for (value in listOf("0.5", "0x1p-1", "1e1", "0x10")) {
             val result = run("app", "test", "--no-build", "--step-delay", value, "x.appctl")
             assertEquals("error: cannot run `adb devices` (exit 1)\n", result.err, value)
         }
