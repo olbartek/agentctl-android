@@ -18,7 +18,6 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.RawOption
 import com.github.ajalt.clikt.parameters.options.validate
 import com.github.ajalt.clikt.parameters.types.choice
-import io.github.olbartek.agentctl.AgentNumbers
 import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.CLIName
 import io.github.olbartek.agentctl.runtime.AgentDriver
@@ -299,12 +298,12 @@ public object AgentCtl {
     ) {
         private val seed by option(help = "Commands to run before the first frame (appctl-seed).")
         private val device by option(help = "adb serial or AVD name.")
-        private val latency by option(help = "Fixed mock latency in ms (default: the app's own).").asciiInt()
+        private val latency by option(help = "Fixed mock latency in ms (default: the app's own).").swiftInt()
         private val clearSession by option("--clear-session", help = "Forget the saved session before launching.").flag()
         private val noBuild by option("--no-build", help = "Relaunch the installed app instead of building it.").flag()
         private val port by launchPortOption()
 
-        override fun execute(): Int = cli.appLaunch(seed, device ?: cli.config.device, latency, clearSession, !noBuild, port)
+        override fun execute(): Int = cli.appLaunch(seed, device ?: cli.config.device, clampedLatency(latency), clearSession, !noBuild, port?.toInt())
     }
 
     private class AppRunCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
@@ -319,7 +318,7 @@ public object AgentCtl {
         private val json by option(help = "Print a JSON array of steps.").flag()
         private val port by portOption(cli.config.outputPath)
 
-        override fun execute(): Int = cli.appRun(script, json, port)
+        override fun execute(): Int = cli.appRun(script, json, port?.toInt())
     }
 
     private class AppTestCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
@@ -337,7 +336,7 @@ public object AgentCtl {
         private val device by option(help = "adb serial or AVD name.")
         private val latency by option(
             help = "Fixed mock latency in ms (default: 0, so the first screen has loaded when the script starts).",
-        ).asciiInt()
+        ).swiftInt()
         private val noBuild by option("--no-build", help = "Use the installed app instead of building it.").flag()
         private val record by option(help = "Record the run to this .mp4, with a <file>.chapters.txt of when each scenario started.")
         private val stepDelay by option(
@@ -348,7 +347,7 @@ public object AgentCtl {
 
         override fun execute(): Int = cli.appTest(
             paths,
-            AppTest.Options(device ?: cli.config.device, latency, !noBuild, port, record, stepDelay),
+            AppTest.Options(device ?: cli.config.device, clampedLatency(latency), !noBuild, port?.toInt(), record, stepDelay),
         )
     }
 
@@ -490,7 +489,7 @@ public object AgentCtl {
     ) {
         private val port by portOption(cli.config.outputPath)
 
-        override fun execute(): Int = cli.appGet(path, port)
+        override fun execute(): Int = cli.appGet(path, port?.toInt())
     }
 }
 
@@ -503,18 +502,18 @@ private fun CoreCliktCommand.deviceOption(cli: Cli<*, *>) = option(
 /** `--port` for `app run`, `app state` and `app screens`: which bridge to talk to. */
 private fun CoreCliktCommand.portOption(outputPath: String) = option(
     help = "The port of the app's agent bridge. Default: APPCTL_PORT, else the last launch's (${outputPath}/bridge.json), else ${BridgeDefaults.PORT}.",
-).asciiInt().validate { validatePort(it) }
+).swiftInt().validate { validatePort(it) }
 
 /** `--port` for `app launch` and `app test`: which port to start the bridge on. */
 private fun CoreCliktCommand.launchPortOption() = option(
     help = "The port for the app's agent bridge (the app's agent-port). Default: APPCTL_PORT, else ${BridgeDefaults.PORT} or the next free port.",
-).asciiInt().validate { validatePort(it) }
+).swiftInt().validate { validatePort(it) }
 
 /**
  * `--port` outside 1-65535 is a usage error while the command line is parsed, before the repo root is looked for, as
  * agentctl-ios checks it: Clikt prints it with the command's usage line, and the CLI exits 2.
  */
-private fun validatePort(port: Int) {
+private fun validatePort(port: Long) {
     Ports.flagError(port)?.let { throw UsageError(it) }
 }
 
@@ -528,7 +527,15 @@ private fun validateStepDelay(seconds: Double) {
 }
 
 /**
- * An integer option as Swift's `Int(_:)` reads it (`AgentNumbers.int`): an optional sign and ASCII digits. Clikt's
- * `int()` also takes other scripts' digits (`--port ٣` as 3), which agentctl-ios refuses. The error is Clikt's own.
+ * An integer option as Swift's `Int(_:)` reads it ([SwiftNumbers.int]): an optional sign and ASCII digits, 64-bit.
+ * Clikt's `int()` also takes other scripts' digits (`--port ٣` as 3) and stops at 32 bits, where agentctl-ios reads
+ * `99999999999` and then checks its range. The error is Clikt's own.
  */
-private fun RawOption.asciiInt() = convert { AgentNumbers.int(it) ?: fail(context.localization.intConversionError(it)) }
+private fun RawOption.swiftInt() = convert { SwiftNumbers.int(it) ?: fail(context.localization.intConversionError(it)) }
+
+/**
+ * A `--latency` as the app can take it: agentctl-ios passes any 64-bit value on, which its app reads as a fixed
+ * latency (a negative one as none). An Android launch extra is 32-bit, so a value past that is the nearest one, which
+ * behaves the same: about 25 days, or none.
+ */
+private fun clampedLatency(milliseconds: Long?): Int? = milliseconds?.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong())?.toInt()

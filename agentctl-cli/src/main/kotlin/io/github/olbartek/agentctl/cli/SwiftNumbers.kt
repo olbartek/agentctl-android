@@ -24,6 +24,16 @@ internal object SwiftNumbers {
     /** Swift writes a smaller (nonzero) magnitude in exponent form. */
     private const val SMALLEST_PLAIN: Double = 1e-4
 
+    /**
+     * [text] as Swift's `Int(_:)` reads it, a 64-bit integer: an optional sign and ASCII digits only. Kotlin's
+     * [String.toIntOrNull] also reads other scripts' digits (`٣` as 3), and stops at 32 bits.
+     */
+    fun int(text: String): Long? {
+        val digits = if (text.startsWith('+') || text.startsWith('-')) text.substring(1) else text
+        if (digits.isEmpty() || !digits.all { it in '0'..'9' }) return null
+        return text.toLongOrNull()
+    }
+
     private val DECIMAL = Regex("(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
     private val HEX = Regex("0[xX](?:[0-9a-fA-F]+\\.?[0-9a-fA-F]*|\\.[0-9a-fA-F]+)([pP][+-]?[0-9]+)?")
     private val NAN = Regex("nan(?:\\([^)]*\\))?", RegexOption.IGNORE_CASE)

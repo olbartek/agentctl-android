@@ -56,4 +56,16 @@ class SwiftNumbersTest {
         )
         for (text in refused) assertEquals(null, SwiftNumbers.double(text), "'$text'")
     }
+
+    /** What Swift's 64-bit `Int(_:)` reads, as `swift` printed it. */
+    @Test
+    fun anIntIsReadAsSwiftReadsIt() {
+        assertEquals(99999999999L, SwiftNumbers.int("99999999999"))
+        assertEquals(-1L, SwiftNumbers.int("-1"))
+        assertEquals(5L, SwiftNumbers.int("+5"))
+        assertEquals(Long.MAX_VALUE, SwiftNumbers.int("9223372036854775807"))
+        for (text in listOf("9223372036854775808", "\u0663", "", "+", "-", " 1", "1 ", "1_0", "0x10")) {
+            assertEquals(null, SwiftNumbers.int(text), "'$text'")
+        }
+    }
 }

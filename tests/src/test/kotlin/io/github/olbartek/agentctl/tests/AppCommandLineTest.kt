@@ -125,12 +125,25 @@ class AppCommandLineTest {
             listOf("app", "launch", "--latency") to "\u0663",
             listOf("app", "test", "--latency") to "\u0663",
             listOf("app", "state", "--port") to "abc",
+            // Past Swift's 64-bit Int.
+            listOf("app", "state", "--port") to "9223372036854775808",
+            listOf("app", "test", "--latency") to "9223372036854775808",
         )) {
             val option = args.last()
             val result = run(*(args + value + if (args[1] == "run") listOf("open 2") else emptyList()).toTypedArray())
             assertEquals(2, result.status, "$args $value: ${result.combined}")
             assertTrue("Error: invalid value for $option: $value is not a valid integer\n" in result.err, result.err)
             assertEquals(false, adbCalls.exists(), "$args reached adb")
+        }
+    }
+
+    /** A latency past 32 bits is read, as Swift's 64-bit Int reads it, and the run goes on (here to an adb that fails). */
+    @Test
+    fun aLatencyPast32BitsIsRead() {
+        File(sdk, "platform-tools/adb").writeText("#!/bin/sh\nexit 1\n")
+        for (value in listOf("99999999999", "-99999999999", "9223372036854775807")) {
+            val result = run("app", "test", "--no-build", "--latency", value, "x.appctl")
+            assertEquals("error: cannot run `adb devices` (exit 1)\n", result.err, value)
         }
     }
 }
