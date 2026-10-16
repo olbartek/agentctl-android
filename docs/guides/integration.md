@@ -462,8 +462,10 @@ changes as follows:
   `HeadlessHost(container, mockMethods, …)` and `LiveHost(container, …)` calls are unchanged.
 - The test helpers: `AgentCoverage<Action>` and `AgentScenarioChecks<AgentStoreDriver<State, Action>, Action>`. A
   test that reads `host.store` imports `io.github.olbartek.agentctl.runtime.store`.
-- `AgentLaunch.store` and `stores` are now `launch.app` and `apps` (the old names still compile, with a deprecation
-  warning), and `AgentLaunch.isRequested(intent)` is also `AgentLaunchArguments.isRequested(intent)`.
+- `AgentLaunch.store` and `stores` are now `launch.app` and `apps`, and `AgentLaunch.isRequested(intent)` is also
+  `AgentLaunchArguments.isRequested(intent)`. That includes the host's own call sites, such as the debug-only class
+  that hands `launch.store` to the app's root: it reads `launch.app`. The old names still compile, with a deprecation
+  warning, so a build that treats warnings as errors fails until they move.
 - A host that built a `ScriptRunner` itself passes `driver = host.driver` instead of the store and the container.
 - The store lives on the driver: `host.store` (the import above), `host.driver.state`, and `host.container` is
   `host.driver.container`. `ScriptRunner.store` and `ScriptRunner.state` are gone, since a runner names only the
