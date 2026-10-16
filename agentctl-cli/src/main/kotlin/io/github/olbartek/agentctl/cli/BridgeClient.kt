@@ -53,6 +53,7 @@ internal class BridgeClient(private val port: Int, private val scriptLimit: Dura
         // stays silent for as long as it runs: its limit is on the whole request, and generous.
         val runsScript = method == "POST" && path.startsWith("/run")
         val expired = AtomicBoolean(false)
+        var connected = false
         val deadline = if (runsScript) {
             Timer("agentctl-run-limit", true).apply {
                 schedule(scriptLimit.inWholeMilliseconds) {
@@ -67,13 +68,17 @@ internal class BridgeClient(private val port: Int, private val scriptLimit: Dura
             connection.requestMethod = method
             connection.connectTimeout = timeout.inWholeMilliseconds.toInt()
             connection.readTimeout = (if (runsScript) scriptLimit else timeout).inWholeMilliseconds.toInt()
+            // Connected explicitly: only a script that reached the bridge can have run past its limit. A connection
+            // that times out never reached it, and stays "cannot reach".
             connection.setRequestProperty("Connection", "close")
-            if (body != null) {
-                val bytes = body.toByteArray(Charsets.UTF_8)
+            val bytes = body?.toByteArray(Charsets.UTF_8)
+            if (bytes != null) {
                 connection.doOutput = true
                 connection.setFixedLengthStreamingMode(bytes.size)
-                connection.outputStream.use { it.write(bytes) }
             }
+            connection.connect()
+            connected = true
+            bytes?.let { connection.outputStream.use { stream -> stream.write(it) } }
             val status = connection.responseCode
             val stream = if (status >= 400) connection.errorStream else connection.inputStream
             val text = stream?.use { String(it.readBytes(), Charsets.UTF_8) } ?: ""
@@ -87,7 +92,7 @@ internal class BridgeClient(private val port: Int, private val scriptLimit: Dura
                 connection.getHeaderField(HttpParser.PLATFORM_HEADER),
             )
         } catch (error: IOException) {
-            if (runsScript && (expired.get() || error is SocketTimeoutException)) throw ScriptTimedOut(port, scriptLimit)
+            if (runsScript && connected && (expired.get() || error is SocketTimeoutException)) throw ScriptTimedOut(port, scriptLimit)
             throw error
         } finally {
             deadline?.cancel()

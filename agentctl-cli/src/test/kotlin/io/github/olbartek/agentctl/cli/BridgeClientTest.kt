@@ -73,6 +73,35 @@ class BridgeClientTest {
         assertFalse(error is BridgeClient.ScriptTimedOut)
     }
 
+    /**
+     * A connection that is never accepted (a listener whose backlog is full) did not reach the bridge: the script
+     * never started, so it is "cannot reach", not "did not finish".
+     */
+    @Test
+    fun aScriptWhoseConnectionTimesOutDidNotReachTheBridge() {
+        ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { full ->
+            val queued = mutableListOf<Socket>()
+            try {
+                // Fill the backlog: once a connection is not taken, the next ones are not answered at all.
+                repeat(8) {
+                    val socket = Socket()
+                    try {
+                        socket.connect(java.net.InetSocketAddress(full.inetAddress, full.localPort), 300)
+                        queued += socket
+                    } catch (_: IOException) {
+                        socket.close()
+                    }
+                }
+                val error = assertFailsWith<IOException> {
+                    BridgeClient(full.localPort, scriptLimit = 30.seconds).send("POST", "/run", "open 2", timeout = 500.milliseconds)
+                }
+                assertFalse(error is BridgeClient.ScriptTimedOut, "$error")
+            } finally {
+                queued.forEach { it.close() }
+            }
+        }
+    }
+
     @Test
     fun appRunSaysTheScriptDidNotFinish() {
         val previous = BridgeClient.scriptLimit
