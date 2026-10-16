@@ -21,7 +21,7 @@ dependencyResolutionManagement {
 
 // a module's build.gradle.kts
 dependencies {
-    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.7.0")
+    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.8.0")
 }
 ```
 
@@ -278,7 +278,7 @@ which you can copy).
 dependencies {
     implementation(project(":feature:items"))           // screens and store: agentctl-core
     debugImplementation(project(":appctl-config"))      // the AppCtlConfig: agentctl-runtime
-    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.7.0")
+    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.8.0")
 }
 ```
 
@@ -482,3 +482,20 @@ changes as follows:
 - Other type parameters: `AgentLaunch<State, Action>` is `AgentLaunch<AgentStoreDriver<State, Action>, Action,
   AgentStore<State, Action>>`, `AgentLaunchSession<Driver, Action>`, `BridgeRouter<Action>`, and `applySeed` and
   `ScenarioRunner.run` are generic over the action only.
+
+### Moving a host to 0.8
+
+0.8 changes no host type. What a host may notice:
+
+- `MockCallLog.all` and `since(index)` are now `entries` and `entries(since:)`, as the reference names them; the old
+  names still compile, with a deprecation warning (an error where warnings are).
+- Parse a number from a command's argument or a link with `AgentNumbers.int(text)`, not `toIntOrNull()`, which also
+  reads non-ASCII digits the reference refuses.
+- Scripts: a CRLF file now runs line by line, so a CRLF scenario that passed having run nothing may now fail for
+  real; `expect "a=b"` (the only `=` quoted) is a usage error; `"a"b"c"` is no
+  longer unquoted; text matches by canonical equivalence; a scenario that is not UTF-8 cannot be read (exit 3).
+- The CLI: `snapshots` and `check` exit 2 or 3 for usage and environment errors (CONTRACT.md §5); an unusable
+  `--session` file is one error line, exit 3; `help [<subcommand>]` prints help.
+- The bridge cancels a run whose client went away; a `ScriptRunner.run` cancelled that way throws
+  `CancellationException` before its next line, as any suspend call does: its signature is unchanged (the
+  reference's `run` now `throws(CancellationError)`).
