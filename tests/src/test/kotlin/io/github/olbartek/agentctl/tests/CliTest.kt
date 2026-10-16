@@ -41,6 +41,9 @@ class CliTest {
             listOf("help", "app", "nosuch", "record") to listOf("app"),
             listOf("help", "run", "extra") to listOf("run"),
             listOf("help", "--help") to listOf(),
+            listOf("help", "-h") to listOf(),
+            listOf("help", "-help") to listOf(),
+            listOf("help", "app", "--help") to listOf("app"),
         )) {
             val result = tinyctl(*args.toTypedArray())
             assertEquals(0, result.status, "$args: ${result.combined}")
@@ -50,6 +53,16 @@ class CliTest {
         for (args in listOf(listOf("app", "help"), listOf("app", "record", "help"))) {
             assertEquals(2, tinyctl(*args.toTypedArray()).status, "$args")
         }
+        // Any other option is not help's: a usage error, as ArgumentParser's "Unknown option".
+        for (args in listOf(listOf("help", "--nope"), listOf("help", "app", "--nope"), listOf("help", "-x", "app"))) {
+            val result = tinyctl(*args.toTypedArray())
+            assertEquals(2, result.status, "$args: ${result.combined}")
+            assertEquals("", result.out, "$args")
+            assertTrue(result.err.startsWith("Usage: tinyctl help "), "$args: ${result.err}")
+            assertTrue("Error: no such option ${args.first { it.startsWith("-") }}" in result.err, "$args: ${result.err}")
+        }
+        // The root's help says so last, as ArgumentParser's does.
+        assertTrue(tinyctl("--help").out.endsWith("\n\nSee 'tinyctl help <subcommand>' for detailed help.\n"), tinyctl("--help").out)
     }
 
     @Test

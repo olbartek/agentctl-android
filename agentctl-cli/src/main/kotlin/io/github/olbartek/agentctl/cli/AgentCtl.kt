@@ -101,18 +101,24 @@ public object AgentCtl {
      */
     internal fun helpArguments(args: List<String>, root: CoreCliktCommand): List<String> {
         if (args.firstOrNull() != "help") return args
+        // `help`'s own flags ask for help too; any other option is a usage error, which [HelpCommand] raises.
+        val rest = args.drop(1).filter { it !in HELP_FLAGS }
+        if (rest.any { it.startsWith("-") }) return args
         val path = mutableListOf<String>()
         var command = root
-        for (name in args.drop(1)) {
+        for (name in rest) {
             command = command.registeredSubcommands().firstOrNull { it.commandName == name } as? CoreCliktCommand ?: break
             path += name
         }
         return path + "--help"
     }
 
+    private val HELP_FLAGS = setOf("-h", "--help", "-help")
+
     /** The command tree, for rendering help pages in tests. */
     internal fun <D : AgentDriver<A, *>, A> command(cli: Cli<D, A>): CoreCliktCommand = Root(cli)
         .subcommands(
+            HelpCommand(),
             RunCommand(cli),
             StateCommand(cli),
             ScreensCommand(cli),
@@ -165,9 +171,25 @@ public object AgentCtl {
         override fun helpEpilog(context: Context): String = listOfNotNull(
             cli.config.help.note,
             "Command reference: ${cli.config.docsPath} (or ${cli.config.help.invocation} screens).",
+            "See '${commandName(cli.config)} help <subcommand>' for detailed help.",
         ).joinToString("\n\n")
 
         override fun run() = Unit
+    }
+
+    /**
+     * `help [<subcommand>…]`, hidden as ArgumentParser's is. [helpArguments] answers it before Clikt parses; Clikt only
+     * sees it with an option that is not a help flag, and reports that as a usage error with this usage line.
+     */
+    private class HelpCommand : CoreCliktCommand(name = "help") {
+        override val hiddenFromHelp: Boolean = true
+
+        override fun help(context: Context): String = "Show subcommand help information."
+
+        @Suppress("unused")
+        private val subcommands by argument().multiple()
+
+        override fun run() = throw PrintHelpMessage(currentContext.parent, error = false)
     }
 
     private class AppGroup : CoreCliktCommand(name = "app") {
