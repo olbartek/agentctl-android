@@ -40,7 +40,7 @@ public class NoScenariosFound(
  * - [unvisitedScreens]: documented screen paths no scenario run visits. A pattern segment written `<id>` matches any
  *   concrete segment, so a screen with a variable path needs one scenario, not one per instance.
  *
- * All three use the scenario files found when this value was constructed.
+ * All four use the scenario files found when this value was constructed.
  *
  * They are deliberately shallow: they check that a command *appears* in some script, not that its result was
  * asserted. A thin suite that touches everything once passes them.

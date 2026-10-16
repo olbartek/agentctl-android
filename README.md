@@ -153,8 +153,8 @@ tasks, `adb` for the device commands, Compose's idleness for live settling, `Age
 
 [`examples/tinyapp`](examples/tinyapp) is the smallest complete integration and this repository's fixture: two
 screens, one mocked client, five scenarios, its own `tinyctl` CLI and a committed
-[generated command reference](examples/tinyapp/agent-commands.md). Every snippet in
-[the integration guide](docs/guides/integration.md) is from it, and
+[generated command reference](examples/tinyapp/agent-commands.md). Most snippets in
+[the integration guide](docs/guides/integration.md) are from it, and
 [`examples/tinyapp-android`](examples/tinyapp-android) runs it as an Android app with the bridge.
 
 [`examples/tinymvvm`](examples/tinymvvm) is TinyApp rebuilt as MVVM: Jetpack `ViewModel`s under a coordinator, no
