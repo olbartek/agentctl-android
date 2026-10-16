@@ -65,7 +65,7 @@ public class AgentCoverage<A>(
     /** Command names no scenario sends. */
     public fun unusedCommands(): List<String> {
         // By canonical equivalence, as the runner looks the names up.
-        val used = files.flatMap { file -> ScriptParser.parse(file.readText()).map { AgentText.canonical(it.name) } }.toSet()
+        val used = files.flatMap { file -> ScriptParser.parse(ScriptParser.read(file)).map { AgentText.canonical(it.name) } }.toSet()
         return AgentRegistry.allCommandNames(screens, make().deviceSurface).filter { AgentText.canonical(it) !in used }.sorted()
     }
 
@@ -78,7 +78,7 @@ public class AgentCoverage<A>(
         val surface = make().deviceSurface
         val used = mutableSetOf<String>()
         for (file in files) {
-            for (line in ScriptParser.parse(file.readText()).filter { AgentText.canonical(it.name) == "device" }) {
+            for (line in ScriptParser.parse(ScriptParser.read(file)).filter { AgentText.canonical(it.name) == "device" }) {
                 val tokens = ArgumentText.tokens(line.argument ?: "")
                 val sub = tokens.firstOrNull() ?: continue
                 used.add(AgentText.canonical("device $sub"))

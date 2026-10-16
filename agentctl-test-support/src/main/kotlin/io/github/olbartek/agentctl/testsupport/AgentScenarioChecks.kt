@@ -245,7 +245,7 @@ public class AgentScenarioChecks<D : AgentDriver<A, *>, A>(
 
     private fun run(file: File): ScenarioResult = runBlocking { ScenarioRunner.run(file) { config.makeRunner() } }
 
-    private fun parse(file: File): List<ScriptLine> = ScriptParser.parse(file.readText())
+    private fun parse(file: File): List<ScriptLine> = ScriptParser.parse(ScriptParser.read(file))
 
     private fun describe(error: Exception): String = if (error is ScriptError) error.description else error.toString()
 

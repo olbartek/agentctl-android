@@ -2,6 +2,7 @@ package io.github.olbartek.agentctl.cli
 
 import io.github.olbartek.agentctl.ScreensRenderer
 import io.github.olbartek.agentctl.ScriptLine
+import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.StepFormatter
 import io.github.olbartek.agentctl.StepRecord
 import io.github.olbartek.agentctl.runtime.AgentDriver
@@ -339,7 +340,7 @@ internal object Session {
     fun load(file: File, path: String): String {
         if (!file.exists()) return ""
         return try {
-            file.readText()
+            ScriptParser.read(file)
         } catch (error: IOException) {
             throw Unusable(Message.cannotRead(path, error))
         }
@@ -485,6 +486,7 @@ internal object Message {
      * (Permission denied)`, and the message already names the path as the user gave it.
      */
     private fun reason(error: Exception): String {
+        if (error is java.nio.charset.CharacterCodingException) return "not valid UTF-8"
         val message = error.message ?: return error.toString()
         if (error !is java.io.FileNotFoundException || !message.endsWith(")")) return message
         val open = message.lastIndexOf(" (")
