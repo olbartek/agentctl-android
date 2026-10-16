@@ -35,7 +35,11 @@ internal class Cli<D : AgentDriver<A, *>, A>(
 ) {
     val invocation: String get() = config.help.invocation
 
-    fun run(script: String, sessionPath: String?, diff: Boolean, json: Boolean): Int = runBlocking {
+    fun run(script: String, sessionPath: String?, diff: Boolean, json: Boolean): Int = withSession {
+        runSession(script, sessionPath, diff, json)
+    }
+
+    private fun runSession(script: String, sessionPath: String?, diff: Boolean, json: Boolean): Int = runBlocking {
         val runner = config.makeRunner()
         val launch = runner.launch()
         // A launch that did not settle fails the run before the script (or a session replay) starts.
@@ -45,7 +49,7 @@ internal class Cli<D : AgentDriver<A, *>, A>(
         }
         val steps = mutableListOf<StepRecord>()
         if (sessionPath != null) {
-            val replay = runner.run(Session.load(resolve(sessionPath)))
+            val replay = runner.run(Session.load(resolve(sessionPath), sessionPath))
             if (replay.status != RunStatus.OK) {
                 val why = replay.message ?: replay.steps.lastOrNull()?.message ?: ""
                 io.error("session replay of $sessionPath failed at ${replay.failedLine?.text ?: "a line"}: $why")
@@ -63,11 +67,13 @@ internal class Cli<D : AgentDriver<A, *>, A>(
             io.print(StepFormatter.text(steps))
         }
         result.message?.let(io::error)
-        if (sessionPath != null) Session.append(result.executed, resolve(sessionPath))
+        if (sessionPath != null) Session.append(result.executed, resolve(sessionPath), sessionPath)
         result.status.code
     }
 
-    fun state(sessionPath: String?): Int = runBlocking {
+    fun state(sessionPath: String?): Int = withSession { stateAfter(sessionPath) }
+
+    private fun stateAfter(sessionPath: String?): Int = runBlocking {
         val runner = config.makeRunner()
         val launch = runner.launch()
         if (launch.status != RunStatus.OK) {
@@ -75,7 +81,7 @@ internal class Cli<D : AgentDriver<A, *>, A>(
             return@runBlocking launch.status.code
         }
         if (sessionPath != null) {
-            val replay = runner.run(Session.load(resolve(sessionPath)))
+            val replay = runner.run(Session.load(resolve(sessionPath), sessionPath))
             if (replay.status != RunStatus.OK) {
                 io.error("session replay of $sessionPath failed")
                 return@runBlocking RunStatus.FAILED.code
@@ -83,6 +89,14 @@ internal class Cli<D : AgentDriver<A, *>, A>(
         }
         io.print(runner.stateDump)
         0
+    }
+
+    /** [body], with a session file that cannot be read or written reported as one error line and exit 3. */
+    private fun withSession(body: () -> Int): Int = try {
+        body()
+    } catch (error: Session.Unusable) {
+        io.error(error.message ?: "")
+        RunStatus.INTERNAL_ERROR.code
     }
 
     fun screens(): Int {
@@ -314,17 +328,34 @@ internal class Cli<D : AgentDriver<A, *>, A>(
     }
 }
 
-/** `--session` files: one command per line, replayed before each run. */
+/**
+ * `--session` files: one command per line, replayed before each run. A file that does not exist yet is an empty
+ * session; one that cannot be read or written throws [Unusable], named by [path] as the user gave it.
+ */
 internal object Session {
-    fun load(file: File): String = if (file.isFile) file.readText() else ""
+    /** A session file that cannot be read or written: the CLI's one error line, exit 3. */
+    class Unusable(message: String) : Exception(message)
 
-    fun append(lines: List<ScriptLine>, file: File) {
-        file.parentFile?.mkdirs()
-        if (lines.isEmpty()) {
-            if (!file.exists()) file.createNewFile()
-            return
+    fun load(file: File, path: String): String {
+        if (!file.exists()) return ""
+        return try {
+            file.readText()
+        } catch (error: IOException) {
+            throw Unusable(Message.cannotRead(path, error))
         }
-        file.appendText(lines.joinToString("\n") { it.text } + "\n")
+    }
+
+    fun append(lines: List<ScriptLine>, file: File, path: String) {
+        try {
+            file.parentFile?.mkdirs()
+            if (lines.isEmpty()) {
+                if (!file.exists()) file.createNewFile()
+                return
+            }
+            file.appendText(lines.joinToString("\n") { it.text } + "\n")
+        } catch (error: IOException) {
+            throw Unusable(Message.cannotWrite(path, error))
+        }
     }
 }
 
@@ -430,6 +461,12 @@ internal object Message {
     fun deviceDoesNotAnswer(name: String, serial: String): String =
         "$name is running as $serial but does not answer (adb shell timed out after ${Devices.PROBE_SECONDS} s): " +
             "restart it (adb -s $serial emu kill), or pass another --device"
+
+    /** A file the user named (a `--session` file) that cannot be read: its path as given, and the platform's reason. */
+    fun cannotRead(path: String, error: Exception): String = "cannot read $path: ${error.message ?: error}"
+
+    /** A file the user named (a `--session` file) that cannot be written. */
+    fun cannotWrite(path: String, error: Exception): String = "cannot write $path: ${error.message ?: error}"
 
     fun staleDocs(config: AppCtlConfig<*, *>): String = "${config.docsPath} is stale. Run ${config.help.invocation} docs."
 
