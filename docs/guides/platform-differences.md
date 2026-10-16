@@ -51,12 +51,12 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   (`HeadlessHost<AgentStoreDriver<State, Action>, Action>`) and `ScriptRunner` only the action. The MVVM driver is
   `AgentViewModelDriver`, for Jetpack `ViewModel`s or any class, where the reference's is `AgentObservationDriver` for
   `@Observable` view models. `AgentAppFactory` (clients built once per host, a store per launch) has no counterpart
-  there: the reference's store driver takes the state and reducer, and its host's `configure` builds the clients once. `AgentTasks` is
-  `environment.tasks`, on each launch's scope, where the reference's `\.agentTasks` runs work in its owner's
-  dependencies: Kotlin view models are given their environment, so there is no owner to name. A relaunch also
-  cancels that scope, after `cancelAllWork()`. Hosts for each architecture are functions named like the class
-  (`HeadlessHost(container, …)`, `HeadlessHost(mockMethods, …) { AppCoordinator(it) }`), where the reference has
-  constrained initializers. Since a `ScriptRunner` names only the action, it has no `store` or `state` (the
+  there: the reference's store driver takes the state and reducer, and its host's `configure` builds the clients
+  once. `AgentTasks` is `environment.tasks`, on each launch's scope, where the reference's `\.agentTasks` runs work
+  in its owner's dependencies: Kotlin view models are given their environment, so there is no owner to name. A
+  relaunch also cancels that scope, after `cancelAllWork()`. Hosts for each architecture are functions named like
+  the class (`HeadlessHost(container, …)`, `HeadlessHost(mockMethods, …) { AppCoordinator(it) }`), where the
+  reference has constrained initializers. Since a `ScriptRunner` names only the action, it has no `store` or `state` (the
   reference's has them when its driver is an `AgentStoreDriver`); a test reads them from the host (`host.store`).
 - The real-OS `app` commands use `adb`: `app permission` takes an Android permission (`CAMERA` is
   `android.permission.CAMERA`) and its `reset` resets every permission of the app (`pm reset-permissions -p`); `app

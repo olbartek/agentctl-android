@@ -456,8 +456,7 @@ In the app, `AgentLaunch(config, intent)` works as it does for a store; `launch.
 0.7 put the engine behind `AgentDriver`. A store host's scripts, scenarios and output are unchanged; its Kotlin
 changes as follows:
 
-- Every public name 0.7 adds starts with `Agent`, so none clashes with an app's own; 0.6's `AppFactory` is now
-  `AgentAppFactory`.
+- Every public name 0.7 adds starts with `Agent`, so none clashes with an app's own.
 - `AppCtlConfig<State, Action>`, `HeadlessHost<State, Action>` and `LiveHost<State, Action>` become
   `…<AgentStoreDriver<State, Action>, Action>`, and `ScriptRunner<State, Action>` becomes `ScriptRunner<Action>`. The
   `HeadlessHost(container, mockMethods, …)` and `LiveHost(container, …)` calls are unchanged.

@@ -17,7 +17,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 
 /**
  * TinyMVVM's integration: TinyApp rebuilt as MVVM — Jetpack ViewModels under a coordinator, no store — and driven
- * through a [AgentViewModelDriver]. It runs TinyApp's own scenario files and prints what TinyApp prints.
+ * through an [AgentViewModelDriver]. It runs TinyApp's own scenario files and prints what TinyApp prints.
  */
 object TinyMVVMConfig {
     val screens: List<ScreenDoc> get() = AppCoordinator.registry

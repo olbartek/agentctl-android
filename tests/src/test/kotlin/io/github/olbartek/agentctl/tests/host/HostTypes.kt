@@ -1,38 +1,44 @@
 package io.github.olbartek.agentctl.tests.host
 
-// A host's own types, named as apps commonly name them (nzozopole has its own PermissionStatus). The library's
-// device types are nested in AgentDevice, so these never clash with it: see PublicNamesTest.
+// A host's own types, named with the common words apps use (nzozopole declares its own PermissionStatus): the names
+// agentctl-ios's HostNamesTests checks, and the names 0.7's seam renamed to start with Agent. PublicNamesTest uses them beside every agentctl package.
 
 enum class PermissionStatus { GRANTED, DENIED, NOT_DETERMINED }
 
-enum class BiometryResult { OK, CANCELLED }
+class BiometryResult
 
-enum class Phase { ACTIVE, INACTIVE }
+class DevicePhase
 
-data class Location(val latitude: Double, val longitude: Double)
+class DeviceLocation
 
-data class Surface(val name: String)
+class DeviceSurface
 
-data class Push(val title: String)
+class DeviceConfig
 
-data class Intent(val name: String)
+class Device
 
-// And the 0.7 seam's old names, which an app could well have: the library's are Agent-prefixed.
+class Permission
 
-fun interface AppIntent { fun run() }
+class Biometry
 
-fun interface ScreenIntent { fun run() }
+class Push
+
+class PushNotification
+
+class Location
+
+class Phase
+
+class Surface
+
+class Subcommand
+
+class AppIntent
+
+class ScreenIntent
 
 class StoreDriver
 
 class ViewModelDriver
 
-fun interface AppFactory { fun make(): String }
-
-/** A host's own declarations sit next to a star import of the library: its own package wins, and it compiles. */
-fun hostStatus(device: io.github.olbartek.agentctl.AgentDevice): PermissionStatus =
-    if (device.permission("camera") == io.github.olbartek.agentctl.AgentDevice.PermissionStatus.GRANTED) {
-        PermissionStatus.GRANTED
-    } else {
-        PermissionStatus.DENIED
-    }
+class AppFactory
