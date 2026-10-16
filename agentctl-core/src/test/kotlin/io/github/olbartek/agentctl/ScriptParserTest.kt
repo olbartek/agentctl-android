@@ -52,6 +52,37 @@ class ScriptParserTest {
         assertEquals("line 1, column 22: unterminated quote", contract.description)
     }
 
+    /**
+     * `\r\n` is one grapheme, so a check for `"\n"` never saw it: a CRLF script parsed as one command, and a CRLF file
+     * starting with a comment was all comment, passing having run nothing (CONTRACT.md §1.1).
+     */
+    @Test
+    fun crlfEndsALineLikeLF() {
+        assertEquals(ScriptParser.parse("open 2\nsave\nexpect saved=true\n"), ScriptParser.parse("open 2\r\nsave\r\nexpect saved=true\r\n"))
+        assertEquals(listOf("open 2", "save"), ScriptParser.parse("open 2\r\nsave\r\n").map { it.text })
+        assertEquals(listOf(1, 2), ScriptParser.parse("open 2\r\nsave").map { it.line })
+    }
+
+    @Test
+    fun crlfEndsAComment() {
+        assertEquals(listOf(ScriptLine(2, "expect", "screen=nope")), ScriptParser.parse("# comment\r\nexpect screen=nope\r\n"))
+        assertEquals(listOf("open 2", "save"), ScriptParser.parse("open 2 # comment\r\nsave").map { it.text })
+    }
+
+    @Test
+    fun crlfEndsAQuote() {
+        val error = assertFailsWith<ScriptError> { ScriptParser.parse("email \"alice\r\nsubmit\"") }
+        assertEquals(ScriptError(1, 7, "unterminated quote"), error)
+    }
+
+    /** A `\r` not followed by `\n` is whitespace, not a line break, as in the reference. */
+    @Test
+    fun loneCarriageReturnIsWhitespace() {
+        assertEquals(listOf(ScriptLine(1, "open", "2\rsave")), ScriptParser.parse("open\r2\rsave"))
+        assertEquals(listOf("open 2", "save"), ScriptParser.parse("open 2\r\r\nsave\r").map { it.text })
+        assertEquals(emptyList(), ScriptParser.parse("# comment\rsave"))
+    }
+
     @Test
     fun emptyScripts() {
         assertEquals(emptyList(), ScriptParser.parse(""))

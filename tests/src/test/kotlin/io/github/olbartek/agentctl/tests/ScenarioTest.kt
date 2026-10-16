@@ -1,6 +1,7 @@
 package io.github.olbartek.agentctl.tests
 
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
+import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import io.github.olbartek.agentctl.testsupport.AgentScenarioChecks
 import java.io.File
@@ -51,6 +52,20 @@ class ScenarioTest {
         val result = tinyctl("docs", "--check")
         assertEquals("examples/tinyapp/agent-commands.md is up to date.\n", result.out, result.combined)
         assertEquals(0, result.status)
+    }
+
+    /**
+     * A scenario saved with CRLF line endings runs line by line (CONTRACT.md §1.1). Read as one line, a file that starts
+     * with a comment was all comment, and passed having run nothing.
+     */
+    @Test
+    fun aCrlfScenarioRunsEveryLine() = runBlocking {
+        val file = kotlin.io.path.createTempFile("crlf", ".appctl").toFile()
+        file.writeText("# opens the second item\r\nopen 2\r\nexpect screen=items/2\r\nexpect screen=nope\r\n")
+        val result = ScenarioRunner.run(file) { TinyAppConfig.headless().makeRunner() }
+        assertEquals(RunStatus.FAILED, result.status, result.report)
+        assertEquals(4, result.failedLine?.line)
+        assertEquals(listOf("(launch)", "open 2", "expect screen=items/2", "expect screen=nope"), result.steps.map { it.command })
     }
 
     @Test

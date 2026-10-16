@@ -41,6 +41,12 @@ internal fun Int.isUnicodeWhiteSpace(): Boolean = when (this) {
     else -> false
 }
 
+/**
+ * A line break in a script (CONTRACT.md §1.1): `\n`, or `\r\n`, which is one grapheme as it is one Swift `Character`.
+ * A lone `\r` is not one: it is whitespace.
+ */
+internal fun String.isScriptNewline(): Boolean = this == "\n" || this == "\r\n"
+
 /** `true` when `text` contains a whitespace grapheme, the rule of CONTRACT.md §3.2. */
 internal fun containsWhitespace(text: String): Boolean = Graphemes.of(text).any { it.isWhitespaceGrapheme() }
 

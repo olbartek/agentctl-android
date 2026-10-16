@@ -22,7 +22,8 @@ public object AppTestSkip {
      * still skips, with "no reason given".
      */
     public fun reason(source: String): String? {
-        for (rawLine in source.split("\n")) {
+        // A line ends at `\n` or `\r\n`, as in a script (CONTRACT.md §1.1).
+        for (rawLine in source.split("\r\n", "\n")) {
             val line = rawLine.trim()
             if (!line.startsWith("#")) continue
             val comment = line.drop(1).trim()

@@ -36,7 +36,7 @@ public class ScriptError(
  * Parses the script language shared by the CLI's `run`, scenarios, `-appctl-seed` and the agent bridge
  * (CONTRACT.md §1).
  *
- * - Commands are separated by `;` or newlines.
+ * - Commands are separated by `;` or newlines. A newline is `\n` or `\r\n`; a lone `\r` is whitespace.
  * - `#` starts a comment that runs to the end of the line.
  * - Double quotes protect `;` and `#`; inside quotes `\` escapes the next character. Quotes are kept in the
  *   argument so that commands like `expect` can split on unquoted spaces; use [ArgumentText] to unquote.
@@ -69,7 +69,7 @@ public object ScriptParser {
 
         for (character in Graphemes.of(source)) {
             column += 1
-            if (character == "\n") {
+            if (character.isScriptNewline()) {
                 if (inQuotes) throw ScriptError(quoteLine, quoteColumn, "unterminated quote")
                 inComment = false
                 flush()
