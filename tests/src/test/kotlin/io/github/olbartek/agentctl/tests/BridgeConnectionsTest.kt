@@ -6,15 +6,15 @@ import io.github.olbartek.agentctl.runtime.BridgeResponse
 import io.github.olbartek.agentctl.runtime.BridgeRouter
 import io.github.olbartek.agentctl.runtime.BridgeServer
 import io.github.olbartek.agentctl.runtime.HttpParser
-import io.github.olbartek.agentctl.runtime.RunStatus
 import java.net.Socket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -146,31 +146,6 @@ class BridgeConnectionsTest {
     }
 
     @Test
-    fun aRequestWhoseClientGoesAwayWhileQueuedNeverRuns() {
-        val release = CountDownLatch(1)
-        val ran = AtomicInteger(0)
-        val first = CountDownLatch(1)
-        val (_, port) = start {
-            if (ran.incrementAndGet() == 1) {
-                first.countDown()
-                while (release.count > 0) delay(10)
-            }
-            BridgeResponse(200, "ok\n", exitCode = 0)
-        }
-        val waiting = sendAndKeep(port, get)
-        assertTrue(first.await(3, TimeUnit.SECONDS))
-        val queued = sendAndKeep(port, get)
-        Thread.sleep(200)
-        queued.close()
-        Thread.sleep(200)
-        release.countDown()
-        waiting.soTimeout = 3_000
-        assertTrue(waiting.getInputStream().readBytes().decodeToString().startsWith("HTTP/1.1 200 OK"))
-        assertEquals("HTTP/1.1 200 OK", send(port, get))
-        assertEquals(2, ran.get(), "the request whose client went away ran anyway")
-    }
-
-    @Test
     fun aClientThatWaitsGetsItsAnswerHoweverLongItTakes() {
         val (_, port) = start {
             delay(1_500)
@@ -209,20 +184,57 @@ class BridgeConnectionsTest {
         app.close()
     }
 
+    /** A runner whose coroutine is cancelled runs no further line, and passes the cancellation on. */
     @Test
     fun aCancelledRunnerStopsBeforeItsNextLine() {
-        val result = runBlocking {
-            val runner = TinyAppConfig.headless().makeRunner()
-            runner.launch()
-            var outcome: io.github.olbartek.agentctl.runtime.RunResult? = null
+        val runner = TinyAppConfig.headless().makeRunner()
+        runBlocking { runner.launch() }
+        var ranTo: Any? = "nothing"
+        val job = runBlocking {
             launch {
                 coroutineContext[kotlinx.coroutines.Job]!!.cancel()
-                outcome = runner.run("open 2; back")
-            }.join()
-            outcome!!
+                ranTo = try {
+                    runner.run("open 2; back")
+                } catch (e: CancellationException) {
+                    e
+                }
+            }.also { it.join() }
         }
-        assertEquals(RunStatus.INTERNAL_ERROR, result.status)
-        assertEquals(emptyList(), result.steps)
-        assertEquals("cancelled", result.message)
+        assertTrue(job.isCancelled)
+        assertTrue(ranTo is CancellationException, "ran to $ranTo")
+        // Not even its first line ran.
+        assertEquals("items", runner.snapshot("(snapshot)").screen)
+    }
+
+    /**
+     * CONTRACT.md §8.1: a client that closes its side of the connection before the answer has gone away: its request
+     * is cancelled and gets no answer. Here it sends a whole request, then shuts its output: it reads end of stream
+     * with zero bytes, and the handler never finishes (cancelled before it starts or while it runs), so the next
+     * request is answered at once rather than behind it.
+     */
+    @Test
+    fun aClientThatClosesItsSideBeforeTheAnswerGetsNone() {
+        val finished = AtomicBoolean(false)
+        // Only the first request is slow; if it never runs, the next must not take its place.
+        val slow = AtomicBoolean(true)
+        val (_, port) = start {
+            if (slow.getAndSet(false)) {
+                delay(2_000)
+                finished.set(true)
+            }
+            BridgeResponse(200, "ok\n", exitCode = 0)
+        }
+        val answer = Socket("127.0.0.1", port).use { socket ->
+            socket.soTimeout = 5_000
+            socket.getOutputStream().apply { write(get.toByteArray()); flush() }
+            socket.shutdownOutput()
+            socket.getInputStream().readBytes()
+        }
+        assertEquals(0, answer.size, answer.decodeToString())
+        slow.set(false)
+        val next = TimeSource.Monotonic.markNow()
+        assertEquals("HTTP/1.1 200 OK", send(port, get))
+        assertTrue(next.elapsedNow() < 1.seconds, "the next request waited ${next.elapsedNow()}")
+        assertFalse(finished.get(), "the handler ran to its end")
     }
 }

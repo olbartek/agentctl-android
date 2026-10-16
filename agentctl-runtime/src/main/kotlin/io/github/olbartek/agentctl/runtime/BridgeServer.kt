@@ -18,6 +18,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -33,8 +34,10 @@ import kotlinx.coroutines.runBlocking
  *
  * A request whose client goes away before its answer (the end of its stream says so: a client sends nothing after its
  * request) is cancelled, so a script nobody waits for stops at its next line and the next request does not wait
- * behind it. If the listening socket fails other than by [stop], the bridge says so on stderr (logcat in an app) and
- * listens again on the same port; if it cannot, it stays closed, so clients are refused rather than left hanging.
+ * behind it. If accepting fails other than by [stop], the bridge says so on stderr (logcat in an app) and tries again
+ * after a short wait: on the same socket while it is open (out of file descriptors, say), on a new one on the same port
+ * once it has closed. After a few failures in a row it gives up and closes, so clients are refused rather than left
+ * hanging.
  */
 public class BridgeServer(
     /** Where [handler] runs: the store's own thread. */
@@ -59,14 +62,20 @@ public class BridgeServer(
     /** Makes each listening socket; a test's may fail on purpose. */
     internal var makeSocket: () -> ServerSocket = ::ServerSocket
 
-    /** How long the bridge waits before each try to listen again after its socket failed. */
+    /** How long the bridge waits after each failure to accept in a row; one more failure, and it gives up. */
     internal var relistenDelays: List<Duration> = listOf(100.milliseconds, 500.milliseconds, 2.seconds)
+
+    /** What a test waits on: "client gone", "cancelled", "gave up". */
+    internal var events: (String) -> Unit = {}
 
     /** Answers complete requests one at a time, in the order they were completed; one per [start]. */
     @Volatile private var answering: ExecutorService? = null
 
     /** Connections still sending their request: each holds a reader thread until its deadline at most. */
     private val reading = Semaphore(MAX_READING)
+
+    /** Queued requests whose connection is watched for the client going away: each holds a thread until its answer. */
+    private val watching = Semaphore(MAX_WATCHING)
 
     /** Starts listening and returns the bound port (pass 0 for an ephemeral port). */
     @Throws(IOException::class)
@@ -106,14 +115,41 @@ public class BridgeServer(
     }
 
     private fun serve(listening: ServerSocket, answering: ExecutorService) {
+        val port = listening.localPort
         var server = listening
+        // Failures to accept in a row: each waits the next of [relistenDelays], and one past them gives up.
+        var failures = 0
         while (true) {
             val connection = try {
                 server.accept()
-            } catch (e: IOException) {
-                server = listenAgain(server, e) ?: return
+            } catch (first: IOException) {
+                var error = first
+                while (true) {
+                    if (socket !== server) return // [stop] closed it.
+                    if (failures == relistenDelays.size) {
+                        giveUp(server, port, error)
+                        return
+                    }
+                    val open = !server.isClosed
+                    System.err.println(
+                        "AgentCtl bridge: accepting on 127.0.0.1:$port failed ($error); " +
+                            if (open) "trying again" else "listening again",
+                    )
+                    Thread.sleep(relistenDelays[failures++].inWholeMilliseconds)
+                    // Still open: accept on it again. Closing it would drop the connections in its backlog.
+                    if (open) break
+                    server = try {
+                        listenAgain(server, port) ?: return
+                    } catch (e: IOException) {
+                        error = e
+                        continue
+                    }
+                    System.err.println("AgentCtl bridge: listening on 127.0.0.1:$port again")
+                    break
+                }
                 continue
             }
+            failures = 0
             // Past the limit, idle connections must not pile up threads: this one closes unanswered.
             if (!reading.tryAcquire()) {
                 connection.close()
@@ -136,45 +172,45 @@ public class BridgeServer(
                     connection.close()
                 } else {
                     val exchange = Exchange(connection)
-                    // This thread then waits for the client to go away, until the answer closes the connection.
-                    if (queue(answering, exchange, parsed) && parsed is HttpParser.Result.Request) watch(exchange)
+                    // This thread then waits for the client to go away, until the answer closes the connection. Past
+                    // the limit, a request is answered without being watched.
+                    if (queue(answering, exchange, parsed) && parsed is HttpParser.Result.Request && watching.tryAcquire()) {
+                        try {
+                            watch(exchange)
+                        } finally {
+                            watching.release()
+                        }
+                    }
                 }
             }
         }
     }
 
     /**
-     * After [failed] failed with [error]: `null` if [stop] closed it, or if no new socket could listen on its port;
-     * otherwise the new socket, which [stop] now closes.
+     * A new socket on [port] in place of [failed], which has closed; `null` if [stop] was called meanwhile. Throws if
+     * the port cannot be bound.
      */
-    private fun listenAgain(failed: ServerSocket, error: IOException): ServerSocket? {
-        val port = failed.localPort
+    @Throws(IOException::class)
+    private fun listenAgain(failed: ServerSocket, port: Int): ServerSocket? {
+        val fresh = listen(port)
         synchronized(lock) {
-            if (socket !== failed) return null
-            failed.close()
-        }
-        System.err.println("AgentCtl bridge: listening on 127.0.0.1:$port failed ($error); listening again")
-        var lastError: IOException = error
-        for (wait in relistenDelays) {
-            Thread.sleep(wait.inWholeMilliseconds)
-            val fresh = try {
-                listen(port)
-            } catch (e: IOException) {
-                lastError = e
-                continue
+            if (socket !== failed) {
+                fresh.close()
+                return null
             }
-            synchronized(lock) {
-                if (socket !== failed) {
-                    fresh.close()
-                    return null
-                }
-                socket = fresh
-            }
-            System.err.println("AgentCtl bridge: listening on 127.0.0.1:$port again")
-            return fresh
+            socket = fresh
         }
-        System.err.println("AgentCtl bridge: could not listen on 127.0.0.1:$port again ($lastError); the bridge is closed")
-        return null
+        return fresh
+    }
+
+    /** Closes [server] for good after one failure too many, so clients are refused rather than left in its backlog. */
+    private fun giveUp(server: ServerSocket, port: Int, error: IOException) {
+        synchronized(lock) {
+            if (socket !== server) return
+            server.close()
+        }
+        System.err.println("AgentCtl bridge: accepting on 127.0.0.1:$port failed ($error); giving up, the bridge is closed")
+        events("gave up")
     }
 
     /** Queues [exchange]'s answer; `false` (the connection closed) once [stop] has shut the queue. */
@@ -192,9 +228,10 @@ public class BridgeServer(
      * it is dropped.
      */
     private fun watch(exchange: Exchange) {
+        val connection = exchange.connection
         try {
-            exchange.connection.soTimeout = 0
-            val input = exchange.connection.getInputStream()
+            connection.soTimeout = 0
+            val input = connection.getInputStream()
             val scrap = ByteArray(1024)
             while (input.read(scrap) >= 0) {
                 // Dropped.
@@ -202,7 +239,8 @@ public class BridgeServer(
         } catch (_: IOException) {
             // The answer closed the connection, or the client reset it.
         }
-        // After the answer, there is nothing left to cancel.
+        // Closed here: the answer is done, and there is nothing left to cancel.
+        if (!connection.isClosed) events("client gone")
         exchange.abandon()
     }
 
@@ -211,8 +249,8 @@ public class BridgeServer(
         val response = when (parsed) {
             is HttpParser.Result.Request -> try {
                 runBlocking {
-                    val handling = async(dispatcher) { handler(parsed.request) }
-                    // Its client may have gone away while it waited: then it is cancelled before it starts.
+                    // Started by await, after begin: if its client went away while it waited, it never starts.
+                    val handling = async(dispatcher, CoroutineStart.LAZY) { handler(parsed.request) }
                     exchange.begin(handling)
                     handling.await()
                 }
@@ -221,6 +259,7 @@ public class BridgeServer(
             } catch (e: Throwable) {
                 if (e is CancellationException && exchange.isAbandoned) {
                     System.err.println("AgentCtl bridge: ${parsed.request.method} ${parsed.request.path} cancelled: its client went away")
+                    events("cancelled")
                     return
                 }
                 // Cancellation included: there is no coroutine here to pass it on to, only this request to give up.
@@ -291,5 +330,8 @@ public class BridgeServer(
     private companion object {
         /** At most this many connections are sending their request at once. */
         const val MAX_READING = 16
+
+        /** At most this many queued requests are watched for their client going away at once. */
+        const val MAX_WATCHING = 16
     }
 }

@@ -5,25 +5,31 @@ import java.net.ConnectException
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.asCoroutineDispatcher
 
 /**
- * What this guards: a listening socket that fails other than by `stop()` (the system taking it back, say) does not
- * leave the bridge bound but deaf. It listens again on the same port, or, if it cannot, closes, so a client is refused
- * rather than left waiting in the backlog. As agentctl-ios's listener restart.
+ * What this guards: a failure to accept other than by `stop()` does not leave the bridge bound but deaf. On a socket
+ * still open (out of file descriptors, say) it accepts again on that socket, keeping its backlog; on one that closed
+ * (the system took it back) it listens again on the same port. After a few failures in a row it gives up and closes,
+ * so a client is refused rather than left waiting in the backlog. As agentctl-ios's listener restart.
  */
 class BridgeListeningTest {
     private val executor = Executors.newSingleThreadExecutor()
     private val servers = mutableListOf<BridgeServer>()
+    private val made = AtomicInteger(0)
+    private val gaveUp = CountDownLatch(1)
 
     @AfterTest
     fun tearDown() {
@@ -31,14 +37,26 @@ class BridgeListeningTest {
         executor.shutdownNow()
     }
 
-    /** A socket whose first accept fails, as one the system took back does. */
-    private class FailsOnce : ServerSocket() {
+    /** A socket whose first accept closes it and fails, as one the system took back does. */
+    private class ClosesOnce : ServerSocket() {
         private var failed = false
 
         override fun accept(): Socket {
             if (!failed) {
                 failed = true
+                close()
                 throw SocketException("taken back")
+            }
+            return super.accept()
+        }
+    }
+
+    /** A socket whose first [failures] accepts fail while it stays open, as when the app is out of file descriptors. */
+    private class FailsWhileOpen(private var failures: Int) : ServerSocket() {
+        override fun accept(): Socket {
+            if (failures > 0) {
+                failures--
+                throw IOException("too many open files")
             }
             return super.accept()
         }
@@ -49,16 +67,17 @@ class BridgeListeningTest {
         override fun bind(endpoint: java.net.SocketAddress?, backlog: Int): Unit = throw IOException("port taken")
     }
 
-    private fun server(makeSocket: (Int) -> ServerSocket): BridgeServer {
-        val made = AtomicInteger(0)
-        return BridgeServer(executor.asCoroutineDispatcher(), "app", "android") { BridgeResponse(200, "ok\n", exitCode = 0) }.apply {
-            this.makeSocket = { makeSocket(made.getAndIncrement()) }
-            relistenDelays = listOf(10.milliseconds, 10.milliseconds, 10.milliseconds)
-            servers += this
-        }
+    /** A started server whose listening sockets [makeSocket] makes, given how many it made before; returns its port. */
+    private fun start(makeSocket: (Int) -> ServerSocket): Int {
+        val server = BridgeServer(executor.asCoroutineDispatcher(), "app", "android") { BridgeResponse(200, "ok\n", exitCode = 0) }
+        server.makeSocket = { makeSocket(made.getAndIncrement()) }
+        server.relistenDelays = listOf(10.milliseconds, 10.milliseconds, 10.milliseconds)
+        server.events = { if (it == "gave up") gaveUp.countDown() }
+        servers += server
+        return server.start(0)
     }
 
-    /** The status line of the answer to a GET, or the failure to connect. */
+    /** The status line of the answer to a GET. */
     private fun get(port: Int): String = Socket("127.0.0.1", port).use { socket ->
         socket.soTimeout = 3_000
         socket.getOutputStream().apply { write("GET /snapshot HTTP/1.1\r\nHost: x\r\n\r\n".toByteArray()); flush() }
@@ -81,45 +100,47 @@ class BridgeListeningTest {
         }
     }
 
+    private fun awaitGaveUp() = assertTrue(gaveUp.await(3, TimeUnit.SECONDS), "the bridge never gave up")
+
     @Test
-    fun aFailedSocketListensAgainOnTheSamePort() {
-        val server = server { made -> if (made == 0) FailsOnce() else ServerSocket() }
-        val port = server.start(0)
+    fun aClosedSocketListensAgainOnTheSamePort() {
+        val port = start { if (it == 0) ClosesOnce() else ServerSocket() }
         assertEquals("HTTP/1.1 200 OK", getOnceListening(port))
         assertEquals("HTTP/1.1 200 OK", get(port))
+        assertEquals(2, made.get())
+    }
+
+    @Test
+    fun anOpenSocketThatFailsToAcceptIsAcceptedOnAgainNotReplaced() {
+        val port = start { FailsWhileOpen(failures = 2) }
+        // Connected while the accepts fail: it waits in the backlog, which a new socket would have dropped.
+        assertEquals("HTTP/1.1 200 OK", get(port))
+        assertEquals(1, made.get())
+    }
+
+    @Test
+    fun anOpenSocketThatNeverAcceptsIsGivenUp() {
+        val port = start { FailsWhileOpen(failures = Int.MAX_VALUE) }
+        awaitGaveUp()
+        assertFailsWith<ConnectException> { get(port) }
+        assertEquals(1, made.get())
     }
 
     @Test
     fun aSocketThatCannotListenAgainLeavesTheBridgeClosed() {
-        val server = server { made -> if (made == 0) FailsOnce() else CannotBind() }
-        val port = server.start(0)
-        val started = TimeSource.Monotonic.markNow()
-        // Refused, not left hanging, once the bridge has given up (three short tries).
-        while (true) {
-            val refused = try {
-                get(port)
-                false
-            } catch (_: ConnectException) {
-                true
-            } catch (_: SocketException) {
-                // Reset with the socket that failed.
-                false
-            }
-            if (refused) break
-            check(started.elapsedNow() < 2.seconds) { "the bridge still accepts connections" }
-            Thread.sleep(20)
-        }
-        Thread.sleep(100)
+        val port = start { if (it == 0) ClosesOnce() else CannotBind() }
+        awaitGaveUp()
         assertFailsWith<ConnectException> { get(port) }
+        assertEquals(1 + 3, made.get())
     }
 
     @Test
     fun stopDoesNotListenAgain() {
-        val server = server { ServerSocket() }
-        val port = server.start(0)
+        val port = start { ServerSocket() }
         assertEquals("HTTP/1.1 200 OK", get(port))
-        server.stop()
+        servers.single().stop()
         Thread.sleep(100)
         assertFailsWith<ConnectException> { get(port) }
+        assertEquals(1, made.get())
     }
 }
