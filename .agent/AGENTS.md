@@ -83,7 +83,10 @@ agentctl-ios with the same number.
 
 - Branch per change, PR to `main`, squash-merge. Commit only after `./gradlew build` passes.
 - `gh`'s active account may be another one; use `GH_TOKEN=$(gh auth token --user olbartek)` per command.
-- After every merge, clean up. Remove the worktree the work used (`git worktree remove`), then `git branch -D` the
-  squash-merged branch. Also remove scratchpad worktrees of this repo and their build directories. Never remove a
-  worktree with uncommitted changes, or one another session holds (another agent's scratchpad, say). The main
-  checkout's `build/` directories and the Gradle cache stay.
+- After every merged branch: remove its worktree, delete the local and remote branch, and delete that worktree's
+  build caches (Xcode DerivedData / Gradle build dirs). Never remove a worktree with uncommitted or unpushed changes,
+  or one another session holds.
+  - Here: `git worktree remove` (it takes the worktree's `build/` and `.gradle/` with it), `git branch -D` the
+    squash-merged branch, and `git push origin --delete` it when no open PR needs it. Scratchpad worktrees of this
+    repo count too.
+  - The main checkout and its caches stay, and so does the shared `~/.gradle` cache.
