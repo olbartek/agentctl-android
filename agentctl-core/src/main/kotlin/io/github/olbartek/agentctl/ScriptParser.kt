@@ -90,7 +90,8 @@ public object ScriptParser {
                 }
                 continue
             }
-            when (character) {
+            // By canonical equivalence, as Swift compares a `Character`: U+037E GREEK QUESTION MARK is a `;`.
+            when (AgentText.canonical(character)) {
                 "\"" -> {
                     inQuotes = true
                     quoteLine = line

@@ -5,6 +5,7 @@ import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentDuration
 import io.github.olbartek.agentctl.AgentRegistry
+import io.github.olbartek.agentctl.AgentText
 import io.github.olbartek.agentctl.ArgumentText
 import io.github.olbartek.agentctl.Expectation
 import io.github.olbartek.agentctl.ExpectationSyntaxError
@@ -128,7 +129,7 @@ public class ScriptRunner<A>(
      * Runs one command (`expect`, `advance`, `mock`, `device`, or one the current screen offers) and returns its step
      * and status.
      */
-    public suspend fun execute(line: ScriptLine): StepOutcome = when (line.name) {
+    public suspend fun execute(line: ScriptLine): StepOutcome = when (AgentText.canonical(line.name)) {
         "expect" -> expect(line)
         "advance" -> advance(line)
         "mock" -> mock(line)
@@ -180,12 +181,12 @@ public class ScriptRunner<A>(
             return fail(line, RunStatus.USAGE, "usage: mock <client.method> <error> — exactly two words$mockable")
         }
         val (name, code) = tokens
-        val method = mockMethods.firstOrNull { it.name == name }
+        val method = mockMethods.firstOrNull { AgentText.equivalent(it.name, name) }
             ?: return fail(line, RunStatus.FAILED, "unknown mock method '$name'; mockable: $names")
-        if (code !in method.errorCodes) {
-            return fail(line, RunStatus.FAILED, "unknown error '$code' for $name; valid: ${method.errorCodes.joinToString(", ")}")
-        }
-        faults.set(name, code)
+        val error = method.errorCodes.firstOrNull { AgentText.equivalent(it, code) }
+            ?: return fail(line, RunStatus.FAILED, "unknown error '$code' for $name; valid: ${method.errorCodes.joinToString(", ")}")
+        // The app's own spellings: the app looks the fault up by its method's name and reads the code it declared.
+        faults.set(method.name, error)
         lastCalls = emptyList()
         return StepOutcome(snapshot(line.text), RunStatus.OK)
     }
@@ -224,7 +225,7 @@ public class ScriptRunner<A>(
         val tokens = ArgumentText.tokens(line.argument ?: "")
         val first = tokens.firstOrNull()
             ?: return fail(line, RunStatus.USAGE, "usage: device <subcommand>; available: $available")
-        val sub = AgentDevice.Surface.Subcommand.of(first)
+        val sub = AgentDevice.Surface.Subcommand.of(AgentText.canonical(first))
             ?: return fail(line, RunStatus.USAGE, "unknown device command '$first'; available: $available")
         if (sub !in surface.subcommands) {
             return fail(line, RunStatus.USAGE, "device $first is not configured by this app; available: $available")
@@ -236,12 +237,12 @@ public class ScriptRunner<A>(
 
         return when (sub) {
             AgentDevice.Surface.Subcommand.PERMISSION -> {
-                val status = arguments.takeIf { it.size == 2 }?.let { AgentDevice.PermissionStatus.of(it[1]) }
+                val status = arguments.takeIf { it.size == 2 }?.let { AgentDevice.PermissionStatus.of(AgentText.canonical(it[1])) }
                     ?: return usage("device permission <service> <not-determined|granted|denied|limited>; services: $services")
-                val service = arguments[0]
-                if (service !in surface.services) return failed("unknown permission '$service'; services: $services")
+                val service = surface.services.firstOrNull { AgentText.equivalent(it, arguments[0]) }
+                    ?: return failed("unknown permission '${arguments[0]}'; services: $services")
                 if (device.isPrompting(service)) {
-                    return failed("device permission: a prompt for $service is pending; answer it with device prompt allow|deny|limited")
+                    return failed("device permission: a prompt for ${arguments[0]} is pending; answer it with device prompt allow|deny|limited")
                 }
                 settling(line) { device.setPermission(service, status) }
             }
@@ -252,7 +253,7 @@ public class ScriptRunner<A>(
                     "deny" to AgentDevice.PermissionStatus.DENIED,
                     "limited" to AgentDevice.PermissionStatus.LIMITED,
                 )
-                val status = arguments.singleOrNull()?.let(answers::get) ?: return usage("device prompt <allow|deny|limited>")
+                val status = arguments.singleOrNull()?.let { answers[AgentText.canonical(it)] } ?: return usage("device prompt <allow|deny|limited>")
                 try {
                     device.answerPermission(status)
                 } catch (error: AgentDevice.AnswerError) {
@@ -274,10 +275,10 @@ public class ScriptRunner<A>(
 
             AgentDevice.Surface.Subcommand.PUSH -> {
                 val names = surface.pushes.joinToString(", ") { it.name }
-                if (!(arguments.size == 1 || (arguments.size == 2 && arguments[1] == "tap"))) {
+                if (!(arguments.size == 1 || (arguments.size == 2 && AgentText.equivalent(arguments[1], "tap")))) {
                     return usage("device push <name> [tap]; pushes: $names")
                 }
-                val push = deviceConfig.pushes.firstOrNull { it.name == arguments[0] }
+                val push = deviceConfig.pushes.firstOrNull { AgentText.equivalent(it.name, arguments[0]) }
                     ?: return failed("unknown push '${arguments[0]}'; pushes: $names")
                 val action = if (arguments.size == 2) push.opened else push.received
                 settling(line) { if (action != null) driver.send(action) }
@@ -306,7 +307,7 @@ public class ScriptRunner<A>(
             }
 
             AgentDevice.Surface.Subcommand.NETWORK -> {
-                val online = when (arguments.singleOrNull()) {
+                val online = when (arguments.singleOrNull()?.let(AgentText::canonical)) {
                     "online" -> true
                     "offline" -> false
                     else -> return usage("device network <online|offline>")
@@ -320,11 +321,11 @@ public class ScriptRunner<A>(
                 settling(line) { device.setLocation(location.location) }
             }
 
-            AgentDevice.Surface.Subcommand.BIOMETRY -> when (arguments.singleOrNull()) {
-                "enrolled", "unenrolled" -> settling(line) { device.setBiometryEnrolled(arguments[0] == "enrolled") }
+            AgentDevice.Surface.Subcommand.BIOMETRY -> when (val word = arguments.singleOrNull()?.let(AgentText::canonical)) {
+                "enrolled", "unenrolled" -> settling(line) { device.setBiometryEnrolled(word == "enrolled") }
                 "match", "fail" -> {
                     try {
-                        device.answerBiometry(if (arguments[0] == "match") AgentDevice.BiometryResult.SUCCESS else AgentDevice.BiometryResult.FAILURE)
+                        device.answerBiometry(if (word == "match") AgentDevice.BiometryResult.SUCCESS else AgentDevice.BiometryResult.FAILURE)
                     } catch (_: AgentDevice.AnswerError) {
                         return failed("device biometry: no biometric prompt is pending")
                     }

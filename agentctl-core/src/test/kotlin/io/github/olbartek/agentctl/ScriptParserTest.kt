@@ -83,6 +83,16 @@ class ScriptParserTest {
         assertEquals(emptyList(), ScriptParser.parse("# comment\rsave"))
     }
 
+    /**
+     * Characters compare by canonical equivalence, as Swift's `Character ==` does: U+037E GREEK QUESTION MARK is
+     * canonically `;`, so it separates commands as `;` does.
+     */
+    @Test
+    fun aCanonicalSemicolonSeparates() {
+        assertEquals(listOf("open 2", "save"), ScriptParser.parse("open 2\u037Esave").map { it.text })
+        assertEquals(listOf("expect title=\"a\u037Eb\""), ScriptParser.parse("expect title=\"a\u037Eb\"").map { it.text })
+    }
+
     @Test
     fun emptyScripts() {
         assertEquals(emptyList(), ScriptParser.parse(""))

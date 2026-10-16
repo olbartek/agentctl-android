@@ -1,7 +1,23 @@
 package io.github.olbartek.agentctl
 
 import java.text.BreakIterator
+import java.text.Normalizer
 import java.util.Locale
+
+/**
+ * Text compared as the Swift reference compares it: by canonical equivalence, as Swift's `String ==` does, so `é`
+ * typed as `e` + U+0301 is the same as a precomposed `é`. Every lookup a script's text goes through (command names,
+ * mock methods and errors, choice words, permissions, pushes, summary keys) and every `expect` value uses it. It
+ * compares only; what a step prints is the script as typed and the values as the app gives them.
+ */
+public object AgentText {
+    /** [text] in Unicode Normalization Form C: the one spelling of every canonically equivalent string. */
+    public fun canonical(text: String): String =
+        if (Normalizer.isNormalized(text, Normalizer.Form.NFC)) text else Normalizer.normalize(text, Normalizer.Form.NFC)
+
+    /** Whether [a] and [b] are canonically equivalent: Swift's `a == b` on two `String`s. */
+    public fun equivalent(a: String, b: String): Boolean = a == b || canonical(a) == canonical(b)
+}
 
 /**
  * Text as the Swift reference sees it: a sequence of grapheme clusters (Swift's `Character`), not of UTF-16

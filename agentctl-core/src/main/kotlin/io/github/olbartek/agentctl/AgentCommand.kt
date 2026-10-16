@@ -132,13 +132,13 @@ public class AgentCommand<S, A>(
         ): AgentCommand<S, A> {
             val names = options.map { it.first }
             require(names.isNotEmpty()) { "choice '$name' needs at least one option" }
-            require(names.toSet().size == names.size) { "choice '$name' lists an option twice: $names" }
+            require(names.map(AgentText::canonical).toSet().size == names.size) { "choice '$name' lists an option twice: $names" }
             require(names.all { word -> word.isNotEmpty() && '|' !in word && word.none { it.isWhitespace() } }) {
                 "choice '$name' has an option that is empty or contains '|' or whitespace: $names"
             }
             val words = names.joinToString("|")
             return parsing(name, "<$words>", help, paths, gate, note) { text ->
-                val option = options.firstOrNull { it.first == text } ?: invalidArgument("expected $words")
+                val option = options.firstOrNull { AgentText.equivalent(it.first, text) } ?: invalidArgument("expected $words")
                 makeAction(option.second)
             }
         }

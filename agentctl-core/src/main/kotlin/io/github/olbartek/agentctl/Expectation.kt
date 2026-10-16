@@ -25,9 +25,9 @@ public data class Expectation(val pairs: List<Pair>) {
 
     /** Returns one failure message per unmet pair; empty when everything matches. */
     public fun evaluate(snapshot: StepSnapshot): List<String> = pairs.mapNotNull { pair ->
-        when (pair.key) {
-            "screen" -> if (snapshot.screen == pair.value) null else mismatch(pair, snapshot.screen)
-            "call" -> if (pair.value in snapshot.calls) {
+        when (AgentText.canonical(pair.key)) {
+            "screen" -> if (AgentText.equivalent(snapshot.screen, pair.value)) null else mismatch(pair, snapshot.screen)
+            "call" -> if (snapshot.calls.any { AgentText.equivalent(it, pair.value) }) {
                 null
             } else {
                 val calls = if (snapshot.calls.isEmpty()) "none" else snapshot.calls.joinToString(",")
@@ -35,22 +35,22 @@ public data class Expectation(val pairs: List<Pair>) {
             }
             "error" -> {
                 val actual = snapshot.error ?: "none"
-                if (actual == pair.value) null else mismatch(pair, actual)
+                if (AgentText.equivalent(actual, pair.value)) null else mismatch(pair, actual)
             }
             "pending" -> {
                 val actual = snapshot.pending.toString()
-                if (actual == pair.value) null else mismatch(pair, actual)
+                if (AgentText.equivalent(actual, pair.value)) null else mismatch(pair, actual)
             }
             "prompt" -> {
                 val actual = snapshot.prompt ?: "none"
-                if (actual == pair.value) null else mismatch(pair, actual)
+                if (AgentText.equivalent(actual, pair.value)) null else mismatch(pair, actual)
             }
             else -> {
-                val item = snapshot.summary.firstOrNull { it.key == pair.key }
+                val item = snapshot.summary.firstOrNull { AgentText.equivalent(it.key, pair.key) }
                 if (item == null) {
                     val available = (RESERVED_KEYS + snapshot.summary.map { it.key }).joinToString(", ")
                     "unknown key '${pair.key}' on ${snapshot.screen}; available: $available"
-                } else if (item.value == pair.value) {
+                } else if (AgentText.equivalent(item.value, pair.value)) {
                     null
                 } else {
                     mismatch(pair, item.value)

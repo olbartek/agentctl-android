@@ -38,6 +38,28 @@ class ExpectationTest {
     }
 
     /**
+     * Values and keys compare by canonical equivalence, as Swift's `String ==` does: `é` precomposed matches `e` +
+     * U+0301. A failure still prints both values as they are.
+     */
+    @Test
+    fun comparesByCanonicalEquivalence() {
+        val precomposed = StepSnapshot("café", listOf(SummaryItem("crème", "brûlée")), listOf("café.fetch"), "réseau", 0, "caméra")
+        val decomposed = { text: String -> java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD) }
+        val expectation = Expectation.parse(decomposed("screen=café crème=brûlée call=café.fetch error=réseau prompt=caméra"))
+        assertEquals(emptyList(), expectation.evaluate(precomposed))
+        assertEquals(
+            listOf("expected crème=${decomposed("brulée")}, got crème=brûlée"),
+            Expectation.parse("crème=${decomposed("brulée")}").evaluate(precomposed),
+        )
+    }
+
+    /** `=` followed by a combining mark is one grapheme, and not an `=`: the token has no `=`, as in the reference. */
+    @Test
+    fun anEqualsWithACombiningMarkIsNotAnEquals() {
+        assertEquals("expected key=value, got 'a=\u0301b'", assertFailsWith<ExpectationSyntaxError> { Expectation.parse("a=\u0301b") }.message)
+    }
+
+    /**
      * A token's `=` must be outside quotes (CONTRACT.md §2.1): `"title=Second item"` used to be read as the pair
      * `title=Second item`, because the `=` was looked for after the quotes were removed.
      */

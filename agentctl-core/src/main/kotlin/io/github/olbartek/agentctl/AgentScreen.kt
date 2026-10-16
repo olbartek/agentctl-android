@@ -141,8 +141,8 @@ public data class ActiveScreen<out A>(
     /** Prefixes the identity, e.g. with a stack element id, so re-pushing the same path counts as a new appearance. */
     public fun identified(component: String): ActiveScreen<A> = copy(identity = "$component/$identity")
 
-    /** The command named [name] on this screen, or `null` if it offers none. */
-    public fun command(name: String): ResolvedCommand<A>? = commands.firstOrNull { it.name == name }
+    /** The command called [name], compared by canonical equivalence ([AgentText]); `null` if there is none. */
+    public fun command(name: String): ResolvedCommand<A>? = commands.firstOrNull { AgentText.equivalent(it.name, name) }
 }
 
 /** Appends ancestor commands. Commands that a descendant already provides keep the descendant's version. */

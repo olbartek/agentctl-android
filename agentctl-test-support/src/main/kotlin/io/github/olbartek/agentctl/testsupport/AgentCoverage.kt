@@ -2,6 +2,7 @@ package io.github.olbartek.agentctl.testsupport
 
 import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentRegistry
+import io.github.olbartek.agentctl.AgentText
 import io.github.olbartek.agentctl.ArgumentText
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.ScriptParser
@@ -63,8 +64,9 @@ public class AgentCoverage<A>(
 
     /** Command names no scenario sends. */
     public fun unusedCommands(): List<String> {
-        val used = files.flatMap { file -> ScriptParser.parse(file.readText()).map { it.name } }.toSet()
-        return (AgentRegistry.allCommandNames(screens, make().deviceSurface) - used).sorted()
+        // By canonical equivalence, as the runner looks the names up.
+        val used = files.flatMap { file -> ScriptParser.parse(file.readText()).map { AgentText.canonical(it.name) } }.toSet()
+        return AgentRegistry.allCommandNames(screens, make().deviceSurface).filter { AgentText.canonical(it) !in used }.sorted()
     }
 
     /**
@@ -76,15 +78,17 @@ public class AgentCoverage<A>(
         val surface = make().deviceSurface
         val used = mutableSetOf<String>()
         for (file in files) {
-            for (line in ScriptParser.parse(file.readText()).filter { it.name == "device" }) {
+            for (line in ScriptParser.parse(file.readText()).filter { AgentText.canonical(it.name) == "device" }) {
                 val tokens = ArgumentText.tokens(line.argument ?: "")
                 val sub = tokens.firstOrNull() ?: continue
-                used.add("device $sub")
-                if (sub == AgentDevice.Surface.Subcommand.PUSH.rawValue && tokens.size > 1) used.add("device push ${tokens[1]}")
+                used.add(AgentText.canonical("device $sub"))
+                if (AgentText.equivalent(sub, AgentDevice.Surface.Subcommand.PUSH.rawValue) && tokens.size > 1) {
+                    used.add(AgentText.canonical("device push ${tokens[1]}"))
+                }
             }
         }
         val expected = surface.subcommands.map { "device ${it.rawValue}" } + surface.pushes.map { "device push ${it.name}" }
-        return expected.filter { it !in used }
+        return expected.filter { AgentText.canonical(it) !in used }
     }
 
     /** Summary keys emitted during the scenarios that no screen documents. */
