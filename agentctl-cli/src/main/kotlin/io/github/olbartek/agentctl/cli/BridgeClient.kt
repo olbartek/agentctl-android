@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.HttpParser
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -86,7 +87,8 @@ internal class BridgeClient(
             // Connected explicitly: only a script that reached the bridge can have run past its limit. A connection
             // that times out never reached it, and stays "cannot reach".
             connection.setRequestProperty("Connection", "close")
-            token?.let { connection.setRequestProperty(HttpParser.TOKEN_HEADER, it) }
+            // Only a well-formed token goes out: nothing else (a line break, say) reaches the request's headers.
+            token?.takeIf(AgentLaunchOptions::isToken)?.let { connection.setRequestProperty(HttpParser.TOKEN_HEADER, it) }
             val bytes = body?.toByteArray(Charsets.UTF_8)
             if (bytes != null) {
                 connection.doOutput = true

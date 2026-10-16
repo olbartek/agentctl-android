@@ -5,10 +5,7 @@ import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import java.io.File
 import java.io.IOException
-import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
-import java.nio.file.StandardCopyOption
-import java.nio.file.attribute.PosixFilePermissions
 import java.time.Instant
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
@@ -47,32 +44,21 @@ internal data class BridgeState(
     }
 
     /**
-     * Writes the record whole or not at all, so a reader never sees half a file: to a temporary file made with mode 0600
-     * before the token is written to it, then moved over the record.
+     * Writes the record whole or not at all, so a reader never sees half a file: to a temporary file of its own in the
+     * same directory (two launches at once do not share one), created with mode 0600 and written through the channel
+     * that created it, then moved over the record.
      */
     @Throws(IOException::class)
     fun save(layout: Layout) {
         val file = file(layout).toPath()
         Files.createDirectories(file.parent)
-        val temporary = file.resolveSibling("${file.fileName}.tmp")
-        Files.deleteIfExists(temporary)
-        try {
-            Files.createFile(temporary, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
-        } catch (_: UnsupportedOperationException) {
-            // A file system without POSIX permissions (Windows): its own access rules apply.
-            Files.createFile(temporary)
-        }
-        try {
-            Files.write(temporary, render().toByteArray(Charsets.UTF_8))
-            try {
-                Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING)
-            }
-        } finally {
-            Files.deleteIfExists(temporary)
-        }
+        PrivateFiles.writeAtomically(file, render().toByteArray(Charsets.UTF_8))
     }
+
+    /** The record, with its token left out: it is not for logs or messages. */
+    override fun toString(): String =
+        "BridgeState(platform=$platform, device=$device, port=$port, appId=$appId, launchedAt=$launchedAt, " +
+            "token=${if (token == null) "null" else "<token>"})"
 
     companion object {
         const val PLATFORM: String = "android"
@@ -123,12 +109,22 @@ internal object Tokens {
     /** A fresh token for a launch: 32 lowercase hex characters from `SecureRandom`. */
     fun make(): String = AgentLaunchOptions.makeToken()
 
+    /** `APPCTL_TOKEN` is set but is not a token: a usage error (exit 2). The message leaves its value out. */
+    class BadEnvironmentToken : Exception("$ENVIRONMENT_VARIABLE is not a token (32 lowercase hex characters)")
+
     /**
      * The token a request to [port] sends: `APPCTL_TOKEN` (an empty one is unset), else [recorded]'s when it is the
-     * record of a launch on that port, else none.
+     * record of a launch on that port and well-formed, else none. Throws [BadEnvironmentToken] for an `APPCTL_TOKEN`
+     * that is not a token.
      */
-    fun client(environment: Map<String, String>, port: Int, recorded: BridgeState?): String? =
-        environment[ENVIRONMENT_VARIABLE]?.takeIf { it.isNotEmpty() } ?: recorded?.takeIf { it.port == port }?.token
+    @Throws(BadEnvironmentToken::class)
+    fun client(environment: Map<String, String>, port: Int, recorded: BridgeState?): String? {
+        environment[ENVIRONMENT_VARIABLE]?.takeIf { it.isNotEmpty() }?.let { value ->
+            if (!AgentLaunchOptions.isToken(value)) throw BadEnvironmentToken()
+            return value
+        }
+        return recorded?.takeIf { it.port == port }?.token?.takeIf(AgentLaunchOptions::isToken)
+    }
 }
 
 /** `bridge.json` exists but cannot be read, or is not a launch state. */

@@ -14,6 +14,12 @@ public data class BridgeRequest(
      */
     val headers: Map<String, String> = emptyMap(),
 ) {
+    /** The request, with the `X-Appctl-Token` header's value shown as `<token>`: it is not for logs. */
+    override fun toString(): String {
+        val shown = headers.mapValues { (name, value) -> if (HttpParser.asciiLowercase(name) == "x-appctl-token") "<token>" else value }
+        return "BridgeRequest(method=$method, path=$path, query=$query, body=$body, headers=$shown)"
+    }
+
     /** A request without headers: the constructor before 0.9, kept so code built against it still links. */
     public constructor(method: String, path: String, query: Map<String, String> = emptyMap(), body: String = "") :
         this(method, path, query, body, emptyMap())

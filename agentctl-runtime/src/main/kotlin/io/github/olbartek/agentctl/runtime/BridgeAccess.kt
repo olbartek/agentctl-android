@@ -7,9 +7,11 @@ import java.security.MessageDigest
  * or one over [HttpParser.MAX_BODY_BYTES] (400, which the parser decides), in this order:
  *
  * 1. A `Host` that does not name the loopback (`127.0.0.1` or `localhost`, in any ASCII case, with any port or none),
- *    a missing `Host`, or any `Origin`: `403 forbidden`, exit 3. A CLI sends neither; a web page's request always
- *    carries one of them.
- * 2. Without the expected token in `X-Appctl-Token`: `401 unauthorized`, exit 3. Compared in constant time.
+ *    a missing `Host`, or any `Origin`: `403 forbidden`, exit 3. This stops DNS rebinding (a foreign `Host`) and the
+ *    cross-origin requests that carry an `Origin`. It does not stop every request a web page can make: a no-cors
+ *    `GET` carries a loopback `Host` and no `Origin`.
+ * 2. Without the expected token in `X-Appctl-Token`: `401 unauthorized`, exit 3. Compared in constant time. This
+ *    covers the rest: only whoever launched the app knows the token.
  */
 internal object BridgeAccess {
     /** The answer to a request that names another host or comes from a web page. */

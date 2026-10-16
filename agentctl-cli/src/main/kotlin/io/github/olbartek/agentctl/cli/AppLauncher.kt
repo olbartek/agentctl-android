@@ -33,7 +33,10 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
     private val missingAdb: String? get() = AndroidSdk.missingAdb(root, cli.environment)
 
     /** The launch: where, on which port, what to print, and the [token] every request to its bridge sends. */
-    data class Launched(val device: Device, val port: Int, val report: String, val token: String)
+    data class Launched(val device: Device, val port: Int, val report: String, val token: String) {
+        /** The launch, with its token left out: it is not for logs or messages. */
+        override fun toString(): String = "Launched(device=$device, port=$port, report=$report, token=<token>)"
+    }
 
     /**
      * Launches the app with its bridge on [port], or — when it is `null` — on the first port from 8765 up that is
@@ -246,7 +249,7 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
 
     private fun adbOrThrow(arguments: List<String>, device: Device, log: File) {
         val status = Shell.run(listOf(adb, "-s", device.serial) + arguments, root, log, append = true)
-        if (status != 0) throw AppCtlException("adb ${arguments.take(3).joinToString(" ")} failed; log: ${log.path}")
+        if (status != 0) throw AppCtlException("adb ${Shell.shown(arguments.take(3))} failed; log: ${log.path}")
     }
 
     companion object {

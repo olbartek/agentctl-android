@@ -273,8 +273,14 @@ internal class Cli<D : AgentDriver<A, *>, A>(
             null
         }
         val recorded = resolved.state
+        val token = try {
+            Tokens.client(environment, resolved.port, record)
+        } catch (error: Tokens.BadEnvironmentToken) {
+            io.error(error.message!!)
+            return RunStatus.USAGE.code
+        }
         return try {
-            val client = BridgeClient(resolved.port, Tokens.client(environment, resolved.port, record))
+            val client = BridgeClient(resolved.port, token)
             if (recorded != null && method != "GET") {
                 // A script changes the app it runs in, so it is only posted once the recorded app is known to answer;
                 // a GET changes nothing, and its own answer is checked instead.

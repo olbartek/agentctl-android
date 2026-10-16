@@ -181,7 +181,11 @@ public class BridgeServer(
             }
             thread(name = "AgentCtlBridge-read", isDaemon = true) {
                 val read = try {
-                    read(connection)
+                    read(connection).also {
+                        // Not routed, so not queued: answered here, and closed, while this connection still counts
+                        // among those being read.
+                        if (it is Read.Refused) refuse(connection, it.response)
+                    }
                 } catch (_: IOException) {
                     null
                 } catch (e: VirtualMachineError) {
@@ -194,8 +198,7 @@ public class BridgeServer(
                 }
                 when (read) {
                     null -> connection.close()
-                    // Not routed, so not queued: answered here, and closed.
-                    is Read.Refused -> refuse(connection, read.response)
+                    is Read.Refused -> Unit
                     is Read.Routed -> {
                         val exchange = Exchange(connection)
                         // This thread then waits for the client to go away, until the answer closes the connection.
@@ -297,16 +300,40 @@ public class BridgeServer(
         write(connection, response)
     }
 
-    /** Answers a request that is not routed with [response], and closes its connection. */
+    /**
+     * Answers a request that is not routed with [response], and closes its connection. A client may still be sending
+     * (a body the bridge refused from its headers): closing with its bytes unread would reset the connection, and the
+     * reset can discard the answer before the client reads it. So after the answer the bridge ends its side, then reads
+     * and drops what still comes, for [LINGER] or [LINGER_BYTES] at most, before it closes.
+     */
     private fun refuse(connection: Socket, response: BridgeResponse) {
         connection.use {
             write(it, response)
             try {
-                // The client reads the answer to its end, even if it sent more than was read.
                 it.shutdownOutput()
+                drain(it)
             } catch (_: IOException) {
                 // Gone already.
             }
+        }
+    }
+
+    private fun drain(connection: Socket) {
+        val deadline = TimeSource.Monotonic.markNow() + LINGER
+        val input = connection.getInputStream()
+        val scrap = ByteArray(8 * 1024)
+        var dropped = 0
+        while (dropped < LINGER_BYTES) {
+            val left = -deadline.elapsedNow()
+            if (left <= Duration.ZERO) return
+            connection.soTimeout = left.inWholeMilliseconds.coerceIn(1, Int.MAX_VALUE.toLong()).toInt()
+            val count = try {
+                input.read(scrap)
+            } catch (_: SocketTimeoutException) {
+                return
+            }
+            if (count < 0) return
+            dropped += count
         }
     }
 
@@ -395,6 +422,12 @@ public class BridgeServer(
     private companion object {
         val MALFORMED = BridgeResponse(400, "bad request\n", exitCode = RunStatus.USAGE.code)
         val INCOMPLETE = BridgeResponse(400, "incomplete request\n", exitCode = RunStatus.USAGE.code)
+
+        /** How long a refused connection is read and dropped from, at most, before it closes. */
+        val LINGER: Duration = 1.seconds
+
+        /** How much of a refused connection is read and dropped, at most, before it closes. */
+        const val LINGER_BYTES = 64 * 1024
 
         /** At most this many connections are sending their request at once. */
         const val MAX_READING = 16

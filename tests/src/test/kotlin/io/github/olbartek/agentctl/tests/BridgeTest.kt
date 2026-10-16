@@ -324,6 +324,13 @@ class BridgeServerTest {
         assertEquals(0, run(recorded = "0".repeat(32), environment = TOKEN).status)
         assertEquals(0, run(recorded = null, environment = TOKEN).status)
         assertEquals(0, run(recorded = TOKEN, environment = "").status)
+        // One that is not a token at all is a usage error, which does not echo it.
+        for (bad in listOf("abc", "$TOKEN\r\nX-Evil: 1")) {
+            val malformed = run(recorded = TOKEN, environment = bad)
+            assertEquals(2, malformed.status, malformed.combined)
+            assertEquals("", malformed.out)
+            assertEquals("error: APPCTL_TOKEN is not a token (32 lowercase hex characters)\n", malformed.err)
+        }
         val wrong = run(recorded = TOKEN, environment = "0".repeat(32))
         assertEquals(3, wrong.status)
         assertEquals("error: the app's agent bridge on 127.0.0.1:$port refused the token (relaunch it: ./tinyctl app launch)\n", wrong.err)

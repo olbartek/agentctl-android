@@ -108,6 +108,11 @@ public data class AgentLaunchOptions(
         private fun Iterator<String>.nextOrNull(): String? = if (hasNext()) next() else null
     }
 
+    /** The options, with the token left out (`<token>` when there is one): it is not for logs. */
+    override fun toString(): String =
+        "AgentLaunchOptions(port=$port, seed=$seed, latency=$latency, clearSession=$clearSession, " +
+            "token=${if (token == null) "null" else "<token>"})"
+
     /** These options if their token is well-formed, else the defaults: without a token, every argument is ignored. */
     internal fun honored(): AgentLaunchOptions = if (isToken(token)) this else AgentLaunchOptions()
 }

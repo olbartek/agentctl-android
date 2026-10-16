@@ -189,6 +189,47 @@ class BridgeAccessTest {
         assertFalse(BridgeAccess.tokenMatches(TOKEN, TOKEN.dropLast(1) + "0"))
     }
 
+    /**
+     * A client still sending a body the bridge refused from its headers gets the answer, not a reset: the bridge reads
+     * and drops what comes after its answer, for a moment, before it closes.
+     */
+    @Test
+    fun aClientStillSendingGetsTheRefusal() {
+        val port = start()
+        repeat(5) {
+            Socket("127.0.0.1", port).use { socket ->
+                socket.soTimeout = 10_000
+                val body = ByteArray(1_100_000) { 'a'.code.toByte() }
+                val sending = Thread {
+                    runCatching {
+                        socket.getOutputStream().apply {
+                            write("POST /run HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Appctl-Token: $TOKEN\r\nContent-Length: ${body.size}\r\n\r\n".toByteArray())
+                            write(body)
+                            flush()
+                        }
+                    }
+                }.apply { start() }
+                val answer = String(socket.getInputStream().readBytes())
+                sending.join(10_000)
+                assertAnswer("400 Bad Request", "bad request\n", 2, answer)
+            }
+        }
+        assertEquals(0, handled.get())
+    }
+
+    @Test
+    fun theTokenNeverShowsInToString() {
+        val request = BridgeRequest("GET", "/snapshot", headers = mapOf("host" to "127.0.0.1", "x-appctl-token" to TOKEN))
+        assertFalse(TOKEN in request.toString(), request.toString())
+        assertTrue("x-appctl-token=<token>" in request.toString(), request.toString())
+        val parsed = HttpParser.parse("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Appctl-Token: $TOKEN\r\n\r\n".toByteArray())
+        assertFalse(TOKEN in parsed.toString(), parsed.toString())
+        val options = AgentLaunchOptions(port = 0, token = TOKEN)
+        assertFalse(TOKEN in options.toString(), options.toString())
+        assertEquals("AgentLaunchOptions(port=0, seed=null, latency=null, clearSession=false, token=<token>)", options.toString())
+        assertEquals("AgentLaunchOptions(port=8765, seed=null, latency=null, clearSession=false, token=null)", AgentLaunchOptions().toString())
+    }
+
     private companion object {
         const val TOKEN = "0123456789abcdef0123456789abcdef"
     }
