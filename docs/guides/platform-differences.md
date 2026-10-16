@@ -77,6 +77,10 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   `AgentLaunchArguments.makeToken()` read and make it for an instrumented test's `Intent`. Requests reach the bridge
   through `adb forward`, so the `Host` they carry is the Mac's `127.0.0.1:<port>`, which the bridge accepts as it
   would on a simulator.
+- `BridgeServer` can also be made without a token (`token = null`, or the constructors kept from 0.8 so code built
+  against it still links), and then it checks every request but the token: for a JVM host or a test that runs the
+  bridge itself. The reference's `BridgeServer` always takes a token. What a launch starts, `AgentLaunchSession` on
+  the JVM and `AgentLaunch` on Android, never listens without a well-formed one (CONTRACT.md §8.2).
 - `--latency` is read as a 64-bit number, as the reference's `Int`, but reaches the app as an intent extra, which is
   32-bit: a value past about 25 days is clamped to the largest one, where the reference passes it on as it is.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,

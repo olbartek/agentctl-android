@@ -1,4 +1,4 @@
-Contract version: 3
+Contract version: 4
 
 # The AgentCtl contract
 
@@ -682,9 +682,15 @@ and documentation send exactly these.
 - **Port 8765** unless the app is launched with `-agent-port <n>`; `-agent-port 0` asks the system
   for a free port. Which port a CLI launches the app on, and which it connects to, is §8.6.
 - **HTTP/1.1, one request per connection.** A request is a request line, headers, and a body of
-  exactly `Content-Length` bytes (no chunked encoding); a request whose headers exceed 64 KiB is
-  malformed. The bridge answers and closes the connection. Requests are handled one at a time, in
-  the order they arrive.
+  exactly `Content-Length` bytes (no chunked encoding). It is malformed, decided as soon as the
+  headers are in and without reading the body, when its headers exceed 64 KiB; when it has any
+  `Transfer-Encoding` header, or more than one `Content-Length` (even with the same value); when its
+  `Content-Length` is not one or more ASCII digits (spaces or tabs around them aside) or is over
+  1048576 (1 MiB); or when a header line starts with a space or a tab, or has whitespace between its
+  name and its `:`. The bridge answers, then ends its side of the connection and drops whatever the
+  client still sends until it closes its own (for a few seconds at most), so that an answer, a
+  refusal included, is not lost to a reset. Requests are handled one at a time, in the order they
+  arrive.
   A client that closes its side of the connection before the answer has gone away: its request is cancelled and gets no answer.
 
 ### 8.2 Launch arguments
@@ -694,10 +700,16 @@ ignored.
 
 | Argument | Meaning |
 |---|---|
+| `-agent-token <t>` | The launch's token: exactly 32 lowercase hex characters. Every request must carry it (§8.4). A CLI makes a fresh one for every launch, from 16 bytes of the system's secure random generator. |
 | `-agent-port <n>` | The port to listen on, 0–65535 (`0`: any free port). Default 8765; a value that is not a port is ignored. |
 | `-appctl-seed "<script>"` | A script to run before the app shows its first real frame (§8.3). |
 | `-mock-latency <ms>` | A fixed latency for every mocked call, in milliseconds, instead of the app's own live latency. |
 | `-clear-session` | Forget the app's saved session before it launches. What a session is, is the app's own business. |
+
+**No token, no bridge.** Without a well-formed `-agent-token` (none, an empty one, a wrong length,
+uppercase), the app starts no bridge and ignores every other argument above: no seed, no latency,
+no cleared session, no port. It runs as a launch without them would. A launch that is not the CLI's,
+such as a UI test that passes `-clear-session` or `-appctl-seed`, passes a fresh token beside them.
 
 ### 8.3 Launch seeding
 
@@ -713,6 +725,24 @@ for the app by polling `GET /snapshot` until it answers.
 
 ### 8.4 Routes and responses
 
+**Every request carries** `Host: 127.0.0.1` or `Host: localhost`, with or without a port, and
+`X-Appctl-Token: <t>`, the launch's token (§8.2). Header names are matched without regard to ASCII
+case; a header sent more than once counts as its values joined with `", "`, so a repeated `Host` or
+`X-Appctl-Token` never matches. The bridge checks each request as soon as its headers are in,
+before it reads the body, and answers the first of these that applies:
+
+1. **400**, `bad request`, exit 2: the request is malformed (§8.1), its body over the cap included.
+2. **403**, `forbidden`, exit 3: there is no `Host`; or its name — what comes before its last `:`,
+   if any — is not `127.0.0.1` or `localhost` (ASCII case aside), or what comes after that `:` is
+   not ASCII digits or nothing; or the request has an `Origin` header, whatever its value. The port
+   is not compared: through `adb forward`, the CLI's port differs from the app's.
+3. **401**, `unauthorized`, exit 3: `X-Appctl-Token` is missing or is not the launch's token. The
+   bridge compares the two in constant time.
+
+A refusal is answered at once, never queued behind other requests, and the connection is closed.
+Only a request that passes all three has its body read (an unfinished one is then `incomplete
+request`, as before) and is routed:
+
 | Request | Response |
 |---|---|
 | `POST /run` | Runs the body, a UTF-8 script, on the app's live store, from whatever state the app is in — there is no `(launch)` step. The body is the steps in the text form of §3, ending in a newline; for a parse error, `error: <message>` and a newline instead. With `?format=json`, the JSON form below. Status 200 whatever the outcome: the outcome is the exit code. |
@@ -721,7 +751,9 @@ for the app by polling `GET /snapshot` until it answers.
 | `GET /snapshot` | The active screen as one step (§3) whose command echo is `(snapshot)`, exit 0. It runs nothing; its `calls=` are those of the last step that ran. |
 | another method on one of those paths | 405, body `method not allowed`, exit 2 |
 | any other path | 404, body `not found; endpoints: POST /run, GET /state, GET /screens, GET /snapshot`, exit 2 |
-| a request that cannot be parsed | 400, body `bad request` (or `incomplete request` when the connection closed mid-request), exit 2 |
+| a request that cannot be parsed, or over the cap | 400, body `bad request` (or `incomplete request` when the connection closed mid-request), exit 2 |
+| a `Host` that is not loopback, none, or an `Origin` | 403, body `forbidden`, exit 3 |
+| a missing or wrong `X-Appctl-Token` | 401, body `unauthorized`, exit 3 |
 
 Every response carries these headers:
 
@@ -737,12 +769,21 @@ Connection: close
 `Content-Type` is `application/json` for `?format=json`. **`X-Appctl-Exit`** is the §5 exit code
 of what the request did; the CLI's `app run` prints the body and exits with it (with 3 if the
 header is missing). **`X-Appctl-App`** names the app and **`X-Appctl-Platform`** its platform, on
-every response, errors included, so a CLI can tell the app it launched from another one on the same
-port (§8.6). Both are needed: an app often has the same ID on iOS and on Android.
+every response, errors and refusals included, so a CLI can tell the app it launched from another
+one on the same port (§8.6). Both are needed: an app often has the same ID on iOS and on Android.
 
 This is TinyApp answering `POST /run` with the body `open 2`, and then `?format=json` with a script
 that does not parse. (The reference's router, on a headless store: the live bridge answers
 byte-identically for any script that starts no timer, which its test suite checks.)
+
+```
+POST /run HTTP/1.1
+Host: 127.0.0.1:8766
+X-Appctl-Token: 9f86d081884c7d659a2feaa0c55ad015
+Content-Length: 6
+
+open 2
+```
 
 ```
 HTTP/1.1 200 OK
@@ -837,6 +878,10 @@ build: a build takes minutes, and a port free before it may not be free after.
 | `launchedAt` | When the bridge answered: ISO 8601, UTC, to the second (`2026-09-30T10:00:00Z`). |
 | `platform` | `ios` or `android`. |
 | `port` | The port, a number. |
+| `token` | The launch's token (§8.2), a string. |
+
+The file holds the token, so it is written readable by its owner only, mode 0600, including when it
+was already there with another mode.
 
 ```
 {
@@ -844,13 +889,28 @@ build: a build takes minutes, and a port free before it may not be free after.
   "device" : "5C0A5A2E-0000-4000-8000-000000000001",
   "launchedAt" : "2026-09-30T10:00:00Z",
   "platform" : "ios",
-  "port" : 8766
+  "port" : 8766,
+  "token" : "9f86d081884c7d659a2feaa0c55ad015"
 }
 ```
 
 **Reading it.** A command that talks to the running app (`app run`, `app state`, `app screens`)
 connects to `--port`, else `APPCTL_PORT`, else the file's `port`, else 8765. A command that
 launches never reads the file: it may name another device, or an app that has quit.
+
+**The token it sends** is `APPCTL_TOKEN`, else the file's `token` when the file's `port` is the
+port it connects to, however that port was given; else none. An empty `APPCTL_TOKEN` is unset. A
+command that launches sends the token it made, kept in memory.
+
+- An `APPCTL_TOKEN` that is not a well-formed token (§8.2) is a usage error, exit 2, and nothing is
+  sent: `error: APPCTL_TOKEN is not a token (32 lowercase hex characters)`. Its value is never
+  printed.
+
+- A 401 or 403 that carries `X-Appctl-Exit` is the bridge refusing the request: exit 3, with
+  `error: the app's agent bridge on 127.0.0.1:<port> refused the token (relaunch it: <cli> app
+  launch)` for a 401 and `error: the app's agent bridge on 127.0.0.1:<port> refused the request
+  (forbidden)` for a 403, where `<cli>` is how the CLI is invoked. Where the CLI checks who answers
+  (below) and the identity headers show another app, its `answers as …` error is printed instead.
 
 - A `--port` or an `APPCTL_PORT` that is not a port from 1 to 65535 is a usage error, exit 2 (an
   empty `APPCTL_PORT` is unset), on every command that takes one.
@@ -870,10 +930,12 @@ acts on: an app with the same ID on the other platform is another app. An error 
   On a mismatch the CLI stops its app and, unless the port was named by `--port` or
   `APPCTL_PORT`, launches it once more on the next free port above; if that one mismatches too, or
   the port was named, it exits 3. The same goes for no answer at all while, with the app stopped,
-  something still listens on the port: the bridge could not listen there. A command that runs
+  something still listens on the port: the bridge could not listen there. A refusal from another
+  app is a mismatch like any other answer of another app; a refusal from the app itself stops the
+  launch with the refusal's error, exit 3. A command that runs
   scripts on the app it launched (the reference's `app test`) checks every response the same way;
-  a scenario whose response comes from another app fails as not run (exit 3), and its output is not
-  printed as the app's.
+  a scenario whose response comes from another app, or is a refusal, fails as not run (exit 3), and
+  its output is not printed as the app's.
 - **When the port came from the file**, with the file's `appId` and `platform`. A different app
   or platform on that port means the file is stale: exit 3, and nothing from the response is
   printed. A script is only posted after a `GET /snapshot` does not show another app, so another app
@@ -912,3 +974,9 @@ choice:
    exactly `expect, advance, mock` (and `device`, where the app has it) after the screen's own commands. Is a port required to reproduce
    that exact tail, or is the actual requirement just "list the commands that would currently
    resolve, including the runtime ones," with the reference's specific wording being incidental?
+7. **The bridge proving who it is.** The token (§8.2) ties requests to the launch; it does not
+   prove the bridge to the CLI. A process that holds the port before the app's bridge does (a port
+   squatter) receives what the CLI sends there, the token included. `X-Appctl-App` and `X-Appctl-Platform` (§8.6)
+   are claims, not proof. Should a future version have the bridge prove that it holds the launch's
+   token (for instance by answering a challenge with it), and should the CLI then refuse a bridge
+   that cannot?
