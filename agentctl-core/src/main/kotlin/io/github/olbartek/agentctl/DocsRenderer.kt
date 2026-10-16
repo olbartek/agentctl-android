@@ -35,7 +35,7 @@ public object DocsRenderer {
         screens: List<ScreenDoc>,
         mockMethods: List<MockMethod>,
         text: DocsText,
-        device: DeviceSurface = DeviceSurface.NONE,
+        device: AgentDevice.Surface = AgentDevice.Surface.NONE,
     ): String = render(screens, AgentRegistry.runtimeCommands(text.mockExample, device), mockMethods, text)
 
     /** The command reference from its parts; [render] with the standard runtime commands is what `docs` writes. */

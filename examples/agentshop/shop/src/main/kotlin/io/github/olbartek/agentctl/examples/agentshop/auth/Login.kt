@@ -1,8 +1,8 @@
 package io.github.olbartek.agentctl.examples.agentshop.auth
 
 import io.github.olbartek.agentctl.AgentCommand
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentScreen
-import io.github.olbartek.agentctl.BiometryResult
 import io.github.olbartek.agentctl.CommandGate
 import io.github.olbartek.agentctl.Effect
 import io.github.olbartek.agentctl.Reducer
@@ -58,7 +58,7 @@ object Login {
         data object SubmitTapped : Action
         data object GoogleTapped : Action
         data object FaceIDTapped : Action
-        data class FaceIDAnswered(val result: BiometryResult) : Action
+        data class FaceIDAnswered(val result: AgentDevice.BiometryResult) : Action
         data class LoginResponse(val result: Outcome<Session, AuthError>) : Action
         data object UseOTPTapped : Action
         data object RegisterTapped : Action
@@ -108,12 +108,12 @@ object Login {
             }
 
             is Action.FaceIDAnswered -> when (action.result) {
-                BiometryResult.SUCCESS -> {
+                AgentDevice.BiometryResult.SUCCESS -> {
                     val session = state.faceIDAccount ?: return@Reducer next(state)
                     next(state, Effect.send(Action.Delegate.Authenticated(session)))
                 }
-                BiometryResult.FAILURE -> next(state.copy(faceIDError = FaceIDError.BIOMETRY_FAILED))
-                BiometryResult.UNAVAILABLE -> next(state.copy(faceIDError = FaceIDError.BIOMETRY_UNAVAILABLE))
+                AgentDevice.BiometryResult.FAILURE -> next(state.copy(faceIDError = FaceIDError.BIOMETRY_FAILED))
+                AgentDevice.BiometryResult.UNAVAILABLE -> next(state.copy(faceIDError = FaceIDError.BIOMETRY_UNAVAILABLE))
             }
 
             is Action.LoginResponse -> {

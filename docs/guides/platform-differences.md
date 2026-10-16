@@ -43,7 +43,7 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   `java.net.URI`, where the reference's `openURL` gets a `URL`; both parse it as strictly (CONTRACT.md §2.4).
   `device relaunch` builds the next store on a
   fresh `scope` (cancelling the old one ends the old store's effects), where the reference rebuilds the store over
-  the same dependencies. A host built with an `AppFactory` keeps what `prepare` built (the clients, and what they
+  the same dependencies. A host built with an `AgentAppFactory` keeps what `prepare` built (the clients, and what they
   stored) as the reference does; one built with a plain `makeStore` runs all of it again. In the app it is the same
   process, and `AgentLaunch.stores` gives the root the new store.
 - The real-OS `app` commands use `adb`: `app permission` takes an Android permission (`CAMERA` is

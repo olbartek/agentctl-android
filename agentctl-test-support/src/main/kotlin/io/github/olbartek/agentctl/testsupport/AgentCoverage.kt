@@ -1,8 +1,8 @@
 package io.github.olbartek.agentctl.testsupport
 
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentRegistry
 import io.github.olbartek.agentctl.ArgumentText
-import io.github.olbartek.agentctl.DeviceSurface
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.runtime.ScenarioResult
@@ -80,7 +80,7 @@ public class AgentCoverage<S, A>(
                 val tokens = ArgumentText.tokens(line.argument ?: "")
                 val sub = tokens.firstOrNull() ?: continue
                 used.add("device $sub")
-                if (sub == DeviceSurface.Subcommand.PUSH.rawValue && tokens.size > 1) used.add("device push ${tokens[1]}")
+                if (sub == AgentDevice.Surface.Subcommand.PUSH.rawValue && tokens.size > 1) used.add("device push ${tokens[1]}")
             }
         }
         val expected = surface.subcommands.map { "device ${it.rawValue}" } + surface.pushes.map { "device push ${it.name}" }

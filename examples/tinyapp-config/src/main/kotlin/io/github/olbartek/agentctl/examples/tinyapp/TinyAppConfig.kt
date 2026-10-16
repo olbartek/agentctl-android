@@ -1,7 +1,7 @@
 package io.github.olbartek.agentctl.examples.tinyapp
 
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
-import io.github.olbartek.agentctl.AgentPush
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
@@ -51,7 +51,7 @@ object TinyAppConfig {
                 }
             },
             pushes = listOf(
-                AgentPush(
+                AgentDevice.Push(
                     "item-updated",
                     help = "Item 2 was updated.",
                     received = TinyRoot.Action.Items(Items.Action.Refresh),

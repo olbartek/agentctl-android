@@ -1,11 +1,10 @@
 package io.github.olbartek.agentctl.examples.agentshop.onboarding
 
 import io.github.olbartek.agentctl.AgentCommand
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentScreen
 import io.github.olbartek.agentctl.CommandGate
-import io.github.olbartek.agentctl.DeviceLocation
 import io.github.olbartek.agentctl.Effect
-import io.github.olbartek.agentctl.PermissionStatus
 import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.examples.agentshop.clients.AccountClient
@@ -161,8 +160,8 @@ object AddressForm {
     }
 
     /** The mock geocoder: the one place it knows. */
-    val knownPlaces: Map<DeviceLocation, Address> = mapOf(
-        DeviceLocation(37.3349, -122.009) to Address(street = "1 Apple Park Way", city = "Cupertino", zip = "95014"),
+    val knownPlaces: Map<AgentDevice.Location, Address> = mapOf(
+        AgentDevice.Location(37.3349, -122.009) to Address(street = "1 Apple Park Way", city = "Cupertino", zip = "95014"),
     )
 
     data class State(val address: Address = Address(), val error: Error? = null) {
@@ -179,7 +178,7 @@ object AddressForm {
         data object UseLocationTapped : Action
 
         /** Where the device is, or why it could not say. */
-        data class Located(val result: Outcome<DeviceLocation, Error>) : Action
+        data class Located(val result: Outcome<AgentDevice.Location, Error>) : Action
 
         sealed interface Delegate : Action {
             /** `address` is `null` when skipped. */
@@ -193,7 +192,7 @@ object AddressForm {
                 state.copy(error = null),
                 Effect.run { send ->
                     val status = locationClient.requestAuthorization()
-                    if (status != PermissionStatus.GRANTED && status != PermissionStatus.LIMITED) {
+                    if (status != AgentDevice.PermissionStatus.GRANTED && status != AgentDevice.PermissionStatus.LIMITED) {
                         send(Action.Located(Outcome.Failure(Error.LOCATION_DENIED)))
                         return@run
                     }

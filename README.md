@@ -143,7 +143,7 @@ It also counts script columns in grapheme clusters, as Swift does.
 
 Where Android differs from iOS, this port adapts the reference rather than copying it: L3's Roborazzi or Paparazzi
 tasks, `adb` for the device commands, Compose's idleness for live settling, `AgentEnvironment.device` and
-`AppFactory` for the simulated device, and a few Kotlin-forced API shapes.
+`AgentAppFactory` for the simulated device, and a few Kotlin-forced API shapes.
 [The list, one difference per item](docs/guides/platform-differences.md).
 
 ## The example apps

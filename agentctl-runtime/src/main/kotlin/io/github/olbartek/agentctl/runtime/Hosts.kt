@@ -36,15 +36,15 @@ import kotlinx.coroutines.job
  * once at launch and again at each relaunch; the store runs its effects in that scope, which a relaunch cancels.
  *
  * ```kotlin
- * HeadlessHost(MyAppAgent, mockMethods, deviceConfig, AppFactory { environment ->
+ * HeadlessHost(MyAppAgent, mockMethods, deviceConfig, AgentAppFactory { environment ->
  *     val clients = MyClients.mocked(environment.mocks, SessionStorage.inMemory())
- *     return@AppFactory { scope -> MyApp.store(environment, clients, scope) }
+ *     return@AgentAppFactory { scope -> MyApp.store(environment, clients, scope) }
  * })
  * ```
  *
  * A host given a plain `makeStore` instead runs all of it again at each relaunch, clients included.
  */
-public fun interface AppFactory<S, A> {
+public fun interface AgentAppFactory<S, A> {
     /** Builds what outlives a relaunch, and returns how to build a store on a scope. */
     public fun prepare(environment: AgentEnvironment): (CoroutineScope) -> AgentStore<S, A>
 }
@@ -53,14 +53,14 @@ public fun interface AppFactory<S, A> {
 internal fun AgentEnvironment.withScope(scope: CoroutineScope): AgentEnvironment =
     AgentEnvironment(scope, clock, mocks, uuids, random, zone, locale, device)
 
-/** A [makeStore] as an [AppFactory]: everything is built again at each launch. */
-internal fun <S, A> rebuilding(makeStore: (AgentEnvironment) -> AgentStore<S, A>): AppFactory<S, A> =
-    AppFactory { environment -> { scope -> makeStore(environment.withScope(scope)) } }
+/** A [makeStore] as an [AgentAppFactory]: everything is built again at each launch. */
+internal fun <S, A> rebuilding(makeStore: (AgentEnvironment) -> AgentStore<S, A>): AgentAppFactory<S, A> =
+    AgentAppFactory { environment -> { scope -> makeStore(environment.withScope(scope)) } }
 
 /**
  * A real store running in the CLI's process with the deterministic environment CONTRACT.md §6 requires.
  *
- * It builds exactly this [AgentEnvironment] and hands it to the host's `makeStore` (or its [AppFactory]):
+ * It builds exactly this [AgentEnvironment] and hands it to the host's `makeStore` (or its [AgentAppFactory]):
  *
  * | Field | Headless value |
  * |---|---|
@@ -83,11 +83,11 @@ public class HeadlessHost<S, A>(
     public val mockMethods: List<MockMethod>,
     /** What of the device scripts can drive, and the actions its events become (`device`). */
     public val deviceConfig: AgentDeviceConfig<A>,
-    app: AppFactory<S, A>,
+    app: AgentAppFactory<S, A>,
 ) {
     /**
      * A host whose [makeStore] builds the whole app. `device relaunch` runs it again, so whatever it builds starts over,
-     * clients included; an app whose clients keep something across a relaunch uses an [AppFactory].
+     * clients included; an app whose clients keep something across a relaunch uses an [AgentAppFactory].
      */
     public constructor(
         container: AgentContainer<S, A>,
@@ -222,11 +222,11 @@ public class LiveHost<S, A>(
     public val dispatcher: CoroutineDispatcher,
     /** What of the device scripts can drive, and the actions its events become (`device`). */
     public val deviceConfig: AgentDeviceConfig<A>,
-    app: AppFactory<S, A>,
+    app: AgentAppFactory<S, A>,
 ) {
     /**
      * A host whose [makeStore] builds the whole app. `device relaunch` runs it again, so whatever it builds starts over,
-     * clients included; an app whose clients keep something across a relaunch uses an [AppFactory].
+     * clients included; an app whose clients keep something across a relaunch uses an [AgentAppFactory].
      */
     public constructor(
         container: AgentContainer<S, A>,
