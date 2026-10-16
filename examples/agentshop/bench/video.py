@@ -35,18 +35,23 @@ DEVICE_FILE = "/sdcard/agentshop-bench.mp4"
 
 
 class Recorder:
-    """`adb shell screenrecord` in the background. `started` is when it reported that it was capturing."""
+    """
+    `adb shell screenrecord` in the background. `started` is when it reported that it was capturing. It is stopped by
+    its own PID on the device, never by name: another screenrecord there (an `app record`, say) is not ours to stop.
+    """
 
     def __init__(self, path: Path) -> None:
         self.path = path
         subprocess.run([bench.ADB, "-s", bench.SERIAL, "shell", "rm", "-f", DEVICE_FILE], env=bench.ENV)
         self.process = subprocess.Popen(
-            [bench.ADB, "-s", bench.SERIAL, "shell", "screenrecord", "--verbose", "--bit-rate", "8000000", DEVICE_FILE],
+            # The shell prints its PID, then becomes screenrecord: that PID is screenrecord's.
+            [bench.ADB, "-s", bench.SERIAL, "shell", f"echo $$; exec screenrecord --verbose --bit-rate 8000000 {DEVICE_FILE}"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=bench.ENV,
         )
         self.ready = threading.Event()
         self.started = 0.0
         self.log: list[str] = []
+        self.device_pid = ""
         threading.Thread(target=self._watch, daemon=True).start()
         if not self.ready.wait(20):
             self.process.kill()
@@ -54,13 +59,16 @@ class Recorder:
 
     def _watch(self) -> None:
         for line in self.process.stdout:  # type: ignore[union-attr]
+            if not self.device_pid and line.strip().isdigit():
+                self.device_pid = line.strip()
+                continue
             self.log.append(line)
             if "Content area is" in line and not self.ready.is_set():
                 self.started = time.perf_counter()
                 self.ready.set()
 
     def stop(self) -> None:
-        subprocess.run([bench.ADB, "-s", bench.SERIAL, "shell", "pkill", "-INT", "screenrecord"], env=bench.ENV)
+        subprocess.run([bench.ADB, "-s", bench.SERIAL, "shell", "kill", "-INT", self.device_pid], env=bench.ENV)
         self.process.wait(30)
         time.sleep(1)  # the muxer finishes the file
         subprocess.run([bench.ADB, "-s", bench.SERIAL, "pull", DEVICE_FILE, str(self.path)], env=bench.ENV,
