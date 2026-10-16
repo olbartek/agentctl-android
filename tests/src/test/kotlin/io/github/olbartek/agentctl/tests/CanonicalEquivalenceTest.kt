@@ -100,11 +100,14 @@ class CanonicalEquivalenceTest {
                 "device permission caméra granted; device push thé; expect screen=café commandé=oui taille=crème pings=1",
         )
         assertTrue(script != Normalizer.normalize(script, Normalizer.Form.NFC), "the script is really decomposed")
-        val runner = Cafe.host().makeRunner()
+        val host = Cafe.host()
+        val runner = host.makeRunner()
         runner.launch()
         val result = runner.run(script)
         val text = StepFormatter.text(result.steps)
         assertEquals(RunStatus.OK, result.status, text)
+        // Stored under the app's own spelling, so the app's lookup finds it.
+        assertEquals(AgentDevice.PermissionStatus.GRANTED, host.device.permission("caméra"))
         // Each command is printed as typed; the summary as the app gives it, precomposed.
         assertEquals(script.split("; ").map { "> $it" }, text.lines().filter { it.startsWith("> ") })
         assertTrue("  screen=café commandé=oui taille=crème reçu=réseau pings=1\n" in text, text)

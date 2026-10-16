@@ -117,7 +117,7 @@ public object ScriptParser {
     /**
      * Reads a script or scenario file as strict UTF-8, as the reference's `String(contentsOf:encoding: .utf8)` does: a
      * file that is not valid UTF-8 cannot be read (a [java.nio.charset.CharacterCodingException]), rather than run with
-     * U+FFFD in place of its bad bytes.
+     * U+FFFD in place of its bad bytes. A leading byte order mark is dropped, as the reference's decoding drops it.
      *
      * @throws java.io.IOException when the file is missing, unreadable or not UTF-8.
      */
@@ -128,6 +128,7 @@ public object ScriptParser {
             .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
             .decode(java.nio.ByteBuffer.wrap(file.readBytes()))
             .toString()
+            .removePrefix("\uFEFF")
 
     /**
      * Parses the argument of `advance`: an unsigned integer immediately followed by one unit — `ms`, `s`, `m` or
