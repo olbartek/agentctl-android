@@ -11,13 +11,13 @@ import com.github.ajalt.clikt.core.parse
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
+import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.options.RawOption
 import com.github.ajalt.clikt.parameters.options.validate
 import com.github.ajalt.clikt.parameters.types.choice
-import com.github.ajalt.clikt.parameters.types.double
-import com.github.ajalt.clikt.parameters.types.int
 import io.github.olbartek.agentctl.BridgeDefaults
 import io.github.olbartek.agentctl.CLIName
 import io.github.olbartek.agentctl.runtime.AgentDriver
@@ -57,7 +57,7 @@ public object AgentCtl {
         val cli = Cli(config, io, environment, workingDirectory)
         val root = command(cli)
         return try {
-            root.parse(args)
+            root.parse(helpArguments(arguments(args), root))
             0
         } catch (error: CliktError) {
             val status = exitStatus(error)
@@ -81,9 +81,44 @@ public object AgentCtl {
         else -> if (error.statusCode == 1) RunStatus.USAGE.code else error.statusCode
     }
 
+    /**
+     * The command line as Clikt should read it. `app location -33.86,151.20` (a southern latitude) would read as an
+     * option, so a value that starts with `-` and a digit moves behind a `--`, where it is the argument; the options
+     * around it keep working (as agentctl-ios's `AgentCtl.arguments`).
+     */
+    internal fun arguments(args: List<String>): List<String> {
+        if (args.size < 3 || args[0] != "app" || args[1] != "location" || "--" in args) return args
+        val index = (2 until args.size).firstOrNull { NEGATIVE_NUMBER.containsMatchIn(args[it]) } ?: return args
+        return args.filterIndexed { i, _ -> i != index } + listOf("--", args[index])
+    }
+
+    private val NEGATIVE_NUMBER = Regex("^-\\.?[0-9]")
+
+    /**
+     * `help [<subcommand>…]` as `<subcommand>… --help`: that command's help on stdout, exit 0, as Swift
+     * ArgumentParser's `help` subcommand. Only the root has it. The names are followed while they name a subcommand;
+     * the first that does not ends the path, and the rest is ignored (`help nosuch` is the root's help).
+     */
+    internal fun helpArguments(args: List<String>, root: CoreCliktCommand): List<String> {
+        if (args.firstOrNull() != "help") return args
+        // `help`'s own flags ask for help too; any other option is a usage error, which [HelpCommand] raises.
+        val rest = args.drop(1).filter { it !in HELP_FLAGS }
+        if (rest.any { it.startsWith("-") }) return args
+        val path = mutableListOf<String>()
+        var command = root
+        for (name in rest) {
+            command = command.registeredSubcommands().firstOrNull { it.commandName == name } as? CoreCliktCommand ?: break
+            path += name
+        }
+        return path + "--help"
+    }
+
+    private val HELP_FLAGS = setOf("-h", "--help", "-help")
+
     /** The command tree, for rendering help pages in tests. */
     internal fun <D : AgentDriver<A, *>, A> command(cli: Cli<D, A>): CoreCliktCommand = Root(cli)
         .subcommands(
+            HelpCommand(),
             RunCommand(cli),
             StateCommand(cli),
             ScreensCommand(cli),
@@ -136,9 +171,25 @@ public object AgentCtl {
         override fun helpEpilog(context: Context): String = listOfNotNull(
             cli.config.help.note,
             "Command reference: ${cli.config.docsPath} (or ${cli.config.help.invocation} screens).",
+            "See '${commandName(cli.config)} help <subcommand>' for detailed help.",
         ).joinToString("\n\n")
 
         override fun run() = Unit
+    }
+
+    /**
+     * `help [<subcommand>…]`, hidden as ArgumentParser's is. [helpArguments] answers it before Clikt parses; Clikt only
+     * sees it with an option that is not a help flag, and reports that as a usage error with this usage line.
+     */
+    private class HelpCommand : CoreCliktCommand(name = "help") {
+        override val hiddenFromHelp: Boolean = true
+
+        override fun help(context: Context): String = "Show subcommand help information."
+
+        @Suppress("unused")
+        private val subcommands by argument().multiple()
+
+        override fun run() = throw PrintHelpMessage(currentContext.parent, error = false)
     }
 
     private class AppGroup : CoreCliktCommand(name = "app") {
@@ -269,12 +320,12 @@ public object AgentCtl {
     ) {
         private val seed by option(help = "Commands to run before the first frame (appctl-seed).")
         private val device by option(help = "adb serial or AVD name.")
-        private val latency by option(help = "Fixed mock latency in ms (default: the app's 300–800 ms).").int()
+        private val latency by option(help = "Fixed mock latency in ms (default: the app's own).").swiftInt()
         private val clearSession by option("--clear-session", help = "Forget the saved session before launching.").flag()
         private val noBuild by option("--no-build", help = "Relaunch the installed app instead of building it.").flag()
         private val port by launchPortOption()
 
-        override fun execute(): Int = cli.appLaunch(seed, device ?: cli.config.device, latency, clearSession, !noBuild, port)
+        override fun execute(): Int = cli.appLaunch(seed, device ?: cli.config.device, clampedLatency(latency), clearSession, !noBuild, port?.toInt())
     }
 
     private class AppRunCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
@@ -289,7 +340,7 @@ public object AgentCtl {
         private val json by option(help = "Print a JSON array of steps.").flag()
         private val port by portOption(cli.config.outputPath)
 
-        override fun execute(): Int = cli.appRun(script, json, port)
+        override fun execute(): Int = cli.appRun(script, json, port?.toInt())
     }
 
     private class AppTestCommand<D : AgentDriver<A, *>, A>(private val cli: Cli<D, A>) : Subcommand(
@@ -307,18 +358,18 @@ public object AgentCtl {
         private val device by option(help = "adb serial or AVD name.")
         private val latency by option(
             help = "Fixed mock latency in ms (default: 0, so the first screen has loaded when the script starts).",
-        ).int()
+        ).swiftInt()
         private val noBuild by option("--no-build", help = "Use the installed app instead of building it.").flag()
         private val record by option(help = "Record the run to this .mp4, with a <file>.chapters.txt of when each scenario started.")
         private val stepDelay by option(
             "--step-delay",
             help = "Send the scenario one line at a time, this many seconds apart, so a recording can be followed.",
-        ).double()
+        ).convert { SwiftNumbers.double(it) ?: fail(context.localization.floatConversionError(it)) }.validate { validateStepDelay(it) }
         private val port by launchPortOption()
 
         override fun execute(): Int = cli.appTest(
             paths,
-            AppTest.Options(device ?: cli.config.device, latency, !noBuild, port, record, stepDelay),
+            AppTest.Options(device ?: cli.config.device, clampedLatency(latency), !noBuild, port?.toInt(), record, stepDelay),
         )
     }
 
@@ -460,7 +511,7 @@ public object AgentCtl {
     ) {
         private val port by portOption(cli.config.outputPath)
 
-        override fun execute(): Int = cli.appGet(path, port)
+        override fun execute(): Int = cli.appGet(path, port?.toInt())
     }
 }
 
@@ -473,17 +524,40 @@ private fun CoreCliktCommand.deviceOption(cli: Cli<*, *>) = option(
 /** `--port` for `app run`, `app state` and `app screens`: which bridge to talk to. */
 private fun CoreCliktCommand.portOption(outputPath: String) = option(
     help = "The port of the app's agent bridge. Default: APPCTL_PORT, else the last launch's (${outputPath}/bridge.json), else ${BridgeDefaults.PORT}.",
-).int().validate { validatePort(it) }
+).swiftInt().validate { validatePort(it) }
 
 /** `--port` for `app launch` and `app test`: which port to start the bridge on. */
 private fun CoreCliktCommand.launchPortOption() = option(
     help = "The port for the app's agent bridge (the app's agent-port). Default: APPCTL_PORT, else ${BridgeDefaults.PORT} or the next free port.",
-).int().validate { validatePort(it) }
+).swiftInt().validate { validatePort(it) }
 
 /**
  * `--port` outside 1-65535 is a usage error while the command line is parsed, before the repo root is looked for, as
  * agentctl-ios checks it: Clikt prints it with the command's usage line, and the CLI exits 2.
  */
-private fun validatePort(port: Int) {
+private fun validatePort(port: Long) {
     Ports.flagError(port)?.let { throw UsageError(it) }
 }
+
+/**
+ * `--step-delay` must be finite and 0-3600 seconds: a usage error while the command line is parsed, before anything is
+ * built, as agentctl-ios checks it. The value is shown as Swift prints a `Double` ([SwiftNumbers.description]).
+ */
+private fun validateStepDelay(seconds: Double) {
+    if (seconds.isFinite() && seconds in 0.0..3600.0) return
+    throw UsageError("--step-delay must be between 0 and 3600 seconds, not '${SwiftNumbers.description(seconds)}'")
+}
+
+/**
+ * An integer option as Swift's `Int(_:)` reads it ([SwiftNumbers.int]): an optional sign and ASCII digits, 64-bit.
+ * Clikt's `int()` also takes other scripts' digits (`--port ٣` as 3) and stops at 32 bits, where agentctl-ios reads
+ * `99999999999` and then checks its range. The error is Clikt's own.
+ */
+private fun RawOption.swiftInt() = convert { SwiftNumbers.int(it) ?: fail(context.localization.intConversionError(it)) }
+
+/**
+ * A `--latency` as the app can take it: agentctl-ios passes any 64-bit value on, which its app reads as a fixed
+ * latency (a negative one as none). An Android launch extra is 32-bit, so a value past that is the nearest one, which
+ * behaves the same: about 25 days, or none.
+ */
+private fun clampedLatency(milliseconds: Long?): Int? = milliseconds?.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong())?.toInt()

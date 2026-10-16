@@ -27,6 +27,44 @@ class CliTest {
         assertEquals("", help.err)
     }
 
+    /**
+     * `help [<subcommand>…]` is `<subcommand>… --help`, as Swift ArgumentParser's root `help` is: stdout, exit 0. A name
+     * that is not a subcommand ends the path (`help nosuch` is the root's help), and `help` is only the root's.
+     */
+    @Test
+    fun helpIsTheRootsHelpSubcommand() {
+        for ((args, page) in listOf(
+            listOf("help") to listOf(),
+            listOf("help", "app") to listOf("app"),
+            listOf("help", "app", "record") to listOf("app", "record"),
+            listOf("help", "nosuch") to listOf(),
+            listOf("help", "app", "nosuch", "record") to listOf("app"),
+            listOf("help", "run", "extra") to listOf("run"),
+            listOf("help", "--help") to listOf(),
+            listOf("help", "-h") to listOf(),
+            listOf("help", "-help") to listOf(),
+            listOf("help", "app", "--help") to listOf("app"),
+        )) {
+            val result = tinyctl(*args.toTypedArray())
+            assertEquals(0, result.status, "$args: ${result.combined}")
+            assertEquals("", result.err, "$args")
+            assertEquals(tinyctl(*(page + "--help").toTypedArray()).out, result.out, "$args")
+        }
+        for (args in listOf(listOf("app", "help"), listOf("app", "record", "help"))) {
+            assertEquals(2, tinyctl(*args.toTypedArray()).status, "$args")
+        }
+        // Any other option is not help's: a usage error, as ArgumentParser's "Unknown option".
+        for (args in listOf(listOf("help", "--nope"), listOf("help", "app", "--nope"), listOf("help", "-x", "app"))) {
+            val result = tinyctl(*args.toTypedArray())
+            assertEquals(2, result.status, "$args: ${result.combined}")
+            assertEquals("", result.out, "$args")
+            assertTrue(result.err.startsWith("Usage: tinyctl help "), "$args: ${result.err}")
+            assertTrue("Error: no such option ${args.first { it.startsWith("-") }}" in result.err, "$args: ${result.err}")
+        }
+        // The root's help says so last, as ArgumentParser's does.
+        assertTrue(tinyctl("--help").out.endsWith("\n\nSee 'tinyctl help <subcommand>' for detailed help.\n"), tinyctl("--help").out)
+    }
+
     @Test
     fun malformedCommandLinesAreUsageErrors() {
         for (args in listOf(arrayOf("bogus"), arrayOf("run"), arrayOf("run", "a", "b"), arrayOf("run", "--nope", "x"), arrayOf("app", "run", "--port", "x"))) {
@@ -36,6 +74,7 @@ class CliTest {
         }
         // A command group without a subcommand prints its usage as an error.
         assertEquals(2, tinyctl().status)
+        assertEquals(2, tinyctl("app").status)
     }
 
     /** Every page is rendered from the host's examples, so none names another app's CLI or screens. */

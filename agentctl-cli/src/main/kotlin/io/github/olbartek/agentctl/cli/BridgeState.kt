@@ -109,7 +109,7 @@ internal object Ports {
      * error for a value that is not a port, or `null` for one that is. 0 would let the app pick a port the CLI never
      * learns.
      */
-    fun flagError(value: Int): String? = if (value in 1..65535) null else "--port must be a port from 1 to 65535, not $value"
+    fun flagError(value: Long): String? = if (value in 1..65535) null else "--port must be a port from 1 to 65535, not $value"
 
     /** `APPCTL_PORT` is set but is not a port: a usage error (exit 2). */
     class BadEnvironmentPort(val value: String) : Exception("$ENVIRONMENT_VARIABLE is not a port: '$value' (expected 1-65535)")

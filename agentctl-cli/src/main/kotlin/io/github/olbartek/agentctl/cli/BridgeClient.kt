@@ -3,13 +3,20 @@ package io.github.olbartek.agentctl.cli
 import io.github.olbartek.agentctl.runtime.HttpParser
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URI
+import java.util.Timer
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.schedule
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
-/** Talks to the agent bridge in the running app over loopback HTTP (through `adb forward` on a device). */
-internal class BridgeClient(private val port: Int) {
+/**
+ * Talks to the agent bridge in the running app over loopback HTTP (through `adb forward` on a device). `POST /run` may
+ * take [scriptLimit] in all; every other request [IDLE_TIMEOUT] without an answer.
+ */
+internal class BridgeClient(private val port: Int, private val scriptLimit: Duration = Companion.scriptLimit) {
     /** [app] is the bridge's `X-Appctl-App`: the app it belongs to, or `null` from a bridge that does not say. */
     data class Response(val status: Int, val body: String, val exitCode: Int, val app: String? = null, val platform: String? = null) {
         /**
@@ -26,20 +33,52 @@ internal class BridgeClient(private val port: Int) {
         fun contradicts(recorded: BridgeState): Boolean = !isFrom(recorded.appId, recorded.platform)
     }
 
+    /**
+     * `POST /run` that did not finish within its limit: the bridge was reached, and the app may still be running the
+     * script (as agentctl-ios's `BridgeClient.ScriptTimedOut`). An [IOException], so every caller that reports an
+     * unreachable bridge catches it, and [Message.bridgeUnreachable] says this instead.
+     */
+    class ScriptTimedOut(val port: Int, val limit: Duration) : IOException(
+        "the app did not finish the script within ${limit.inWholeSeconds} s (agent bridge on 127.0.0.1:$port); it may still be running it",
+    )
+
+    /**
+     * Sends one request. [timeout] bounds a request that runs nothing, without an answer; `POST /run` is limited by
+     * [scriptLimit] on the whole request instead, and throws [ScriptTimedOut] past it.
+     */
     @Throws(IOException::class)
-    fun send(method: String, path: String, body: String? = null, timeout: Duration = 60.seconds): Response {
+    fun send(method: String, path: String, body: String? = null, timeout: Duration = IDLE_TIMEOUT): Response {
         val connection = URI("http://127.0.0.1:$port$path").toURL().openConnection() as HttpURLConnection
+        // The bridge answers a script only once it is done (CONTRACT.md §8.4), so one that waits on the app's real time
+        // stays silent for as long as it runs: its limit is on the whole request, and generous.
+        val runsScript = method == "POST" && path.startsWith("/run")
+        val expired = AtomicBoolean(false)
+        var connected = false
+        val deadline = if (runsScript) {
+            Timer("agentctl-run-limit", true).apply {
+                schedule(scriptLimit.inWholeMilliseconds) {
+                    expired.set(true)
+                    connection.disconnect()
+                }
+            }
+        } else {
+            null
+        }
         try {
             connection.requestMethod = method
             connection.connectTimeout = timeout.inWholeMilliseconds.toInt()
-            connection.readTimeout = timeout.inWholeMilliseconds.toInt()
+            connection.readTimeout = (if (runsScript) scriptLimit else timeout).inWholeMilliseconds.toInt()
+            // Connected explicitly: only a script that reached the bridge can have run past its limit. A connection
+            // that times out never reached it, and stays "cannot reach".
             connection.setRequestProperty("Connection", "close")
-            if (body != null) {
-                val bytes = body.toByteArray(Charsets.UTF_8)
+            val bytes = body?.toByteArray(Charsets.UTF_8)
+            if (bytes != null) {
                 connection.doOutput = true
                 connection.setFixedLengthStreamingMode(bytes.size)
-                connection.outputStream.use { it.write(bytes) }
             }
+            connection.connect()
+            connected = true
+            bytes?.let { connection.outputStream.use { stream -> stream.write(it) } }
             val status = connection.responseCode
             val stream = if (status >= 400) connection.errorStream else connection.inputStream
             val text = stream?.use { String(it.readBytes(), Charsets.UTF_8) } ?: ""
@@ -52,7 +91,11 @@ internal class BridgeClient(private val port: Int) {
                 connection.getHeaderField(HttpParser.APP_HEADER),
                 connection.getHeaderField(HttpParser.PLATFORM_HEADER),
             )
+        } catch (error: IOException) {
+            if (runsScript && connected && (expired.get() || error is SocketTimeoutException)) throw ScriptTimedOut(port, scriptLimit)
+            throw error
         } finally {
+            deadline?.cancel()
             connection.disconnect()
         }
     }
@@ -70,5 +113,17 @@ internal class BridgeClient(private val port: Int) {
             Thread.sleep(100)
         }
         throw AppCtlException("the app's agent bridge did not answer on 127.0.0.1:$port within $timeout")
+    }
+
+    companion object {
+        /** How long a request that runs nothing (`GET`, the readiness poll) may go without an answer. */
+        val IDLE_TIMEOUT: Duration = 60.seconds
+
+        /** How long `POST /run` may take in all, as agentctl-ios's `BridgeClient.scriptLimit`. */
+        val SCRIPT_LIMIT: Duration = 3600.seconds
+
+        /** The limit a new client gets: [SCRIPT_LIMIT], shorter only in a test. */
+        @Volatile
+        var scriptLimit: Duration = SCRIPT_LIMIT
     }
 }

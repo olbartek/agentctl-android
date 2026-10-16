@@ -43,7 +43,7 @@ public data class GradleTasks(
 public data class AppCheck(
     /** Commands to seed the app with before the scenario (`appctl-seed`). */
     val seed: String? = null,
-    /** The scenario to send through the bridge, without its extension. `null` uses the first scenario file. */
+    /** The scenario to send through the bridge, without its extension. `null` uses the first scenario file without a `# app-test: skip` line. */
     val scenario: String? = null,
     /** The screen path the app must be on afterwards. `null` skips that assertion. */
     val expectScreen: String? = null,

@@ -94,7 +94,7 @@ the new launch takes, so forwards do not pile up per device; no other forward is
 
 **Who answers.** The bridge names its app and its platform on every response (`X-Appctl-App: <application id>` and
 `X-Appctl-Platform: android`, §8.4), so the CLI never drives the wrong app, not even the same app's iOS build, which
-often has the same ID. `app launch` checks that its own app on Android answered, and `app test` checks every response
+often has the same ID. `app launch` checks that its own app on Android answered, and `app test` and `check --ui` check every response
 of every scenario the same way (a mismatch fails the scenario as not run, exit 3: `another app took the port during the run`). A different app or platform, or an
 answer without either header, means the port was taken. A scanned port then gets one more try on the next free port, and a port you named
 fails with exit 3. When the port came from `bridge.json`, `app run` first asks `GET /snapshot` who answers, and posts

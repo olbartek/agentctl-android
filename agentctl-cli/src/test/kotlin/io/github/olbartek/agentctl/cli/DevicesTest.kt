@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -72,5 +73,52 @@ class DevicesTest {
             "adb devices did not answer within 60 s; the adb server may be stuck: run 'adb kill-server', or restart the emulator",
             Message.adbDidNotAnswer(Devices.LIST_SECONDS),
         )
+    }
+
+    /** An adb that fails says why, not that no device is connected (its listing is empty). */
+    @Test
+    fun anAdbDevicesThatFailsSaysWhy() {
+        val broken = Files.createTempFile("adb", "").toFile().apply {
+            writeText("#!/bin/sh\necho 'List of devices attached'\necho '  adb: failed to check server version: protocol fault  ' >&2\nexit 1\n")
+            setExecutable(true)
+        }
+        try {
+            val error = kotlin.test.assertFailsWith<AppCtlException> { Devices.list(broken.path) {} }
+            assertEquals("cannot run `adb devices` (exit 1): adb: failed to check server version: protocol fault", error.message)
+            broken.writeText("#!/bin/sh\nexit 2\n")
+            val silent = kotlin.test.assertFailsWith<AppCtlException> { Devices.list(broken.path) {} }
+            assertEquals("cannot run `adb devices` (exit 2)", silent.message)
+        } finally {
+            broken.delete()
+        }
+    }
+
+    /** No adb at all names where the CLI looked for the SDK. */
+    @Test
+    fun aMissingAdbSaysWhereTheSdkComesFrom() {
+        val root = Files.createTempDirectory("sdk-root").toFile()
+        try {
+            val error = kotlin.test.assertFailsWith<AppCtlException> {
+                Devices.list("/nonexistent/adb", missing = AndroidSdk.missingAdb(root, emptyMap())) {}
+            }
+            assertEquals(
+                "cannot run adb (/nonexistent/adb): no Android SDK found: set ANDROID_HOME, or sdk.dir in local.properties",
+                error.message,
+            )
+            val sdk = File(root, "sdk").apply { mkdirs() }
+            assertEquals(
+                "no adb in ${sdk.path}/platform-tools (from ANDROID_HOME), nor on PATH: set ANDROID_HOME, or sdk.dir in " +
+                    "local.properties, to the Android SDK",
+                AndroidSdk.missingAdb(root, mapOf("ANDROID_HOME" to sdk.path)),
+            )
+            File(root, "local.properties").writeText("sdk.dir=${sdk.path}\n")
+            assertEquals(
+                "no adb in ${sdk.path}/platform-tools (from local.properties' sdk.dir), nor on PATH: set ANDROID_HOME, or " +
+                    "sdk.dir in local.properties, to the Android SDK",
+                AndroidSdk.missingAdb(root, emptyMap()),
+            )
+        } finally {
+            root.deleteRecursively()
+        }
     }
 }

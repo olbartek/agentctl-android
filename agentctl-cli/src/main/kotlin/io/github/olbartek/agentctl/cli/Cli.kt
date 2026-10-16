@@ -285,7 +285,9 @@ internal class Cli<D : AgentDriver<A, *>, A>(
             response.exitCode
         } catch (error: IOException) {
             val unreachable = Message.bridgeUnreachable(this, resolved.port, error)
-            io.error(resolved.state?.let { unreachable + Message.staleBridgeState(this, it) } ?: unreachable)
+            // A script past its limit reached the app recorded there: the launch state is not stale.
+            val stale = resolved.state?.takeIf { error !is BridgeClient.ScriptTimedOut }
+            io.error(stale?.let { unreachable + Message.staleBridgeState(this, it) } ?: unreachable)
             RunStatus.INTERNAL_ERROR.code
         }
     }
@@ -366,8 +368,10 @@ internal class AppCtlException(message: String, val status: RunStatus = RunStatu
 
 /** The messages that name the CLI itself. They spell it with the host's own invocation. */
 internal object Message {
+    /** A request to the bridge that failed. A script that ran past its limit reached the bridge, so it says that instead. */
     fun bridgeUnreachable(cli: Cli<*, *>, port: Int, error: Exception): String =
-        "cannot reach the app's agent bridge on 127.0.0.1:$port (is the app running? ${cli.invocation} app launch): $error"
+        if (error is BridgeClient.ScriptTimedOut) error.message!!
+        else "cannot reach the app's agent bridge on 127.0.0.1:$port (is the app running? ${cli.invocation} app launch): $error"
 
     /** Appended to [bridgeUnreachable] when the port came from `bridge.json`: the app it recorded has gone. */
     fun staleBridgeState(cli: Cli<*, *>, state: BridgeState): String =
@@ -415,6 +419,10 @@ internal object Message {
     /** `bridge.json` is there but is not a launch state. */
     fun unreadableBridgeState(cli: Cli<*, *>, reason: String): String =
         "cannot read ${cli.config.outputPath}/bridge.json: $reason; relaunch with ${cli.invocation} app launch, or pass --port"
+
+    /** `adb devices` ran and failed: its exit status and what it said on stderr (as agentctl-ios reports simctl's). */
+    fun adbDevicesFailed(status: Int, stderr: String): String =
+        "cannot run `adb devices` (exit $status)" + stderr.trim().let { if (it.isEmpty()) "" else ": $it" }
 
     /** `test` and L2 with nothing to run. Zero scenarios passing is not a pass. */
     fun noScenarios(directory: File): String =

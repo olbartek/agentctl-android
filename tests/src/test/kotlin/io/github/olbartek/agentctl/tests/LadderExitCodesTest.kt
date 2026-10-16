@@ -6,7 +6,10 @@ import io.github.olbartek.agentctl.runtime.AgentStoreDriver
 import io.github.olbartek.agentctl.runtime.AppCheck
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
 import io.github.olbartek.agentctl.runtime.GradleTasks
+import com.sun.net.httpserver.HttpServer
 import java.io.File
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -74,8 +77,11 @@ class LadderExitCodesTest {
         )
     }
 
-    private fun run(vararg args: String, config: AppCtlConfig<AgentStoreDriver<TinyRoot.State, TinyRoot.Action>, TinyRoot.Action> = config()) =
-        cli(*args, config = config, environment = mapOf("ANDROID_HOME" to sdk.path), workingDirectory = root)
+    private fun run(
+        vararg args: String,
+        config: AppCtlConfig<AgentStoreDriver<TinyRoot.State, TinyRoot.Action>, TinyRoot.Action> = config(),
+        environment: Map<String, String> = emptyMap(),
+    ) = cli(*args, config = config, environment = mapOf("ANDROID_HOME" to sdk.path) + environment, workingDirectory = root)
 
     private val withSnapshots = GradleTasks(build = listOf("assemble"), test = listOf("test"), snapshotModules = listOf(":app"))
 
@@ -177,6 +183,118 @@ class LadderExitCodesTest {
         val result = run("check", "--ui", "--device", "Pixel 7", config = config(appCheck = AppCheck(scenario = "browse")))
         assertEquals(2, result.status, result.combined)
         assertTrue("  several devices are named 'Pixel 7'; pass --device <serial>:\n" in result.out, result.out)
+    }
+
+    // check --ui L4, against a fake device and a fake bridge
+
+    /** A bridge on 127.0.0.1: `/snapshot` answers [snapshot], `/run` answers [run]; each as [answersAs] says. */
+    private inner class FakeBridge : AutoCloseable {
+        var snapshot = "> snapshot\n  screen=items items=3 loading=false\n"
+        var run = "> open 2\n  screen=items/2 title=\"Second item\"\n"
+        var runExit = 0
+
+        /** The app and platform each path answers as, once the launch's own readiness poll has been answered. */
+        val answersAs = mutableMapOf<String, Pair<String, String>>()
+        private var ready = false
+        private val server = HttpServer.create(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0).apply {
+            createContext("/") { exchange ->
+                val path = exchange.requestURI.path
+                exchange.requestBody.readBytes()
+                val (app, platform) = answersAs[path]?.takeIf { ready } ?: (TinyAppConfig.appCtl.applicationId to "android")
+                val body = (if (path == "/run") run else snapshot).toByteArray()
+                exchange.responseHeaders.add("X-Appctl-Exit", if (path == "/run") "$runExit" else "0")
+                exchange.responseHeaders.add("X-Appctl-App", app)
+                exchange.responseHeaders.add("X-Appctl-Platform", platform)
+                exchange.sendResponseHeaders(200, body.size.toLong())
+                exchange.responseBody.use { it.write(body) }
+                ready = true
+            }
+            start()
+        }
+        val port: Int get() = server.address.port
+
+        override fun close() = server.stop(0)
+    }
+
+    /** An adb with one emulator that does everything asked of it. */
+    private fun oneEmulator() = adb(
+        """
+        case "${'$'}*" in
+          devices) printf 'List of devices attached\nemulator-5554\tdevice\n' ;;
+          *"shell getprop ro.build.version.release") echo 16 ;;
+          *"emu avd name") printf 'tiny_avd\nOK\n' ;;
+          *) exit 0 ;;
+        esac
+        """.trimIndent(),
+    )
+
+    private fun checkUi(bridge: FakeBridge, appCheck: AppCheck = AppCheck(scenario = "refresh-error", expectScreen = "items")) =
+        run("check", "--ui", config = config(appCheck = appCheck), environment = mapOf("APPCTL_PORT" to "${bridge.port}"))
+
+    private fun anotherApp(port: Int) =
+        "  the app's agent bridge on 127.0.0.1:$port answers as other.app (android), " +
+            "not ${TinyAppConfig.appCtl.applicationId} (android): another app took the port during the run\n"
+
+    @Test
+    fun theAppPassesL4OnTheFakes() {
+        oneEmulator()
+        File(scenariosDirectory, "refresh-error.appctl").copyTo(File(root, "examples/tinyapp/scenarios/refresh-error.appctl"))
+        FakeBridge().use { bridge ->
+            val result = checkUi(bridge)
+            assertEquals(0, result.status, result.combined)
+            assertTrue("L4 app        ok    refresh-error via the agent bridge" in result.out, result.out)
+        }
+    }
+
+    @Test
+    fun anotherAppAnsweringTheScriptFailsL4() {
+        oneEmulator()
+        File(scenariosDirectory, "refresh-error.appctl").copyTo(File(root, "examples/tinyapp/scenarios/refresh-error.appctl"))
+        FakeBridge().use { bridge ->
+            bridge.answersAs["/run"] = "other.app" to "android"
+            val result = checkUi(bridge)
+            assertEquals(3, result.status, result.combined)
+            assertTrue("L4 app        FAIL  another app answered" in result.out, result.out)
+            assertTrue(anotherApp(bridge.port) in result.out, result.out)
+        }
+    }
+
+    @Test
+    fun anotherAppAnsweringTheSnapshotFailsL4() {
+        oneEmulator()
+        File(scenariosDirectory, "refresh-error.appctl").copyTo(File(root, "examples/tinyapp/scenarios/refresh-error.appctl"))
+        FakeBridge().use { bridge ->
+            bridge.answersAs["/snapshot"] = "other.app" to "android"
+            val result = checkUi(bridge)
+            assertEquals(3, result.status, result.combined)
+            assertTrue("L4 app        FAIL  another app answered" in result.out, result.out)
+            assertTrue(anotherApp(bridge.port) in result.out, result.out)
+        }
+    }
+
+    /** `items` is not `items/2`: the expected screen is the whole `screen=` token. */
+    @Test
+    fun theExpectedScreenIsMatchedWhole() {
+        oneEmulator()
+        File(scenariosDirectory, "refresh-error.appctl").copyTo(File(root, "examples/tinyapp/scenarios/refresh-error.appctl"))
+        FakeBridge().use { bridge ->
+            bridge.snapshot = "> snapshot\n  screen=items/2 title=\"Second item\"\n"
+            val result = checkUi(bridge)
+            assertEquals(1, result.status, result.combined)
+            assertTrue("L4 app        FAIL  unexpected final screen" in result.out, result.out)
+        }
+    }
+
+    /** With no scenario named, L4 runs the first one `app test` would not skip: browse is marked `# app-test: skip`. */
+    @Test
+    fun l4SkipsAScenarioMarkedSkip() {
+        oneEmulator()
+        File(scenariosDirectory, "refresh-error.appctl").copyTo(File(root, "examples/tinyapp/scenarios/refresh-error.appctl"))
+        FakeBridge().use { bridge ->
+            val result = checkUi(bridge, AppCheck())
+            assertEquals(0, result.status, result.combined)
+            assertTrue("L4 app        ok    refresh-error via the agent bridge" in result.out, result.out)
+        }
     }
 
     // snapshots

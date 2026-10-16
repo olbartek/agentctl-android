@@ -30,6 +30,7 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
     private val config = cli.config
     private val layout = Layout(root, config.outputPath)
     private val adb = AndroidSdk.adb(root, cli.environment)
+    private val missingAdb: String? get() = AndroidSdk.missingAdb(root, cli.environment)
 
     data class Launched(val device: Device, val port: Int, val report: String)
 
@@ -180,13 +181,13 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
     fun resolve(nameOrSerial: String?): Device = locate(nameOrSerial, boots = true)
 
     /** Whether [serial] is connected and answers (quietly: no warning for one that does not). */
-    fun isConnected(serial: String): Boolean = Devices.list(adb) {}.ready.any { it.serial == serial }
+    fun isConnected(serial: String): Boolean = Devices.list(adb, missing = missingAdb) {}.ready.any { it.serial == serial }
 
     /** [resolve], without booting: an AVD that is not running fails as not booted. For the `app` device commands. */
     fun find(nameOrSerial: String?): Device = locate(nameOrSerial, boots = false)
 
     private fun locate(nameOrSerial: String?, boots: Boolean): Device {
-        val listing = Devices.list(adb) { cli.io.err.println("warning: $it") }
+        val listing = Devices.list(adb, missing = missingAdb) { cli.io.err.println("warning: $it") }
         val devices = listing.ready
         if (nameOrSerial == null) {
             return devices.singleOrNull() ?: throw AppCtlException(
@@ -218,13 +219,22 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             .redirectOutput(log)
             .start()
         val start = TimeSource.Monotonic.markNow()
+        // A listing that fails while the emulator starts (its adb server restarting, say) is waited out with the rest
+        // of the boot; if it is still failing at the end, that is the error.
+        var failure: AppCtlException? = null
         while (start.elapsedNow() < 300.seconds) {
             // Quietly: a device that does not answer was reported once already, by resolve.
-            val booted = Devices.list(adb) {}.ready.firstOrNull { it.serial !in before && it.name == avd }
+            val booted = try {
+                Devices.list(adb, missing = missingAdb) {}.ready.firstOrNull { it.serial !in before && it.name == avd }
+                    .also { failure = null }
+            } catch (error: AppCtlException) {
+                failure = error
+                null
+            }
             if (booted != null && getprop(booted.serial, "sys.boot_completed") == "1") return booted
             Thread.sleep(1000)
         }
-        throw AppCtlException("the emulator $avd did not boot within 5 minutes; log: ${log.path}")
+        throw failure ?: AppCtlException("the emulator $avd did not boot within 5 minutes; log: ${log.path}")
     }
 
     private fun getprop(serial: String, property: String): String? = Devices.getprop(adb, serial, property)
@@ -319,16 +329,23 @@ internal object Devices {
      * answer within [probeSeconds] (a frozen emulator is still listed as `device`) is left out, and [warn] says so.
      */
     fun connected(adb: String, probeSeconds: Long = PROBE_SECONDS, warn: (String) -> Unit): List<Device> =
-        list(adb, probeSeconds, warn).ready
+        list(adb, probeSeconds, warn = warn).ready
 
-    /** [connected], and the devices it left out because they do not answer. */
-    fun list(adb: String, probeSeconds: Long = PROBE_SECONDS, warn: (String) -> Unit): Listing {
+    /**
+     * [connected], and the devices it left out because they do not answer. [missing] says why there is no adb when
+     * [adb] cannot be run at all ([AndroidSdk.missingAdb]).
+     */
+    fun list(adb: String, probeSeconds: Long = PROBE_SECONDS, missing: String? = null, warn: (String) -> Unit): Listing {
         val frozen = mutableListOf<Frozen>()
         // The listing gets the usual time: it may start the adb server first. Only each device's answer is short.
         val started = TimeSource.Monotonic.markNow()
-        val output = Shell.capture(listOf(adb, "devices"), timeoutSeconds = LIST_SECONDS) ?: throw AppCtlException(
-            if (started.elapsedNow() >= LIST_SECONDS.seconds) Message.adbDidNotAnswer(LIST_SECONDS) else "cannot run adb ($adb)",
+        val listed = Shell.captureResult(listOf(adb, "devices"), timeoutSeconds = LIST_SECONDS) ?: throw AppCtlException(
+            if (started.elapsedNow() >= LIST_SECONDS.seconds) Message.adbDidNotAnswer(LIST_SECONDS)
+            else "cannot run adb ($adb)" + (missing?.let { ": $it" } ?: ""),
         )
+        // A broken adb lists nothing: that is its error, not "no device connected".
+        if (listed.status != 0) throw AppCtlException(Message.adbDevicesFailed(listed.status, listed.error))
+        val output = listed.output
         val ready = output.lines().drop(1).mapNotNull { line ->
             val parts = line.trim().split(Regex("\\s+"))
             if (parts.size < 2 || parts[1] != "device") return@mapNotNull null

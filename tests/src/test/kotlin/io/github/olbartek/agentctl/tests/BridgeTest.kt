@@ -327,7 +327,8 @@ class BridgeServerTest {
     fun aPortFlagOutsideOneTo65535IsAUsageError() {
         val nowhere = Files.createTempDirectory("nowhere").toFile()
         for (command in listOf(listOf("app", "state"), listOf("app", "run", "open 2"), listOf("app", "launch", "--no-build"), listOf("app", "test", "--no-build"))) {
-            for (port in listOf("0", "65536")) {
+            // Swift's Int is 64-bit: a port past 32 bits is read, then out of range.
+            for (port in listOf("0", "65536", "99999999999", "-99999999999")) {
                 for (directory in listOf(repositoryRoot, nowhere)) {
                     val result = cli(*(command + listOf("--port", port)).toTypedArray(), config = TinyAppConfig.appCtl, workingDirectory = directory)
                     val name = "${command.joinToString(" ")} --port $port in $directory"

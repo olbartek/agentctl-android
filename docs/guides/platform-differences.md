@@ -72,6 +72,8 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   U+0301 for `é`) reach the app in the app's own declared spelling, where the reference passes them as typed: a Swift
   `switch` on them is canonical too, a Kotlin `when` compares code units, so only the declared spelling matches the
   same way.
+- `--latency` is read as a 64-bit number, as the reference's `Int`, but reaches the app as an intent extra, which is
+  32-bit: a value past about 25 days is clamped to the largest one, where the reference passes it on as it is.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.
