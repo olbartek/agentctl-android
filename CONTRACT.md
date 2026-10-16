@@ -1,4 +1,4 @@
-Contract version: 2
+Contract version: 3
 
 # The AgentCtl contract
 
@@ -33,6 +33,8 @@ Where this text and the reference implementation disagree, one of them has a bug
 
 - A script is plain text. Commands are separated by `;` **or** a newline — either is equivalent as a
   separator.
+- A newline is `\n` or `\r\n`; a script with CRLF line endings parses exactly as with LF. A `\r`
+  not followed by `\n` is not a newline but whitespace.
 - `#` starts a comment that runs to the end of the physical line. A comment resets at each newline,
   so a line that starts with more script after a `;` is not "still commented."
 - Blank lines, and segments that are empty or all whitespace after trimming, produce no command —
@@ -59,8 +61,9 @@ Where this text and the reference implementation disagree, one of them has a bug
   where a `;` or `#` is literal versus a separator. A *separate* step resolves quotes depending on
   how the argument is consumed:
   - A command that takes its argument as one opaque value (`open <id>`, or a free-text field)
-    unquotes the *whole* argument only when it is wrapped end-to-end in a single pair of quotes;
-    otherwise it is used as-is. `open "2"` and `open 2` are the same command, and a free-text field
+    unquotes the *whole* argument only when it is one quoted span from end to end — the quote that
+    closes the opening one is its last character (`"a"b"c"` stays `"a"b"c"`); otherwise it is used
+    as-is. `open "2"` and `open 2` are the same command, and a free-text field
     accepts `Second item` and `"Second item"` as the same value; quoting is only required when the
     value would otherwise be mistaken for something else (see `expect`, next).
   - A command whose argument is itself a list of tokens (`expect k=v [k=v …]`, `mock <method>
@@ -542,8 +545,11 @@ A script stops at its first failing line; exit code 0 requires every line to hav
 
 **Several scripts.** A tool that runs several scripts in one invocation (the reference CLI's
 `test`) runs each against a fresh app. It exits 3 if any script could not be read, or if it was
-asked to run every script in a directory that holds none — zero scripts run is not a pass;
+asked to run every script in a directory that holds none — finding no scripts is not a pass;
 otherwise 1 if any script failed, whatever that script's own code would have been; otherwise 0.
+A script the tool skips by design neither passes nor fails: the reference's `app test` skips a
+file with a `# app-test: skip <reason>` line (which `test` runs like any other), and when it skips
+every file it prints `0 passed, 0 failed, N skipped` and exits 0.
 
 ```
 $ swift run tinyctl test /nonexistent.appctl; echo "exit=$?"
@@ -679,6 +685,7 @@ and documentation send exactly these.
   exactly `Content-Length` bytes (no chunked encoding); a request whose headers exceed 64 KiB is
   malformed. The bridge answers and closes the connection. Requests are handled one at a time, in
   the order they arrive.
+  A client that closes its side of the connection before the answer has gone away: its request is cancelled and gets no answer.
 
 ### 8.2 Launch arguments
 
