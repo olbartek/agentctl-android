@@ -10,7 +10,8 @@ AgentCtl makes an app **agent-addressable**. Each screen describes itself:
 A CLI drives those commands from the terminal, *headlessly on the JVM with no emulator*, and prints one line of
 state per step. A coding agent (or you) can open a screen, run a command and assert on the result in milliseconds,
 instead of building the app, booting an emulator and guessing whether a tap landed. The same script also drives
-the real app on a device, through a debug-only in-app bridge, so what you assert headlessly is what the app does.
+the real app on a device, through a debug-only in-app bridge that answers only the CLI that launched the app (a
+fresh token per launch), so what you assert headlessly is what the app does.
 
 This is the Kotlin port of [agentctl-ios](https://github.com/olbartek/agentctl-ios). Both implement the same
 contract, [CONTRACT.md](CONTRACT.md) (version 2): the same script prints the same bytes in both. This repository's
@@ -116,7 +117,7 @@ The whole integration, in five steps — each is a few lines of real code in
 | [The device environment](docs/guides/device-environment.md) | `device …`: permissions and system prompts, links, pushes, background, foreground and relaunch, the network, location and biometry — one row per capability, with what your app wires and the real-OS `app` wrapper. |
 | [The verification ladder](docs/guides/verification-ladder.md) | `check`, from the Gradle build to the real app on an emulator, and verifying at the cheapest rung that proves a change. |
 | [Coverage and scenario checks](docs/guides/coverage-and-checks.md) | The guards that fail your build when the agent surface drifts, and the scenario checks every host's tests need. |
-| [The in-app bridge](docs/guides/bridge.md) | Driving the real app on a device: `AgentLaunch`, launch extras and seeds, `advance` on real time, `app test`. |
+| [The in-app bridge](docs/guides/bridge.md) | Driving the real app on a device: `AgentLaunch`, launch extras and seeds, the launch token, `advance` on real time, `app test`. |
 | [Differences from agentctl-ios](docs/guides/platform-differences.md) | Where this port adapts the reference rather than copying it, one item each. |
 | [CONTRACT.md](CONTRACT.md) | The engine specified independently of Swift: what a port implements. |
 

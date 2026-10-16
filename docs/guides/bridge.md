@@ -3,7 +3,8 @@
 Add `agentctl-bridge` with **`debugImplementation`** only, as your config module, and keep the code that names them
 in `src/debug`. A release build then carries neither the bridge, nor AgentCtl's runtime, nor the `INTERNET`
 permission the bridge's manifest adds. The server listens on
-`127.0.0.1` only; the CLI reaches it with `adb forward`.
+`127.0.0.1` only; the CLI reaches it with `adb forward`. It answers only the launch that started it: every request
+carries that launch's token (see [Who may ask](#who-may-ask)).
 
 [`examples/tinyapp-android`](../../examples/tinyapp-android) is TinyApp as a real app: plain views that render the store
 and send it the same actions the commands do. Its debug build's store, the whole integration
@@ -11,14 +12,16 @@ and send it the same actions the commands do. Its debug build's store, the whole
 
 ```kotlin
 class AppStore private constructor(activity: Activity) {
-    private val launch = AgentLaunch(TinyAppConfig.appCtl, activity.intent)
+    // Only when the CLI launched the app: a launch by hand runs the plain app, with no bridge.
+    private val launch = if (AgentLaunchArguments.isRequested(activity.intent)) AgentLaunch(TinyAppConfig.appCtl, activity.intent) else null
+    private val plain = if (launch == null) TinyApp.store(AgentEnvironment.system(MainScope())) else null
 
     init {
-        MainScope().launch { launch.start() }   // applies the seed, then starts the bridge
+        launch?.let { MainScope().launch { it.start() } }   // applies the seed, then starts the bridge
     }
 
-    val store: AgentStore<TinyRoot.State, TinyRoot.Action> get() = launch.app   // a coordinator, in an MVVM app
-    val isReady: StateFlow<Boolean> get() = launch.isReady   // false while a seed is applied: show a splash
+    val store: AgentStore<TinyRoot.State, TinyRoot.Action> get() = launch?.app ?: plain!!   // a coordinator, in an MVVM app
+    val isReady: StateFlow<Boolean> = launch?.isReady ?: MutableStateFlow(true)   // false while a seed is applied: show a splash
 
     companion object {
         private var instance: AppStore? = null
@@ -31,10 +34,12 @@ Its release twin
 ([`src/release/…/AppStore.kt`](../../examples/tinyapp-android/src/release/kotlin/io/github/olbartek/agentctl/examples/tinyapp/android/AppStore.kt))
 builds the same store on `AgentEnvironment.system(MainScope())`.
 
-To run the plain app over its live dependencies unless an agent launched it, check
-`AgentLaunch.isRequested(activity.intent)` before creating the `AgentLaunch`: it is true when the intent carries the
-`agent-port` extra, which the CLI's `app` subcommands always send and a launch from the home screen or Android
-Studio's Run does not. A JVM host reads its command line with `AgentLaunchOptions.isRequested(arguments)`.
+Check `AgentLaunchArguments.isRequested(activity.intent)` before creating the `AgentLaunch`, as above, so the app
+runs as the plain app over its live dependencies unless an agent launched it: it is true when the intent carries a
+well-formed `agent-token` extra (32 lowercase hex characters), which the CLI's `app` subcommands always send and a
+launch from the home screen or Android Studio's Run does not. An `AgentLaunch` built without one ignores every extra
+and starts no bridge (it logs `AgentCtlBridge: no agent-token; not listening`), so the check only saves building the
+live store. A JVM host reads its command line with `AgentLaunchOptions.isRequested(arguments)`.
 
 Keep `AgentLaunch` one per process, and start it from a scope that outlives the activity. Right after a cold boot
 the system recreates activities as its overlays settle, and a start tied to the first activity would be cancelled
@@ -48,6 +53,7 @@ extras with the same names, minus the dash. `app launch` sends them with `am sta
 
 | Extra | Type | Meaning |
 |---|---|---|
+| `agent-token` | string | the launch's token: 32 lowercase hex characters, fresh for each launch. Without a well-formed one every other extra is ignored and no bridge starts |
 | `agent-port` | int | the port; `app launch` passes the one it chose (see below). Without it the app uses 8765, and `0` means any free port |
 | `appctl-seed` | string | commands applied before the first real frame, so the app opens already in that state |
 | `mock-latency` | int, ms | a fixed latency for every mocked call |
@@ -79,9 +85,12 @@ forward holds `127.0.0.1`, where the CLI connects, and fails otherwise. `app lau
   "device" : "emulator-5556",
   "launchedAt" : "2026-09-30T10:58:06Z",
   "platform" : "android",
-  "port" : 8765
+  "port" : 8765,
+  "token" : "<32 lowercase hex characters>"
 }
 ```
+
+The file holds the launch's token, so it is written with mode 0600: only you can read it.
 
 `app run`, `app state` and `app screens` then talk to that port, so two apps (or an emulator and a simulator) on one
 Mac never need a port by hand. Each command's port is `--port` if given, else `APPCTL_PORT`, else the last launch's,
@@ -145,6 +154,57 @@ headless fixed date. Such a file says so on a comment line, and `app test` print
 ```
 # app-test: skip the countdown also ticks in real time
 ```
+
+### Who may ask
+
+The bridge answers only the CLI that launched the app. `app launch` makes a fresh token for each launch (128 bits from
+`SecureRandom`, as 32 lowercase hex characters), passes it to the app as the `agent-token` extra, and records it in
+`bridge.json`. Every request then carries it in the `X-Appctl-Token` header: `app run`, `app state` and `app screens`
+send `APPCTL_TOKEN` if it is set (as `APPCTL_PORT` overrides the port), else the token `bridge.json` records when its
+port is the one they connect to, else none. `app test` and `check --ui` send the token of the launch they made.
+
+Before it routes a request, the bridge checks it, in this order, answering a refusal at once and closing the
+connection (each with `X-Appctl-App` and `X-Appctl-Platform`, as every response has):
+
+| Request | Answer | `X-Appctl-Exit` |
+|---|---|---|
+| malformed, or a `Content-Length` over 1 MiB (decided from the headers, before any of the body is read) | 400 `bad request` | 2 |
+| a `Host` that is not `127.0.0.1` or `localhost` (any case, any port or none), no `Host`, or any `Origin` | 403 `forbidden` | 3 |
+| no `X-Appctl-Token`, or another one (compared in constant time) | 401 `unauthorized` | 3 |
+
+The CLI reports a refusal, exit 3:
+
+```
+error: the app's agent bridge on 127.0.0.1:8765 refused the token (relaunch it: ./tinyctl app launch)
+error: the app's agent bridge on 127.0.0.1:8765 refused the request (forbidden)
+```
+
+The first means the app was launched by another `app launch` than the one `bridge.json` records (or by hand, with a
+token of its own): relaunch it, or set `APPCTL_TOKEN`. The second should not happen from the CLI, which always sends
+`Host: 127.0.0.1:<port>` and no `Origin`; a web page's request always carries one of them.
+
+A `BridgeServer` you construct yourself checks a token only when you give it one; the host and size checks always
+apply.
+
+### Launching the app from a test runner
+
+A test runner that launches the debug app itself, such as an instrumented test that builds its own `Intent`, passes a
+token too, or the app ignores its extras and starts no bridge. `AgentLaunchArguments.makeToken()` makes one; make a
+new one for each launch, and send it as `X-Appctl-Token` if the test talks to the bridge:
+
+```kotlin
+val intent = Intent(context, MainActivity::class.java)
+    .putExtra("agent-port", 0)
+    .putExtra("clear-session", true)
+    .putExtra(AgentLaunchArguments.TOKEN, AgentLaunchArguments.makeToken())   // "agent-token"
+```
+
+AgentShop's UI tests launch it this way
+([`ShopUiTestCase.kt`](../../examples/agentshop/app/src/androidTest/kotlin/io/github/olbartek/agentctl/examples/agentshop/app/ShopUiTestCase.kt)).
+Their module needs `agentctl-bridge` on the test classpath: with `testBuildType = "debug"`, the app's
+`debugImplementation` dependencies are already there.
+
+### The protocol
 
 The wire protocol (routes, the `X-Appctl-Exit` header, the JSON form) is
 [CONTRACT.md §8](../../CONTRACT.md#8-the-in-app-bridge), so either port's CLI can drive either port's app.
