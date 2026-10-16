@@ -1,11 +1,11 @@
 package io.github.olbartek.agentctl.tests
 
-import io.github.olbartek.agentctl.toAsciiIntOrNull
+import io.github.olbartek.agentctl.AgentNumbers
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** `toAsciiIntOrNull` reads what Swift's `Int(_:)` reads (each value printed by Swift 6.3.3), within Kotlin's `Int`. */
-class AsciiNumbersTest {
+/** `AgentNumbers.int` reads what Swift's `Int(_:)` reads (each value printed by Swift 6.3.3), within Kotlin's `Int`. */
+class AgentNumbersTest {
     @Test
     fun onlyASignAndAsciiDigits() {
         val cases = mapOf(
@@ -14,6 +14,6 @@ class AsciiNumbersTest {
             "" to null, "+" to null, "-" to null, "+-5" to null, " 5" to null, "5 " to null, "5\u000B" to null,
             "0x10" to null, "1_000" to null, "2147483648" to null,
         )
-        for ((text, value) in cases) assertEquals(value, text.toAsciiIntOrNull(), text)
+        for ((text, value) in cases) assertEquals(value, AgentNumbers.int(text), text)
     }
 }

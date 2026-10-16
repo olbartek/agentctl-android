@@ -3,13 +3,13 @@ package io.github.olbartek.agentctl.examples.tinymvvm
 import androidx.lifecycle.ViewModel
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentEnvironment
+import io.github.olbartek.agentctl.AgentNumbers
 import io.github.olbartek.agentctl.AgentScreen
 import io.github.olbartek.agentctl.AgentScreenIntent
 import io.github.olbartek.agentctl.AgentViewModel
 import io.github.olbartek.agentctl.CommandGate
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.invalidArgument
-import io.github.olbartek.agentctl.toAsciiIntOrNull
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -113,7 +113,7 @@ class ItemsViewModel(
                 help = "Open an item, e.g. open 2.",
                 gate = CommandGate("items=0") { it.items.isNotEmpty() },
             ) { text ->
-                val id = text.toAsciiIntOrNull() ?: invalidArgument("expected an item id such as 2")
+                val id = AgentNumbers.int(text) ?: invalidArgument("expected an item id such as 2")
                 AgentScreenIntent { it.openTapped(id) }
             },
             AgentCommand.action("refresh", help = "Load the list again.", action = AgentScreenIntent { it.refresh() }),

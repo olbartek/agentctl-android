@@ -3,6 +3,7 @@ package io.github.olbartek.agentctl.examples.tinymvvm
 import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentIntent
+import io.github.olbartek.agentctl.AgentNumbers
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
@@ -13,7 +14,6 @@ import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.HelpExamples
 import io.github.olbartek.agentctl.runtime.LiveHost
-import io.github.olbartek.agentctl.toAsciiIntOrNull
 import kotlinx.coroutines.CoroutineDispatcher
 
 /**
@@ -30,7 +30,7 @@ object TinyMVVMConfig {
         get() = AgentDeviceConfig(
             openUrl = { url ->
                 val path = url.path?.split("/")?.filter { it.isNotEmpty() }
-                val id = path?.singleOrNull()?.toAsciiIntOrNull()
+                val id = path?.singleOrNull()?.let(AgentNumbers::int)
                 if (url.scheme == "tinyapp" && url.host == "items" && id != null) AgentIntent { it.openItem(id) } else null
             },
             pushes = listOf(

@@ -1,7 +1,7 @@
 package io.github.olbartek.agentctl.examples.agentshop.models
 
+import io.github.olbartek.agentctl.AgentNumbers
 import io.github.olbartek.agentctl.MockBackend
-import io.github.olbartek.agentctl.toAsciiIntOrNull
 
 /**
  * Backend failures scheduled at launch, for UI tests.
@@ -26,7 +26,7 @@ class ScheduledFaults(specs: List<String> = emptyList()) {
             if (parts.size != 2) continue
             val target = parts[0].split("#").filter { it.isNotEmpty() }
             if (target.size != 2) continue
-            val index = target[1].toAsciiIntOrNull() ?: continue
+            val index = AgentNumbers.int(target[1]) ?: continue
             plan.getOrPut(target[0]) { mutableMapOf() }[index] = parts[1]
         }
     }

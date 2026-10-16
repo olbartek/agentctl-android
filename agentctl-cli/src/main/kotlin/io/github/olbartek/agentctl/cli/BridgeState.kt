@@ -1,7 +1,7 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.AgentNumbers
 import io.github.olbartek.agentctl.BridgeDefaults
-import io.github.olbartek.agentctl.toAsciiIntOrNull
 import java.io.File
 import java.io.IOException
 import java.time.Instant
@@ -161,7 +161,7 @@ internal object Ports {
 
     private fun environmentPort(environment: Map<String, String>): Int? {
         val value = environment[ENVIRONMENT_VARIABLE]?.takeIf { it.isNotEmpty() } ?: return null
-        return value.toAsciiIntOrNull()?.takeIf { it in 1..65535 } ?: throw BadEnvironmentPort(value)
+        return AgentNumbers.int(value)?.takeIf { it in 1..65535 } ?: throw BadEnvironmentPort(value)
     }
 }
 

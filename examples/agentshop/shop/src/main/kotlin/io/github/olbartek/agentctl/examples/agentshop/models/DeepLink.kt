@@ -1,6 +1,6 @@
 package io.github.olbartek.agentctl.examples.agentshop.models
 
-import io.github.olbartek.agentctl.toAsciiIntOrNull
+import io.github.olbartek.agentctl.AgentNumbers
 import java.net.URI
 
 /** The links AgentShop opens: `agentshop://product/<id>`, `agentshop://order/<id>` and `agentshop://shop`. */
@@ -24,6 +24,6 @@ sealed interface DeepLink {
         }
 
         /** Swift's `Int(_:)`: ASCII digits only, where `toIntOrNull` also reads any Unicode digit. */
-        private fun number(text: String): Int? = text.toAsciiIntOrNull()
+        private fun number(text: String): Int? = AgentNumbers.int(text)
     }
 }

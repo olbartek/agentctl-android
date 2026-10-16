@@ -90,7 +90,7 @@ condition that closed it, instead of sending an action that could only do nothin
             help = "Open an item, e.g. open 2.",
             gate = CommandGate("items=0") { it.items.isNotEmpty() },
         ) { text ->
-            val id = text.toAsciiIntOrNull() ?: invalidArgument("expected an item id such as 2")
+            val id = AgentNumbers.int(text) ?: invalidArgument("expected an item id such as 2")
             Items.Action.OpenTapped(id)
         },
         AgentCommand.action("refresh", help = "Load the list again.", action = Items.Action.Refresh),
@@ -103,7 +103,7 @@ condition that closed it, instead of sending an action that could only do nothin
     )
 ```
 
-`toAsciiIntOrNull()` reads a number as Swift's `Int(_:)` does: an optional sign, then ASCII digits only. Kotlin's
+`AgentNumbers.int` reads a number as Swift's `Int(_:)` does: an optional sign, then ASCII digits only. Kotlin's
 `toIntOrNull()` also reads any Unicode digit, so `open ٢` would open item 2 on Android and fail on iOS.
 
 Then a *container* decides which screen is active. That is your navigation stack, tab bar or root, and it:
