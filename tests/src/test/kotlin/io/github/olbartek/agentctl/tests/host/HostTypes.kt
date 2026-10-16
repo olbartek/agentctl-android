@@ -1,8 +1,8 @@
 package io.github.olbartek.agentctl.tests.host
 
-// A host's own types, named with the common words apps use (nzozopole declares its own PermissionStatus): the names
-// agentctl-ios's HostNamesTests checks,
-// and AppFactory, which the library spells AgentAppFactory. PublicNamesTest uses them beside every agentctl package.
+// A host's own types, named with the common words apps use (nzozopole declares its own PermissionStatus): the
+// names agentctl-ios's HostNamesTests checks, and AppFactory, which the library spells AgentAppFactory.
+// PublicNamesTest uses them beside every agentctl package.
 
 enum class PermissionStatus { GRANTED, DENIED, NOT_DETERMINED }
 
