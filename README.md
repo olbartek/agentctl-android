@@ -97,7 +97,7 @@ runs hundreds of times a day.
 The whole integration, in five steps — each is a few lines of real code in
 [the integration guide](docs/guides/integration.md):
 
-1. **Add the dependency** — `com.github.olbartek.agentctl-android:<module>:0.6.0` from JitPack, and only the modules
+1. **Add the dependency** — `com.github.olbartek.agentctl-android:<module>:0.7.0` from JitPack, and only the modules
    each Gradle module needs (`agentctl-core` for screens, `agentctl-runtime` for the config, `agentctl-cli` for your
    CLI, `agentctl-bridge` for the debug app, `agentctl-test-support` for tests).
 2. **Describe your screens** — beside each reducer (or view model), an `AgentScreen` object: its path, a `key=value`
@@ -179,12 +179,14 @@ Android modules.
 
 ## Status
 
-Version 0.6.0, released together with agentctl-ios 0.6.0: the device environment (`device …`, CONTRACT.md version 2)
-and the real-OS `app` wrappers. Like 0.5.0, it was checked on the two NZOZ apps the two ports were extracted for, run
-side by side, before it was tagged. The two example apps in this repository are the integrations CI exercises, and the API may still
-change between minor versions before 1.0. MIT licensed.
+Version 0.7.0, released together with agentctl-ios 0.7.0: the engine drives any architecture through `AgentDriver`,
+a store (`AgentStoreDriver`) or view models under a coordinator (`AgentViewModelDriver`, shown by TinyMVVM), and every
+new public name starts with `Agent`. Scripts, scenarios and step output are unchanged (CONTRACT.md version 2). Like
+0.6.0, it was checked on the two NZOZ apps the two ports were extracted for, run side by side, before it was tagged.
+The example apps in this repository are the integrations CI exercises, and the API may still change between minor
+versions before 1.0. MIT licensed.
 
 This port and [agentctl-ios](https://github.com/olbartek/agentctl-ios) move in lockstep: the same features, the same
-example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.6.x here and 0.6.x there implement the
+example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.7.x here and 0.7.x there implement the
 same [`CONTRACT.md`](CONTRACT.md). A patch release is one repository's own fix, so the two patch numbers can differ.
 (Before 0.4.1 this port had its own numbers: v0.1.0–v0.2.0.)
