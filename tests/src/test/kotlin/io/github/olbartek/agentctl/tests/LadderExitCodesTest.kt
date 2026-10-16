@@ -146,9 +146,10 @@ class LadderExitCodesTest {
     }
 
     @Test
-    fun aScenarioTheConfigNamesThatDoesNotExistIsAUsageErrorInL4() {
+    fun aScenarioTheConfigNamesThatDoesNotExistIsAnEnvironmentErrorInL4() {
+        // CONTRACT.md §5: a scenario file that does not exist is 3. It is found before anything is built.
         val result = run("check", "--ui", config = config(appCheck = AppCheck(scenario = "nonexistent")))
-        assertEquals(2, result.status, result.combined)
+        assertEquals(3, result.status, result.combined)
         assertTrue("L4 app        FAIL  no scenario to run" in result.out, result.out)
         assertTrue("  cannot read ${File(root, "examples/tinyapp/scenarios/nonexistent.appctl").path}\n" in result.out, result.out)
     }

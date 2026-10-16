@@ -475,10 +475,21 @@ internal object Message {
             "restart it (adb -s $serial emu kill), or pass another --device"
 
     /** A file the user named (a `--session` file) that cannot be read: its path as given, and the platform's reason. */
-    fun cannotRead(path: String, error: Exception): String = "cannot read $path: ${error.message ?: error}"
+    fun cannotRead(path: String, error: Exception): String = "cannot read $path: ${reason(error)}"
 
     /** A file the user named (a `--session` file) that cannot be written. */
-    fun cannotWrite(path: String, error: Exception): String = "cannot write $path: ${error.message ?: error}"
+    fun cannotWrite(path: String, error: Exception): String = "cannot write $path: ${reason(error)}"
+
+    /**
+     * Why a file could not be used, without its path: the JDK's `FileNotFoundException` says `<absolute path>
+     * (Permission denied)`, and the message already names the path as the user gave it.
+     */
+    private fun reason(error: Exception): String {
+        val message = error.message ?: return error.toString()
+        if (error !is java.io.FileNotFoundException || !message.endsWith(")")) return message
+        val open = message.lastIndexOf(" (")
+        return if (open < 0) message else message.substring(open + 2, message.length - 1)
+    }
 
     fun staleDocs(config: AppCtlConfig<*, *>): String = "${config.docsPath} is stale. Run ${config.help.invocation} docs."
 

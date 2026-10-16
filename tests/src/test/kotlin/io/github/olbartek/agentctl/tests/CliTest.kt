@@ -147,21 +147,24 @@ class CliTest {
             val locked = File(directory, "locked.session").apply { writeText("open 2\n") }
             locked.setReadable(false)
             locked.setWritable(false)
-            for (args in listOf(listOf("run", "--session", locked.path, "save"), listOf("state", "--session", locked.path))) {
-                val result = tinyctl(*args.toTypedArray())
-                assertEquals(3, result.status, "$args: ${result.combined}")
-                assertEquals("error: cannot read ${locked.path}: ${locked.path} (Permission denied)\n", result.err, "$args")
+            // Root reads and writes it anyway: then only the directory case below can be checked.
+            if (!locked.canRead()) {
+                for (args in listOf(listOf("run", "--session", locked.path, "save"), listOf("state", "--session", locked.path))) {
+                    val result = tinyctl(*args.toTypedArray())
+                    assertEquals(3, result.status, "$args: ${result.combined}")
+                    assertEquals("error: cannot read ${locked.path}: Permission denied\n", result.err, "$args")
+                }
+                // Readable but not writable: the run happens, and appending what succeeded fails.
+                locked.setReadable(true)
+                val unwritable = tinyctl("run", "--session", locked.path, "save")
+                assertEquals(3, unwritable.status, unwritable.combined)
+                assertEquals("error: cannot write ${locked.path}: Permission denied\n", unwritable.err)
+                assertEquals("open 2\n", locked.readText())
             }
-            // Readable but not writable: the run happens, and appending what succeeded fails.
-            locked.setReadable(true)
-            val unwritable = tinyctl("run", "--session", locked.path, "save")
-            assertEquals(3, unwritable.status, unwritable.combined)
-            assertEquals("error: cannot write ${locked.path}: ${locked.path} (Permission denied)\n", unwritable.err)
-            assertEquals("open 2\n", locked.readText())
             // A directory, named as the user gave it.
             val result = cli("run", "--session", "sub", "open 2", config = TinyAppConfig.appCtl, workingDirectory = directory.also { File(it, "sub").mkdir() })
             assertEquals(3, result.status, result.combined)
-            assertEquals("error: cannot read sub: ${File(directory, "sub").path} (Is a directory)\n", result.err)
+            assertEquals("error: cannot read sub: Is a directory\n", result.err)
         } finally {
             directory.walkBottomUp().forEach { it.setReadable(true); it.setWritable(true) }
             directory.deleteRecursively()

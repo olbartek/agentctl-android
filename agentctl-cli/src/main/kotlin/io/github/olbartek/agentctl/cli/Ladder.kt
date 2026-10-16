@@ -13,8 +13,8 @@ import kotlinx.coroutines.runBlocking
  *
  * Each rung returns its exit code (CONTRACT.md §5): 0 when it passed; 1 when it ran and found the app wrong (a build
  * or test that failed, a scenario that failed, stale docs, screenshots that differ, the scenario failing in the app);
- * 2 for a usage error (a scenario the config names that does not exist, an ambiguous `--device`); 3 for an
- * environment error (Gradle that cannot be run, nothing to run, no device, an app that could not be launched).
+ * 2 for a usage error (an ambiguous `--device`); 3 for an environment error (Gradle that cannot be run, nothing to run,
+ * a scenario the config names that does not exist, no device, an app that could not be launched).
  */
 internal class Ladder(private val cli: Cli<*, *>, private val root: File, private val ui: Boolean, private val device: String?) {
     private val config = cli.config
@@ -118,7 +118,7 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
         if (!file.isFile) {
             report("L4 app", false, "no scenario to run", start)
             io.print("  cannot read ${file.path}")
-            return RunStatus.USAGE.code
+            return RunStatus.INTERNAL_ERROR.code
         }
         return try {
             val launcher = AppLauncher(cli, root)
