@@ -219,13 +219,22 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             .redirectOutput(log)
             .start()
         val start = TimeSource.Monotonic.markNow()
+        // A listing that fails while the emulator starts (its adb server restarting, say) is waited out with the rest
+        // of the boot; if it is still failing at the end, that is the error.
+        var failure: AppCtlException? = null
         while (start.elapsedNow() < 300.seconds) {
             // Quietly: a device that does not answer was reported once already, by resolve.
-            val booted = Devices.list(adb, missing = missingAdb) {}.ready.firstOrNull { it.serial !in before && it.name == avd }
+            val booted = try {
+                Devices.list(adb, missing = missingAdb) {}.ready.firstOrNull { it.serial !in before && it.name == avd }
+                    .also { failure = null }
+            } catch (error: AppCtlException) {
+                failure = error
+                null
+            }
             if (booted != null && getprop(booted.serial, "sys.boot_completed") == "1") return booted
             Thread.sleep(1000)
         }
-        throw AppCtlException("the emulator $avd did not boot within 5 minutes; log: ${log.path}")
+        throw failure ?: AppCtlException("the emulator $avd did not boot within 5 minutes; log: ${log.path}")
     }
 
     private fun getprop(serial: String, property: String): String? = Devices.getprop(adb, serial, property)
