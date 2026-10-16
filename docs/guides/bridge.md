@@ -171,7 +171,7 @@ connection (each with `X-Appctl-App` and `X-Appctl-Platform`, as every response 
 
 | Request | Answer | `X-Appctl-Exit` |
 |---|---|---|
-| malformed, or a `Content-Length` over 1 MiB (decided from the headers, before any of the body is read) | 400 `bad request` | 2 |
+| malformed: a `Content-Length` over 1 MiB, more than one `Content-Length` (even with equal values) or one that is not ASCII digits, any `Transfer-Encoding`, a folded header line, or whitespace before a header's colon (all decided from the headers, before any of the body is read) | 400 `bad request` | 2 |
 | a `Host` that is not `127.0.0.1` or `localhost` (any case, any port or none), no `Host`, or any `Origin` | 403 `forbidden` | 3 |
 | no `X-Appctl-Token`, or another one (compared in constant time) | 401 `unauthorized` | 3 |
 

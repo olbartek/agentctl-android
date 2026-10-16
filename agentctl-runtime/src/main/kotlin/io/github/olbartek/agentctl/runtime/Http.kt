@@ -1,6 +1,5 @@
 package io.github.olbartek.agentctl.runtime
 
-import io.github.olbartek.agentctl.AgentNumbers
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
@@ -57,7 +56,11 @@ public object HttpParser {
         /** The header block has not ended yet. */
         data object Incomplete : Head
 
-        /** Not a request this parser accepts, or one whose body would be over [MAX_BODY_BYTES]. */
+        /**
+         * Not a request this parser accepts: one whose body would be over [MAX_BODY_BYTES], with any
+         * `Transfer-Encoding`, more than one `Content-Length` or one that is not ASCII digits, a folded header line, or
+         * whitespace before a header's colon.
+         */
         data object Malformed : Head
 
         /** The request without its body ([request]'s is empty), which starts at [bodyStart] and has [contentLength]. */
@@ -78,24 +81,44 @@ public object HttpParser {
         val requestLine = lines[0].split(" ").filter { it.isNotEmpty() }
         if (requestLine.size != 3 || !requestLine[2].startsWith("HTTP/1.")) return Head.Malformed
 
-        var contentLength = 0
+        var contentLength: Int? = null
         val headers = linkedMapOf<String, String>()
         for (line in lines.drop(1)) {
+            // A line folded onto the one before it (obs-fold) is not accepted.
+            if (line.startsWith(" ") || line.startsWith("\t")) return Head.Malformed
             val parts = line.split(":", limit = 2).filter { it.isNotEmpty() }
             if (parts.size != 2) return Head.Malformed
-            val name = asciiLowercase(parts[0].trimSwiftWhitespaces())
+            // Nor is whitespace between a header's name and its colon.
+            if (parts[0] != parts[0].trimSwiftWhitespaces()) return Head.Malformed
+            val name = asciiLowercase(parts[0])
             val value = parts[1].trimSwiftWhitespaces()
-            if (name == "content-length") {
-                val number = AgentNumbers.int(value)
-                if (number == null || number < 0 || number > MAX_BODY_BYTES) return Head.Malformed
-                contentLength = number
+            when (name) {
+                // The body is framed by one Content-Length alone: no chunking, whatever the encoding named.
+                "transfer-encoding" -> return Head.Malformed
+                "content-length" -> {
+                    if (contentLength != null) return Head.Malformed
+                    contentLength = contentLength(parts[1]) ?: return Head.Malformed
+                }
             }
             // A repeated header is one, its values joined as HTTP joins them (RFC 9110 §5.3).
             headers[name] = headers[name]?.let { "$it, $value" } ?: value
         }
         val target = requestLine[1]
         val (path, query) = RequestTarget.parse(target) ?: (target to emptyMap())
-        return Head.Complete(BridgeRequest(requestLine[0], path, query, "", headers), headerEnd + HEADER_END.size, contentLength)
+        return Head.Complete(BridgeRequest(requestLine[0], path, query, "", headers), headerEnd + HEADER_END.size, contentLength ?: 0)
+    }
+
+    /**
+     * A `Content-Length` value: one or more ASCII digits between optional spaces and tabs, at most [MAX_BODY_BYTES];
+     * `null` for anything else (a sign, other whitespace, other digits, too large).
+     */
+    private fun contentLength(raw: String): Int? {
+        val value = raw.trim { it == ' ' || it == '\t' }
+        if (value.isEmpty() || value.any { it !in '0'..'9' }) return null
+        val digits = value.trimStart('0')
+        if (digits.length > 7) return null
+        val number = if (digits.isEmpty()) 0 else digits.toInt()
+        return number.takeIf { it <= MAX_BODY_BYTES }
     }
 
     /** [text] with ASCII `A`–`Z` lowercased and nothing else changed: header names, host names. */

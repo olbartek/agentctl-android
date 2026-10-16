@@ -230,6 +230,65 @@ class BridgeAccessTest {
         assertEquals("AgentLaunchOptions(port=8765, seed=null, latency=null, clearSession=false, token=null)", AgentLaunchOptions().toString())
     }
 
+    /**
+     * [head] (lines after the request line) is malformed: 400, exit 2, decided from the headers before the host or the
+     * token is looked at. Each is sent once as is and once from a foreign host without a token, which would otherwise
+     * get 403.
+     */
+    private fun assertMalformed(vararg head: String, body: String = "") {
+        val port = start()
+        for (extra in listOf(listOf("Host: 127.0.0.1", "X-Appctl-Token: $TOKEN"), listOf("Host: evil.example"))) {
+            val answer = exchange(port, listOf("POST /run HTTP/1.1") + extra + head, body)
+            assertAnswer("400 Bad Request", "bad request\n", 2, answer)
+        }
+        assertEquals(0, handled.get())
+    }
+
+    private fun assertAccepted(vararg head: String, body: String = "") {
+        val port = start()
+        assertOk(exchange(port, listOf("POST /run HTTP/1.1", "Host: 127.0.0.1", "X-Appctl-Token: $TOKEN") + head, body))
+    }
+
+    @Test
+    fun anyTransferEncodingIsMalformed() {
+        assertMalformed("Transfer-Encoding: chunked", body = "0\r\n\r\n")
+        assertMalformed("Transfer-Encoding: identity", "Content-Length: 2", body = "ab")
+        assertMalformed("transfer-encoding: gzip, chunked", body = "0\r\n\r\n")
+    }
+
+    @Test
+    fun aRepeatedContentLengthIsMalformed() {
+        assertMalformed("Content-Length: 2", "Content-Length: 3", body = "abc")
+        assertMalformed("Content-Length: 2", "Content-Length: 2", body = "ab")
+        assertMalformed("Content-Length: 2", "content-length: 2", body = "ab")
+        assertAccepted("Content-Length: 2", body = "ab")
+    }
+
+    @Test
+    fun aContentLengthIsDigitsOnly() {
+        for (value in listOf("+2", "-0", "2 2", "", " ", "0x2", "٢", "2\u2003", "\u200B2", "2.0", "1e1")) {
+            assertMalformed("Content-Length: $value", body = "ab")
+        }
+        // Surrounding spaces and tabs are not part of the value.
+        assertAccepted("Content-Length:2", body = "ab")
+        assertAccepted("Content-Length: \t2\t ", body = "ab")
+        assertAccepted("Content-Length: 002", body = "ab")
+    }
+
+    @Test
+    fun aFoldedHeaderLineIsMalformed() {
+        assertMalformed("X-Note: a", " folded", body = "")
+        assertMalformed("X-Note: a", "\tfolded", body = "")
+        assertMalformed(" Content-Length: 0")
+    }
+
+    @Test
+    fun whitespaceBeforeTheColonIsMalformed() {
+        assertMalformed("Content-Length : 2", body = "ab")
+        assertMalformed("X-Note\t: a")
+        assertMalformed("Host : 127.0.0.1")
+    }
+
     private companion object {
         const val TOKEN = "0123456789abcdef0123456789abcdef"
     }

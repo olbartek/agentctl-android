@@ -106,17 +106,14 @@ class BridgeRouterTest {
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("GARBAGE\r\n\r\n".toByteArray()))
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("GET / HTTP/1.1\r\nContent-Length: -1\r\n\r\n".toByteArray()))
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("GET / HTTP/1.1\r\nNoColon\r\n\r\n".toByteArray()))
-        // Content-Length as Swift's `Int(_:)` reads it, after trimming `CharacterSet.whitespaces`: the space separators,
-        // a tab and U+200B, but not a vertical tab.
+        // Content-Length is ASCII digits only, between optional spaces and tabs: no sign, no other whitespace.
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("POST / HTTP/1.1\r\nContent-Length: ٣\r\n\r\nabc".toByteArray()))
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse("POST / HTTP/1.1\r\nContent-Length: 3\u000B\r\n\r\nabc".toByteArray()))
-        assertEquals(
-            HttpParser.Result.Request(BridgeRequest("POST", "/", emptyMap(), "abc", mapOf("content-length" to "+3"))),
-            HttpParser.parse("POST / HTTP/1.1\r\nContent-Length:\t+3\u2003\r\n\r\nabc".toByteArray()),
-        )
+        assertEquals(HttpParser.Result.Malformed, HttpParser.parse("POST / HTTP/1.1\r\nContent-Length:\t+3\r\n\r\nabc".toByteArray()))
+        assertEquals(HttpParser.Result.Malformed, HttpParser.parse("POST / HTTP/1.1\r\nContent-Length: 3\u200B\r\n\r\nabc".toByteArray()))
         assertEquals(
             HttpParser.Result.Request(BridgeRequest("POST", "/", emptyMap(), "abc", mapOf("content-length" to "3"))),
-            HttpParser.parse("POST / HTTP/1.1\r\nContent-Length: 3\u200B\r\n\r\nabc".toByteArray()),
+            HttpParser.parse("POST / HTTP/1.1\r\nContent-Length:\t3 \r\n\r\nabc".toByteArray()),
         )
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse(ByteArray(64 * 1024 + 1) { 'a'.code.toByte() }))
         val response = String(HttpParser.serialize(BridgeResponse(200, "ok", exitCode = 1)), Charsets.UTF_8)
