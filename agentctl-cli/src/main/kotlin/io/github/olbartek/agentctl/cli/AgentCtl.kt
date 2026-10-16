@@ -57,7 +57,7 @@ public object AgentCtl {
         val cli = Cli(config, io, environment, workingDirectory)
         val root = command(cli)
         return try {
-            root.parse(args)
+            root.parse(arguments(args))
             0
         } catch (error: CliktError) {
             val status = exitStatus(error)
@@ -80,6 +80,19 @@ public object AgentCtl {
         is UsageError -> RunStatus.USAGE.code
         else -> if (error.statusCode == 1) RunStatus.USAGE.code else error.statusCode
     }
+
+    /**
+     * The command line as Clikt should read it. `app location -33.86,151.20` (a southern latitude) would read as an
+     * option, so a value that starts with `-` and a digit moves behind a `--`, where it is the argument; the options
+     * around it keep working (as agentctl-ios's `AgentCtl.arguments`).
+     */
+    internal fun arguments(args: List<String>): List<String> {
+        if (args.size < 3 || args[0] != "app" || args[1] != "location" || "--" in args) return args
+        val index = (2 until args.size).firstOrNull { NEGATIVE_NUMBER.containsMatchIn(args[it]) } ?: return args
+        return args.filterIndexed { i, _ -> i != index } + listOf("--", args[index])
+    }
+
+    private val NEGATIVE_NUMBER = Regex("^-\\.?[0-9]")
 
     /** The command tree, for rendering help pages in tests. */
     internal fun <D : AgentDriver<A, *>, A> command(cli: Cli<D, A>): CoreCliktCommand = Root(cli)
@@ -313,7 +326,7 @@ public object AgentCtl {
         private val stepDelay by option(
             "--step-delay",
             help = "Send the scenario one line at a time, this many seconds apart, so a recording can be followed.",
-        ).double()
+        ).double().validate { validateStepDelay(it) }
         private val port by launchPortOption()
 
         override fun execute(): Int = cli.appTest(
@@ -486,4 +499,19 @@ private fun CoreCliktCommand.launchPortOption() = option(
  */
 private fun validatePort(port: Int) {
     Ports.flagError(port)?.let { throw UsageError(it) }
+}
+
+/**
+ * `--step-delay` must be finite and 0-3600 seconds: a usage error while the command line is parsed, before anything is
+ * built, as agentctl-ios checks it. The value is shown as Swift prints a `Double` (`inf`, `nan`, `-1.0`).
+ */
+private fun validateStepDelay(seconds: Double) {
+    if (seconds.isFinite() && seconds in 0.0..3600.0) return
+    val shown = when {
+        seconds.isNaN() -> "nan"
+        seconds == Double.POSITIVE_INFINITY -> "inf"
+        seconds == Double.NEGATIVE_INFINITY -> "-inf"
+        else -> seconds.toString()
+    }
+    throw UsageError("--step-delay must be between 0 and 3600 seconds, not '$shown'")
 }
