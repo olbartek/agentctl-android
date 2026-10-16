@@ -124,7 +124,8 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             return Result(name, Outcome.Broken("launch failed: ${error.message}"))
         }
         onLaunched()
-        val client = BridgeClient(launched.port)
+        // The launch's own token, kept here: bridge.json may be another launch's by now.
+        val client = BridgeClient(launched.port, launched.token)
         // One request for the script, or one per line: the app keeps one runner across requests, so `expect` still
         // sees the calls of the step before it.
         val requests = if (options.stepDelay == null) listOf(source) else lines.map { it.text }
@@ -138,6 +139,8 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
                 body.append(response.body)
                 exitCode = response.exitCode
             } catch (error: IOException) {
+                // Another app's refusal is another app's answer.
+                if (error is BridgeClient.Refused) foreign(error.response, launched.port, cli.config.applicationId)?.let { return Result(name, it) }
                 return Result(name, Outcome.Broken(Message.bridgeUnreachable(cli, launched.port, error)))
             }
             if (exitCode != 0) break

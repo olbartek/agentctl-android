@@ -80,7 +80,7 @@ class BridgeListeningTest {
     /** The status line of the answer to a GET. */
     private fun get(port: Int): String = Socket("127.0.0.1", port).use { socket ->
         socket.soTimeout = 3_000
-        socket.getOutputStream().apply { write("GET /snapshot HTTP/1.1\r\nHost: x\r\n\r\n".toByteArray()); flush() }
+        socket.getOutputStream().apply { write("GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".toByteArray()); flush() }
         socket.getInputStream().readBytes().decodeToString().substringBefore("\r\n")
     }
 

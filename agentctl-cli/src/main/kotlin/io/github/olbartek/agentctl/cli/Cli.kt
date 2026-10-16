@@ -250,8 +250,9 @@ internal class Cli<D : AgentDriver<A, *>, A>(
     private class LaunchPort(val port: Int?)
 
     /**
-     * A request to the bridge on `--port`, `APPCTL_PORT`, the port `app launch` recorded, or 8765. When the recorded
-     * port does not answer, the message says the launch state is stale.
+     * A request to the bridge on `--port`, `APPCTL_PORT`, the port `app launch` recorded, or 8765, with the token
+     * `APPCTL_TOKEN` names or that launch recorded for that port. When the recorded port does not answer, the message
+     * says the launch state is stale.
      */
     private fun bridgeCall(flag: Int?, method: String, path: String, body: String?): Int {
         val layout = quietRoot()?.let { Layout(it, config.outputPath) }
@@ -264,9 +265,16 @@ internal class Cli<D : AgentDriver<A, *>, A>(
             io.error(Message.unreadableBridgeState(this, error.reason))
             return RunStatus.INTERNAL_ERROR.code
         }
+        // The recorded token goes with the port it was recorded for, however the port was named. Read quietly when the
+        // port was named: a record that cannot be read was not needed for it.
+        val record = resolved.state ?: try {
+            layout?.let(BridgeState::load)
+        } catch (_: Unreadable) {
+            null
+        }
+        val recorded = resolved.state
         return try {
-            val client = BridgeClient(resolved.port)
-            val recorded = resolved.state
+            val client = BridgeClient(resolved.port, Tokens.client(environment, resolved.port, record))
             if (recorded != null && method != "GET") {
                 // A script changes the app it runs in, so it is only posted once the recorded app is known to answer;
                 // a GET changes nothing, and its own answer is checked instead.
@@ -284,9 +292,14 @@ internal class Cli<D : AgentDriver<A, *>, A>(
             if (response.body.endsWith("\n")) io.out.print(response.body) else io.out.println(response.body)
             response.exitCode
         } catch (error: IOException) {
+            // A refusal from another app than the recorded one: the record is stale, whatever the other app wanted.
+            if (error is BridgeClient.Refused && recorded != null && error.response.contradicts(recorded)) {
+                io.error(Message.anotherAppThanRecorded(this, resolved.port, error.response.app, error.response.platform, recorded))
+                return RunStatus.INTERNAL_ERROR.code
+            }
             val unreachable = Message.bridgeUnreachable(this, resolved.port, error)
-            // A script past its limit reached the app recorded there: the launch state is not stale.
-            val stale = resolved.state?.takeIf { error !is BridgeClient.ScriptTimedOut }
+            // A script past its limit, or a refusal, came from the app recorded there: the launch state is not stale.
+            val stale = resolved.state?.takeIf { error !is BridgeClient.ScriptTimedOut && error !is BridgeClient.Refused }
             io.error(stale?.let { unreachable + Message.staleBridgeState(this, it) } ?: unreachable)
             RunStatus.INTERNAL_ERROR.code
         }
@@ -368,10 +381,23 @@ internal class AppCtlException(message: String, val status: RunStatus = RunStatu
 
 /** The messages that name the CLI itself. They spell it with the host's own invocation. */
 internal object Message {
-    /** A request to the bridge that failed. A script that ran past its limit reached the bridge, so it says that instead. */
-    fun bridgeUnreachable(cli: Cli<*, *>, port: Int, error: Exception): String =
-        if (error is BridgeClient.ScriptTimedOut) error.message!!
-        else "cannot reach the app's agent bridge on 127.0.0.1:$port (is the app running? ${cli.invocation} app launch): $error"
+    /**
+     * A request to the bridge that failed. A script that ran past its limit reached the bridge, and so did a request it
+     * refused ([refused]), so they say that instead.
+     */
+    fun bridgeUnreachable(cli: Cli<*, *>, port: Int, error: Exception): String = when (error) {
+        is BridgeClient.ScriptTimedOut -> error.message!!
+        is BridgeClient.Refused -> refused(cli, port, error.forbidden)
+        else -> "cannot reach the app's agent bridge on 127.0.0.1:$port (is the app running? ${cli.invocation} app launch): $error"
+    }
+
+    /**
+     * The bridge on [port] refused a request: `401`, the token (none, or another launch's), or `403` ([forbidden]), the
+     * request itself (another host, or a web page's).
+     */
+    fun refused(cli: Cli<*, *>, port: Int, forbidden: Boolean): String =
+        if (forbidden) "the app's agent bridge on 127.0.0.1:$port refused the request (forbidden)"
+        else "the app's agent bridge on 127.0.0.1:$port refused the token (relaunch it: ${cli.invocation} app launch)"
 
     /** Appended to [bridgeUnreachable] when the port came from `bridge.json`: the app it recorded has gone. */
     fun staleBridgeState(cli: Cli<*, *>, state: BridgeState): String =

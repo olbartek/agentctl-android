@@ -32,14 +32,16 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
     private val adb = AndroidSdk.adb(root, cli.environment)
     private val missingAdb: String? get() = AndroidSdk.missingAdb(root, cli.environment)
 
-    data class Launched(val device: Device, val port: Int, val report: String)
+    /** The launch: where, on which port, what to print, and the [token] every request to its bridge sends. */
+    data class Launched(val device: Device, val port: Int, val report: String, val token: String)
 
     /**
      * Launches the app with its bridge on [port], or — when it is `null` — on the first port from 8765 up that is
-     * free on the Mac and on the device, then records the launch in `<outputPath>/bridge.json`.
+     * free on the Mac and on the device, with a fresh token, then records the launch in `<outputPath>/bridge.json`.
      */
     fun launch(seed: String?, device: String?, latency: Int?, clearSession: Boolean, build: Boolean, port: Int?): Launched {
         val start = TimeSource.Monotonic.markNow()
+        val token = Tokens.make()
         // With --no-build the app is used as it is installed, on a device already running: one that is not is not booted.
         val target = if (build) resolve(device) else find(device)
         val log = File(layout.logs, "app-launch.log")
@@ -75,13 +77,10 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
                 Shell.run(listOf(adb, "-s", target.serial, "forward", "--remove", "tcp:$chosen"), root, log, append = true)
                 throw AppCtlException("adb forward tcp:$chosen does not listen on 127.0.0.1:$chosen; log: ${log.path}")
             }
-            val extras = mutableListOf("--ei", AgentLaunchOptions.PORT, chosen.toString())
-            seed?.let { extras += listOf("--es", AgentLaunchOptions.SEED, shellQuoted(it)) }
-            latency?.let { extras += listOf("--ei", AgentLaunchOptions.MOCK_LATENCY, it.toString()) }
-            if (clearSession) extras += listOf("--ez", AgentLaunchOptions.CLEAR_SESSION, "true")
+            val extras = launchExtras(chosen, token, seed, latency, clearSession)
             adbOrThrow(listOf("shell", "am", "start", "-W", "-n", component) + extras, target, log)
             answer = try {
-                BridgeClient(chosen).waitUntilReady()
+                BridgeClient(chosen, token).waitUntilReady()
             } catch (timeout: AppCtlException) {
                 // No bridge answered. Our app is stopped first, so a slow start of our own does not read as a port held
                 // by another; if something still listens on the device port, the app could not listen there: a scanned
@@ -98,7 +97,13 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             // this CLI and always says which app it is, so an answer without X-Appctl-App is foreign too (an older app
             // holding the port). A port found by the scan gets one more try, on the next free port above it.
             // The app id alone is not enough: an app's iOS build may hold the port with the same id.
-            if (answer.isFrom(config.applicationId, BridgeState.PLATFORM)) break
+            if (answer.isFrom(config.applicationId, BridgeState.PLATFORM)) {
+                if (answer.status == 200) break
+                // Our app refused its own launch's token: nothing to gain from another port.
+                stop(target, log)
+                Shell.run(listOf(adb, "-s", target.serial, "forward", "--remove", "tcp:$chosen"), root, log, append = true)
+                throw AppCtlException(Message.refused(cli, chosen, forbidden = answer.status == 403))
+            }
             if (port != null || retried) {
                 // Leave nothing half-launched: our app without a bridge, a forward to the other app.
                 stop(target, log)
@@ -113,13 +118,13 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         val port = chosen
         val snapshot = answer.body
         try {
-            BridgeState(BridgeState.PLATFORM, target.serial, port, config.applicationId, Instant.now()).save(layout)
+            BridgeState(BridgeState.PLATFORM, target.serial, port, config.applicationId, Instant.now(), token).save(layout)
         } catch (error: IOException) {
             throw AppCtlException("cannot write ${config.outputPath}/bridge.json: $error")
         }
         val seconds = String.format(Locale.ROOT, "%.1f", start.elapsedNow().inWholeMilliseconds / 1000.0)
         val line = snapshot.split("\n").drop(1).firstOrNull()?.trim() ?: ""
-        return Launched(target, port, "launched on ${target.label} [${target.serial}] at 127.0.0.1:$port in ${seconds}s: $line")
+        return Launched(target, port, "launched on ${target.label} [${target.serial}] at 127.0.0.1:$port in ${seconds}s: $line", token)
     }
 
     /**
@@ -304,6 +309,19 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         fun bootCommand(emulator: String, avd: String): List<String> = listOf(
             emulator, "-avd", avd, "-no-snapshot-save", "-no-boot-anim", "-no-metrics", "-crash-report-mode", "never",
         )
+
+        /**
+         * The launch arguments as `am start` extras (CONTRACT.md §8.2): the port, the launch's [token], and what was
+         * asked for. Strings are quoted for the device's shell.
+         */
+        fun launchExtras(port: Int, token: String, seed: String?, latency: Int?, clearSession: Boolean): List<String> {
+            val extras = mutableListOf("--ei", AgentLaunchOptions.PORT, port.toString())
+            extras += listOf("--es", AgentLaunchOptions.TOKEN, shellQuoted(token))
+            seed?.let { extras += listOf("--es", AgentLaunchOptions.SEED, shellQuoted(it)) }
+            latency?.let { extras += listOf("--ei", AgentLaunchOptions.MOCK_LATENCY, it.toString()) }
+            if (clearSession) extras += listOf("--ez", AgentLaunchOptions.CLEAR_SESSION, "true")
+            return extras
+        }
 
         /** `adb shell` joins its arguments into one device shell command line: quote a value for that shell. */
         fun shellQuoted(value: String): String = "'" + value.replace("'", "'\\''") + "'"
