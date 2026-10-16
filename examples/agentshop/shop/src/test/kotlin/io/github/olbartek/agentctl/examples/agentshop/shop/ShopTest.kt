@@ -139,7 +139,7 @@ class CartTest {
         assertNull(store.state.error)
         assertEquals(0, store.state.discountCents)
         assertEquals("no code typed", CartAgent.activeScreen(store.state).command("apply-promo")?.disabledReason)
-        assertEquals(listOf("cart.applyPromo", "cart.applyPromo"), mocks.log.all)
+        assertEquals(listOf("cart.applyPromo", "cart.applyPromo"), mocks.log.entries)
     }
 }
 

@@ -220,7 +220,7 @@ class AuthClientLiveTest {
                 "auth.login", "auth.sendOTP", "auth.verifyOTP", "auth.requestPasswordReset", "auth.resetPassword",
                 "auth.register", "auth.verifyEmail", "auth.signInWithGoogle",
             ),
-            mocks.log.all,
+            mocks.log.entries,
         )
     }
 
@@ -253,7 +253,7 @@ class SessionTest {
             client.clear()
             assertNull(client.current())
         }
-        assertEquals(listOf("session.current", "session.save", "session.current", "session.clear", "session.current"), mocks.log.all)
+        assertEquals(listOf("session.current", "session.save", "session.current", "session.clear", "session.current"), mocks.log.entries)
     }
 
     /** "Keep me signed in" off: the session works until relaunch, when `current()` drops it. */
@@ -352,7 +352,7 @@ class OrdersTest {
             assertEquals(OrderStatus.DELIVERED, client.fetchOrder(1001).status)
             assertEquals(OrderStatus.CANCELLED, client.cancelOrder(1003).status)
         }
-        assertEquals(listOf("orders.fetchOrders", "orders.fetchOrder", "orders.cancelOrder"), mocks.log.all)
+        assertEquals(listOf("orders.fetchOrders", "orders.fetchOrder", "orders.cancelOrder"), mocks.log.entries)
     }
 
     @Test
@@ -399,7 +399,7 @@ class AccountTest {
         val mocks = TestMocks()
         val client = AccountClient.live(mocks.calls, SessionStorage.inMemory(), AccountBackend())
         assertEquals(AccountError.UNAUTHORIZED, assertFailsWith<AccountException> { await { client.fetchProfile() } }.error)
-        assertEquals(listOf("account.fetchProfile"), mocks.log.all)
+        assertEquals(listOf("account.fetchProfile"), mocks.log.entries)
     }
 }
 
@@ -417,6 +417,6 @@ class CatalogAndCartTest {
         assertEquals(Promo("SAVE10", 10), await { client.applyPromo(" save10 ") })
         assertEquals(CartError.INVALID_PROMO, assertFailsWith<CartException> { await { client.applyPromo("FREE") } }.error)
         assertEquals(1780, Promo("SAVE10", 10).discount(17800))
-        assertEquals(listOf("cart.applyPromo", "cart.applyPromo"), mocks.log.all)
+        assertEquals(listOf("cart.applyPromo", "cart.applyPromo"), mocks.log.entries)
     }
 }

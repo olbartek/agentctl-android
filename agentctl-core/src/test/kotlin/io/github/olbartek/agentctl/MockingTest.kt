@@ -28,10 +28,22 @@ class MockingTest {
         log.begin("session.save")
         log.end("session.save")
         log.end("auth.login")
-        assertEquals(listOf("auth.login", "session.save"), log.all)
+        assertEquals(listOf("auth.login", "session.save"), log.entries)
         assertEquals(0, log.inFlight)
-        assertEquals(listOf("session.save"), log.since(1))
+        assertEquals(listOf("session.save"), log.entries(since = 1))
+        assertEquals(emptyList(), log.entries(since = 2))
         assertEquals(2, log.count)
+    }
+
+    /** The names before 0.8 (the reference's are `entries` and `entries(since:)`) still answer, deprecated. */
+    @Test
+    @Suppress("DEPRECATION")
+    fun callLogKeepsItsOldNames() {
+        val log = MockCallLog()
+        log.begin("auth.login")
+        log.begin("session.save")
+        assertEquals(log.entries, log.all)
+        assertEquals(log.entries(since = 1), log.since(1))
     }
 
     @Test
@@ -59,7 +71,7 @@ class MockingTest {
         val log = MockCallLog()
         val backend = MockBackend(log, MockFaults(), MockLatency.ZERO, UnimplementedClock, Random)
         assertEquals(42, backend.call("demo.fetch", ::Boom) { 42 })
-        assertEquals(listOf("demo.fetch"), log.all)
+        assertEquals(listOf("demo.fetch"), log.entries)
         assertEquals(0, log.inFlight)
     }
 
