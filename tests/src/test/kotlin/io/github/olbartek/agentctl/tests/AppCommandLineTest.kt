@@ -11,7 +11,8 @@ import kotlin.test.assertTrue
 /**
  * What this guards: the `app` commands' arguments are checked as agentctl-ios checks them. `--step-delay` must be a
  * finite number of seconds from 0 to 3600 (a usage error, exit 2, before anything is built), and `app location` takes
- * a southern latitude (`-33.86,151.21`), which would otherwise read as an option.
+ * a southern latitude (`-33.86,151.21`), which would otherwise read as an option. An adb that fails says so, not that
+ * no device is connected.
  *
  * The device is a fake `adb` on a temporary ANDROID_HOME: no device is needed.
  */
@@ -80,5 +81,13 @@ class AppCommandLineTest {
         val result = run("app", "location", "-33.8,151.2", "--nope")
         assertEquals(2, result.status, result.combined)
         assertTrue("no such option --nope" in result.err, result.err)
+    }
+
+    @Test
+    fun aBrokenAdbIsReportedAsBrokenNotAsNoDevice() {
+        File(sdk, "platform-tools/adb").writeText("#!/bin/sh\necho 'adb: failed to check server version: protocol fault' >&2\nexit 1\n")
+        val result = run("app", "screenshot", "shot.png")
+        assertEquals(3, result.status, result.combined)
+        assertEquals("error: cannot run `adb devices` (exit 1): adb: failed to check server version: protocol fault\n", result.err)
     }
 }

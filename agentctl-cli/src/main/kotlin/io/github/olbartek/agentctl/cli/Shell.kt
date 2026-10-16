@@ -48,23 +48,40 @@ internal object Shell {
      * did not finish within [timeoutSeconds]. The output goes to a file rather than a pipe read to its end first, so
      * the timeout holds even for a command that never closes its output (`adb shell` on a frozen emulator).
      */
-    fun capture(command: List<String>, directory: File? = null, timeoutSeconds: Long = 60): String? {
+    fun capture(command: List<String>, directory: File? = null, timeoutSeconds: Long = 60): String? =
+        captureResult(command, directory, timeoutSeconds)?.output
+
+    /** What [captureResult] read: the standard output, the exit status and the standard error. */
+    data class Captured(val output: String, val status: Int, val error: String)
+
+    /**
+     * [capture], with the exit status and standard error, for a caller that reports why a command failed; `null` if
+     * it failed to run or did not finish within [timeoutSeconds].
+     */
+    fun captureResult(command: List<String>, directory: File? = null, timeoutSeconds: Long = 60): Captured? {
         val output = try {
             File.createTempFile("appctl-capture", ".out")
         } catch (_: IOException) {
             return null
         }
+        val error = try {
+            File.createTempFile("appctl-capture", ".err")
+        } catch (_: IOException) {
+            output.delete()
+            return null
+        }
         return try {
             val process = ProcessBuilder(command)
                 .apply { if (directory != null) directory(directory) }
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(error)
                 .redirectOutput(output)
                 .start()
-            if (finish(process, timeoutSeconds) == null) null else output.readText()
+            finish(process, timeoutSeconds)?.let { status -> Captured(output.readText(), status, error.readText()) }
         } catch (_: IOException) {
             null
         } finally {
             output.delete()
+            error.delete()
         }
     }
 
@@ -118,15 +135,30 @@ internal object Gradle {
 
 /** The Android SDK's tools, found the way Android Studio and Gradle find the SDK. */
 internal object AndroidSdk {
-    fun directory(root: File, environment: Map<String, String>): File? {
-        environment["ANDROID_HOME"]?.takeIf { it.isNotEmpty() }?.let { return File(it) }
-        environment["ANDROID_SDK_ROOT"]?.takeIf { it.isNotEmpty() }?.let { return File(it) }
+    fun directory(root: File, environment: Map<String, String>): File? = located(root, environment)?.first
+
+    /** The SDK's directory, and where it came from: `ANDROID_HOME`, `ANDROID_SDK_ROOT` or `local.properties' sdk.dir`. */
+    private fun located(root: File, environment: Map<String, String>): Pair<File, String>? {
+        for (variable in listOf("ANDROID_HOME", "ANDROID_SDK_ROOT")) {
+            environment[variable]?.takeIf { it.isNotEmpty() }?.let { return File(it) to variable }
+        }
         val local = File(root, "local.properties")
         if (local.isFile) {
             val properties = Properties().apply { local.inputStream().use(::load) }
-            properties.getProperty("sdk.dir")?.let { return File(it) }
+            properties.getProperty("sdk.dir")?.let { return File(it) to "local.properties' sdk.dir" }
         }
         return null
+    }
+
+    /**
+     * Why [adb] fell back to the `adb` on PATH, for the error when that cannot run either; `null` when the SDK has an
+     * adb, which then failed to run for a reason of its own.
+     */
+    fun missingAdb(root: File, environment: Map<String, String>): String? {
+        val (sdk, source) = located(root, environment) ?: return "no Android SDK found: set ANDROID_HOME, or sdk.dir in local.properties"
+        if (File(sdk, "platform-tools/adb").canExecute()) return null
+        return "no adb in ${File(sdk, "platform-tools").path} (from $source), nor on PATH: set ANDROID_HOME, or sdk.dir in " +
+            "local.properties, to the Android SDK"
     }
 
     fun tool(root: File, environment: Map<String, String>, relativePath: String, name: String): String {

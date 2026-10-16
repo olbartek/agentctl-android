@@ -420,6 +420,10 @@ internal object Message {
     fun unreadableBridgeState(cli: Cli<*, *>, reason: String): String =
         "cannot read ${cli.config.outputPath}/bridge.json: $reason; relaunch with ${cli.invocation} app launch, or pass --port"
 
+    /** `adb devices` ran and failed: its exit status and what it said on stderr (as agentctl-ios reports simctl's). */
+    fun adbDevicesFailed(status: Int, stderr: String): String =
+        "cannot run `adb devices` (exit $status)" + stderr.trim().let { if (it.isEmpty()) "" else ": $it" }
+
     /** `test` and L2 with nothing to run. Zero scenarios passing is not a pass. */
     fun noScenarios(directory: File): String =
         "no scenario files (*.appctl) in ${directory.path}: check the config's scenariosPath, or name the files to run"
