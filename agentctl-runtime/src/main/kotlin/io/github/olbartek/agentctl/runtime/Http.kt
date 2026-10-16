@@ -17,7 +17,7 @@ public object HttpParser {
     /** The bridge's platform (`android`, `ios`) on every response, beside [APP_HEADER] (CONTRACT.md §8.4). */
     public const val PLATFORM_HEADER: String = "X-Appctl-Platform"
 
-    /** The largest header block a request may have. */
+    /** The largest header block a request may have, with the blank line that ends it (CONTRACT.md §8.1). */
     public const val MAX_HEADER_BYTES: Int = 64 * 1024
 
     public sealed interface Result {
@@ -29,6 +29,8 @@ public object HttpParser {
     public fun parse(data: ByteArray, length: Int = data.size): Result {
         val headerEnd = indexOf(data, length, HEADER_END)
         if (headerEnd < 0) return if (length > MAX_HEADER_BYTES) Result.Malformed else Result.Incomplete
+        // However it arrived: the header block, with the blank line that ends it, holds at most MAX_HEADER_BYTES.
+        if (headerEnd + HEADER_END.size > MAX_HEADER_BYTES) return Result.Malformed
         val head = decodeStrictly(data, headerEnd) ?: return Result.Malformed
         val lines = head.split("\r\n")
         val requestLine = lines[0].split(" ").filter { it.isNotEmpty() }
