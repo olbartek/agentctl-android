@@ -121,6 +121,14 @@ class ExecutorTest {
     @Test
     fun argumentErrorsNameTheUsage() {
         assertEquals("open <id>: invalid argument: expected an item id such as 2", run("open x").second.steps.last().message)
+        // Swift's `Int("٢")` and `Int("９")` are nil: a digit that is not ASCII is no id, as `open x` is none.
+        for (digit in listOf("٢", "９", "²")) {
+            val refused = run("open $digit").second
+            assertEquals(RunStatus.FAILED, refused.status, digit)
+            assertEquals("open <id>: invalid argument: expected an item id such as 2", refused.steps.last().message, digit)
+        }
+        // ...while `Int("+2")` is 2.
+        assertEquals(RunStatus.OK, run("open +2; expect screen=items/2").second.status)
         assertEquals("open <id>: missing argument: expected <id>", run("open").second.steps.last().message)
         assertEquals(
             "save: unexpected argument 'now': this command takes none",

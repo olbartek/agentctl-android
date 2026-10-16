@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.AgentNumbers
 import io.github.olbartek.agentctl.BridgeDefaults
 import java.io.File
 import java.io.IOException
@@ -160,7 +161,7 @@ internal object Ports {
 
     private fun environmentPort(environment: Map<String, String>): Int? {
         val value = environment[ENVIRONMENT_VARIABLE]?.takeIf { it.isNotEmpty() } ?: return null
-        return value.toIntOrNull()?.takeIf { it in 1..65535 } ?: throw BadEnvironmentPort(value)
+        return AgentNumbers.int(value)?.takeIf { it in 1..65535 } ?: throw BadEnvironmentPort(value)
     }
 }
 
@@ -246,7 +247,7 @@ internal object FlatJson {
         private fun readInteger(): Long {
             val start = index
             if (peek() == '-') index++
-            while (index < text.length && text[index].isDigit()) index++
+            while (index < text.length && text[index] in '0'..'9') index++
             return text.substring(start, index).toLongOrNull() ?: fail()
         }
 

@@ -130,7 +130,7 @@ class SettleTest {
     fun mockCallsInsideEffectsSettle() {
         assertEquals(0, send(Toy.Action.Backend).pending)
         assertEquals(42, state.value)
-        assertEquals(listOf("toy.answer"), host.callLog.all)
+        assertEquals(listOf("toy.answer"), host.callLog.entries)
     }
 
     @Test

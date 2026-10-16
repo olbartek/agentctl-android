@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.examples.agentshop.models
 
+import io.github.olbartek.agentctl.AgentNumbers
 import java.net.URI
 
 /** The links AgentShop opens: `agentshop://product/<id>`, `agentshop://order/<id>` and `agentshop://shop`. */
@@ -22,9 +23,7 @@ sealed interface DeepLink {
             }
         }
 
-        private val ASCII_INTEGER = Regex("[+-]?[0-9]+")
-
         /** Swift's `Int(_:)`: ASCII digits only, where `toIntOrNull` also reads any Unicode digit. */
-        private fun number(text: String): Int? = if (ASCII_INTEGER.matches(text)) text.toIntOrNull() else null
+        private fun number(text: String): Int? = AgentNumbers.int(text)
     }
 }

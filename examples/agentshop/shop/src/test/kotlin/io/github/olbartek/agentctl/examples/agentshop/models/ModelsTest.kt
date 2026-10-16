@@ -156,6 +156,6 @@ class ScheduledFaultsTest {
         assertEquals(42, await { call() })
         assertEquals("network", assertFailsWith<Failure> { await { call() } }.code)
         assertEquals(42, await { call() })
-        assertEquals(listOf("a.one", "a.one", "a.one"), mocks.log.all)
+        assertEquals(listOf("a.one", "a.one", "a.one"), mocks.log.entries)
     }
 }

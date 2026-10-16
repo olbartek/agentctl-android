@@ -12,12 +12,12 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 public class MockCallLog {
     private val lock = Any()
-    private val entries = mutableListOf<String>()
+    private val recorded = mutableListOf<String>()
     private var running = 0
 
     /** Records a call to [name], counted in [inFlight] until [end]. */
     public fun begin(name: String): Unit = synchronized(lock) {
-        entries.add(name)
+        recorded.add(name)
         running += 1
     }
 
@@ -26,16 +26,24 @@ public class MockCallLog {
     public fun end(name: String): Unit = synchronized(lock) { running -= 1 }
 
     /** Every call recorded so far, in order. */
-    public val all: List<String> get() = synchronized(lock) { entries.toList() }
+    public val entries: List<String> get() = synchronized(lock) { recorded.toList() }
 
-    /** How many calls have been recorded. A step reads it first, then takes its own calls with [since]. */
-    public val count: Int get() = synchronized(lock) { entries.size }
+    /** How many calls have been recorded. A step reads it first, then takes its own calls with [entries]. */
+    public val count: Int get() = synchronized(lock) { recorded.size }
 
     /** Calls begun and not yet ended. */
     public val inFlight: Int get() = synchronized(lock) { running }
 
-    /** Entries recorded after the first `index` entries. */
-    public fun since(index: Int): List<String> = synchronized(lock) { entries.drop(index) }
+    /** Entries recorded after the first [since] entries. */
+    public fun entries(since: Int): List<String> = synchronized(lock) { recorded.drop(since) }
+
+    /** The name before 0.8, when it differed from the reference's. */
+    @Deprecated("Renamed to entries, as in agentctl-ios.", ReplaceWith("entries"))
+    public val all: List<String> get() = entries
+
+    /** The name before 0.8, when it differed from the reference's. */
+    @Deprecated("Renamed to entries(since:), as in agentctl-ios.", ReplaceWith("entries(since = index)"))
+    public fun since(index: Int): List<String> = entries(since = index)
 }
 
 /**

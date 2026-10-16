@@ -367,7 +367,7 @@ public class ScriptRunner<A>(
     }
 
     private fun finish(command: String, callStart: Int, settle: SettleResult, before: Any?): StepOutcome {
-        val calls = callLog.since(callStart)
+        val calls = callLog.entries(since = callStart)
         lastCalls = calls
         var step = record(command, calls, settle)
         if (recordsDiff) step = step.copy(diff = driver.stateDiff(before))

@@ -1,6 +1,7 @@
 package io.github.olbartek.agentctl.examples.agentshop.home
 
 import io.github.olbartek.agentctl.AgentCommand
+import io.github.olbartek.agentctl.AgentNumbers
 import io.github.olbartek.agentctl.AgentScreen
 import io.github.olbartek.agentctl.CommandGate
 import io.github.olbartek.agentctl.Effect
@@ -112,7 +113,7 @@ object OrdersListAgent : AgentScreen<OrdersList.State, OrdersList.Action> {
 
     override val commands: List<AgentCommand<OrdersList.State, OrdersList.Action>> = listOf(
         AgentCommand.parsing("open", argument = "<id>", help = "Open an order, e.g. open 1003.") { text ->
-            OrdersList.Action.OrderTapped(text.toIntOrNull() ?: invalidArgument("expected an order id such as 1003"))
+            OrdersList.Action.OrderTapped(AgentNumbers.int(text) ?: invalidArgument("expected an order id such as 1003"))
         },
         AgentCommand.action("refresh", help = "Pull to refresh.", action = OrdersList.Action.Refresh),
         AgentCommand.action(

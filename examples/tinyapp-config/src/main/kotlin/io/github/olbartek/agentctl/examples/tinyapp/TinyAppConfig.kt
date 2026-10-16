@@ -2,6 +2,7 @@ package io.github.olbartek.agentctl.examples.tinyapp
 
 import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
+import io.github.olbartek.agentctl.AgentNumbers
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
@@ -43,8 +44,7 @@ object TinyAppConfig {
             // `tinyapp://items/<id>` opens that item, on top of whatever is shown, as tapping it in the list would.
             openUrl = { url ->
                 val path = url.path?.split("/")?.filter { it.isNotEmpty() }
-                // ASCII digits only, as Swift's `Int(_:)` reads them; `toIntOrNull` alone takes any Unicode digit.
-                val id = path?.singleOrNull()?.takeIf { it.matches(Regex("[+-]?[0-9]+")) }?.toIntOrNull()
+                val id = path?.singleOrNull()?.let(AgentNumbers::int)
                 if (url.scheme == "tinyapp" && url.host == "items" && id != null) {
                     TinyRoot.Action.Items(Items.Action.OpenTapped(id))
                 } else {

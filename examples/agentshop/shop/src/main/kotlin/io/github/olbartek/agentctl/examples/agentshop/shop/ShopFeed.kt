@@ -1,6 +1,7 @@
 package io.github.olbartek.agentctl.examples.agentshop.shop
 
 import io.github.olbartek.agentctl.AgentCommand
+import io.github.olbartek.agentctl.AgentNumbers
 import io.github.olbartek.agentctl.AgentScreen
 import io.github.olbartek.agentctl.CommandGate
 import io.github.olbartek.agentctl.Effect
@@ -141,7 +142,7 @@ object ShopFeedAgent : AgentScreen<ShopFeed.State, ShopFeed.Action> {
             help = "Open a product, e.g. open 101.",
             gate = CommandGate("products=0") { it.visible.isNotEmpty() },
         ) { text ->
-            ShopFeed.Action.ProductTapped(text.toIntOrNull() ?: invalidArgument("expected a SKU such as 101"))
+            ShopFeed.Action.ProductTapped(AgentNumbers.int(text) ?: invalidArgument("expected a SKU such as 101"))
         },
         AgentCommand.action("refresh", help = "Load the catalog again.", action = ShopFeed.Action.Refresh),
         AgentCommand.action(
