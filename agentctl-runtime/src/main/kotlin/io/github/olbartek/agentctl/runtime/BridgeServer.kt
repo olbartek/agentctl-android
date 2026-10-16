@@ -12,7 +12,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.Semaphore
 import kotlin.concurrent.thread
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -94,6 +93,11 @@ public class BridgeServer(
                     read(connection)
                 } catch (_: IOException) {
                     null
+                } catch (e: VirtualMachineError) {
+                    connection.close()
+                    throw e
+                } catch (_: Throwable) {
+                    null
                 } finally {
                     reading.release()
                 }
@@ -114,10 +118,10 @@ public class BridgeServer(
         val response = when (parsed) {
             is HttpParser.Result.Request -> try {
                 runBlocking { withContext(dispatcher) { handler(parsed.request) } }
-            } catch (e: CancellationException) {
+            } catch (e: VirtualMachineError) {
                 throw e
-            } catch (e: Exception) {
-                // The app's own code failed: this request gets no answer, the next ones do.
+            } catch (e: Throwable) {
+                // Cancellation included: there is no coroutine here to pass it on to, only this request to give up.
                 System.err.println("AgentCtl bridge: ${parsed.request.method} ${parsed.request.path} failed")
                 e.printStackTrace()
                 return

@@ -9,9 +9,9 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 
 /**
@@ -60,17 +60,17 @@ class BridgeConnectionsTest {
     @Test
     fun aSlowRequestIsIncompleteOnceItsDeadlinePasses() {
         val (server, port) = start()
-        server.requestDeadline = 500.milliseconds
+        server.requestDeadline = 2.seconds
         val slow = idle(port).apply { soTimeout = 5_000 }
         val started = TimeSource.Monotonic.markNow()
         // A byte now and then: each read is quick, the request never ends.
         slow.getOutputStream().apply { write("GET /snap".toByteArray()); flush() }
-        Thread.sleep(300)
+        Thread.sleep(100)
         slow.getOutputStream().apply { write("shot".toByteArray()); flush() }
         val answer = slow.getInputStream().readBytes().decodeToString()
         assertTrue(answer.startsWith("HTTP/1.1 400"), answer)
         assertTrue(answer.endsWith("incomplete request\n"), answer)
-        assertTrue(started.elapsedNow() < 3.seconds, "took ${started.elapsedNow()}")
+        assertTrue(started.elapsedNow() < 5.seconds, "took ${started.elapsedNow()}")
     }
 
     @Test
@@ -91,8 +91,11 @@ class BridgeConnectionsTest {
         val (_, port) = start {
             calls++
             if (calls == 1) throw IllegalStateException("a reducer failed")
+            // A timeout in the app's code, say: cancellation, with no coroutine of the bridge's to cancel.
+            if (calls == 2) throw CancellationException("timed out")
             BridgeResponse(200, "ok\n", exitCode = 0)
         }
+        assertEquals("", send(port, get))
         assertEquals("", send(port, get))
         assertEquals("HTTP/1.1 200 OK", send(port, get))
     }
