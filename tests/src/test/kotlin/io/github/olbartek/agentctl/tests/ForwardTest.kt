@@ -133,7 +133,7 @@ class ForwardTest {
         )
         assertEquals(3, result.status, result.combined)
         assertTrue(
-            "answers as $appId (ios), not $appId (android): another app holds that port" in result.out,
+            "answers as $appId (ios), not $appId (android): another app took the port during the run\n" in result.out,
             result.combined,
         )
     }

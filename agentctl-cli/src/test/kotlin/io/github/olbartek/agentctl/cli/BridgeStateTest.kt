@@ -144,9 +144,30 @@ class BridgeStateTest {
         )
         // The app just launched always names itself: silence is another app, or an installed one from before the header.
         assertEquals(
-            "the app's agent bridge on 127.0.0.1:8765 answers as an app without X-Appctl-App, not dev.app (android): another " +
+            "the app's agent bridge on 127.0.0.1:8765 answers as an app without X-Appctl-App (no X-Appctl-Platform), not dev.app (android): another " +
                 "app holds that port; pass --port or set APPCTL_PORT (or the installed app predates X-Appctl-App: launch without --no-build)",
             Message.anotherApp(8765, null, null, "dev.app"),
+        )
+    }
+
+    /** `app test`: an answer from another app after the launch was answered by this one. agentctl-ios's words. */
+    @Test
+    fun anotherAppDuringTheRunSaysItTookThePort() {
+        assertEquals(
+            "the app's agent bridge on 127.0.0.1:8765 answers as dev.other (android), not dev.app (android): another app " +
+                "took the port during the run",
+            Message.anotherAppAnswered(8765, "dev.other", "android", "dev.app"),
+        )
+        assertEquals(
+            "the app's agent bridge on 127.0.0.1:8765 answers as an app without X-Appctl-App (ios), not dev.app (android): " +
+                "another app took the port during the run",
+            Message.anotherAppAnswered(8765, null, "ios", "dev.app"),
+        )
+        val ours = BridgeClient.Response(200, "", 0, "dev.app", "android")
+        assertNull(AppTest.foreign(ours, 8765, "dev.app"))
+        assertEquals(
+            AppTest.Outcome.Broken(Message.anotherAppAnswered(8765, "dev.app", "ios", "dev.app")),
+            AppTest.foreign(ours.copy(platform = "ios"), 8765, "dev.app"),
         )
     }
 
