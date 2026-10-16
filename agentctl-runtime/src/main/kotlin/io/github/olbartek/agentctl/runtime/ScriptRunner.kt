@@ -18,6 +18,8 @@ import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.StepRecord
 import java.net.URI
 import java.net.URISyntaxException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /** How a [ScriptRunner] waits for the app and whether it can control time. */
 public class RunnerEnvironment(
@@ -117,6 +119,8 @@ public class ScriptRunner<A>(
         val steps = mutableListOf<StepRecord>()
         val executed = mutableListOf<ScriptLine>()
         for (line in lines) {
+            // Cancelled (the bridge client that sent it went away, say): run nothing more, and pass the cancellation on.
+            currentCoroutineContext().ensureActive()
             val (step, status) = execute(line)
             steps.add(step)
             if (status != RunStatus.OK) return RunResult(steps, status, executed, failedLine = line)
