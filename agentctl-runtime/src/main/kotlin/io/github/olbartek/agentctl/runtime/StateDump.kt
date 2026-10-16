@@ -6,6 +6,7 @@ package io.github.olbartek.agentctl.runtime
  * `Name(a=1, b=[x, y])` — one field per line. Informational only (CONTRACT.md §8.4): nothing parses it.
  */
 public object StateDump {
+    /** [value]'s `toString()`, one field per line, each level of nesting indented by two more spaces. */
     public fun render(value: Any?): String {
         val text = value.toString()
         val out = StringBuilder()

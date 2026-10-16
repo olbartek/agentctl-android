@@ -14,7 +14,10 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 /** Java bytecode level for every module: what Android and any JDK 17+ host can load. */
 val JAVA_TARGET = JavaVersion.VERSION_17
 
-/** A pure Kotlin (JVM) module: Java 17 bytecode, explicit API mode, JUnit 4 with kotlin-test. */
+/**
+ * A pure Kotlin (JVM) module: Java 17 bytecode and JUnit 4 with kotlin-test. Explicit API mode is not applied here:
+ * each library module turns it on itself with `kotlin { explicitApi() }`.
+ */
 class JvmLibraryConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) = with(target) {
         pluginManager.apply("org.jetbrains.kotlin.jvm")

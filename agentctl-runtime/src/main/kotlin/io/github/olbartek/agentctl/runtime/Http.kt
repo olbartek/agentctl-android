@@ -20,12 +20,19 @@ public object HttpParser {
     /** The largest header block a request may have, with the blank line that ends it (CONTRACT.md §8.1). */
     public const val MAX_HEADER_BYTES: Int = 64 * 1024
 
+    /** What [parse] makes of the bytes received so far. */
     public sealed interface Result {
+        /** Not a whole request yet: read more and parse again. */
         public data object Incomplete : Result
+
+        /** Not a request this parser accepts; reading more will not help. */
         public data object Malformed : Result
+
+        /** A whole request. */
         public data class Request(val request: BridgeRequest) : Result
     }
 
+    /** Parses the first [length] bytes of [data]. */
     public fun parse(data: ByteArray, length: Int = data.size): Result {
         val headerEnd = indexOf(data, length, HEADER_END)
         if (headerEnd < 0) return if (length > MAX_HEADER_BYTES) Result.Malformed else Result.Incomplete

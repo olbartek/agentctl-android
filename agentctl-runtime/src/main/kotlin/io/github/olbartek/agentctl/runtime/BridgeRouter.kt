@@ -10,6 +10,7 @@ public data class BridgeRequest(
     val body: String = "",
 )
 
+/** An answer of the agent bridge: an HTTP status, a body and its content type, and the exit code the CLI exits with. */
 public data class BridgeResponse(
     val status: Int,
     val body: String,
@@ -34,6 +35,7 @@ public class BridgeRouter<A>(
     private val runner: ScriptRunner<A>,
     private val screensText: () -> String,
 ) {
+    /** Answers one request. An unknown path is a 404 and a wrong method a 405, both with exit code 2. */
     public suspend fun handle(request: BridgeRequest): BridgeResponse {
         val known = request.path in setOf("/run", "/state", "/screens", "/snapshot")
         return when {

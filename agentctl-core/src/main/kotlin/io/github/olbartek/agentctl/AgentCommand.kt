@@ -2,6 +2,7 @@ package io.github.olbartek.agentctl
 
 /** Why an agent command could not be turned into an action. */
 public sealed class AgentCommandError {
+    /** The error as a failed step reports it, e.g. `missing argument: expected <text>`. */
     public abstract val message: String
 
     /** The command needs an argument, described by [expected] (e.g. `"<text>"`). */
@@ -57,9 +58,14 @@ public class AgentCommand<S, A>(
     /** Turns the argument into an action, or throws [AgentCommandException]. */
     public val makeAction: (String?) -> A,
 ) {
+    /** This command as the docs list it under [source]; a [gate] with no [note] reads `disabled when <hint>`. */
     public fun doc(source: String): CommandDoc =
         CommandDoc(name, argument, help, source, note ?: gate?.let { "disabled when ${it.hint}" })
 
+    /**
+     * This command resolved against [state] under [source]: disabled, with the gate's hint as the reason, while its
+     * [gate] is closed.
+     */
     public fun resolve(state: S, source: String): ResolvedCommand<A> {
         val gate = gate
         val disabledReason = if (gate != null && !gate.isEnabled(state)) gate.hint else null
@@ -192,8 +198,10 @@ public class ResolvedCommand<out A>(
     public val disabledReason: String?,
     public val makeAction: (String?) -> A,
 ) {
+    /** The command as typed, e.g. `type <text>`: the name, then the argument's description if it takes one. */
     public val usage: String get() = if (argument != null) "$name $argument" else name
 
+    /** This command with its action lifted into an ancestor's action type by [embed]. */
     public fun <P> map(embed: (A) -> P): ResolvedCommand<P> =
         ResolvedCommand(name, argument, help, source, disabledReason) { embed(makeAction(it)) }
 

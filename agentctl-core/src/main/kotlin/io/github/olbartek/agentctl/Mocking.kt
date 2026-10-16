@@ -15,16 +15,23 @@ public class MockCallLog {
     private val entries = mutableListOf<String>()
     private var running = 0
 
+    /** Records a call to [name], counted in [inFlight] until [end]. */
     public fun begin(name: String): Unit = synchronized(lock) {
         entries.add(name)
         running += 1
     }
 
+    /** Marks one call to [name] as finished. */
     @Suppress("UNUSED_PARAMETER")
     public fun end(name: String): Unit = synchronized(lock) { running -= 1 }
 
+    /** Every call recorded so far, in order. */
     public val all: List<String> get() = synchronized(lock) { entries.toList() }
+
+    /** How many calls have been recorded. A step reads it first, then takes its own calls with [since]. */
     public val count: Int get() = synchronized(lock) { entries.size }
+
+    /** Calls begun and not yet ended. */
     public val inFlight: Int get() = synchronized(lock) { running }
 
     /** Entries recorded after the first `index` entries. */
@@ -41,11 +48,13 @@ public class MockFaults {
     private val lock = Any()
     private val faults = mutableMapOf<String, String>()
 
+    /** Arms [code] for the next call to [method], replacing any fault already armed for it. */
     public fun set(method: String, code: String): Unit = synchronized(lock) { faults[method] = code }
 
     /** Returns and clears the fault registered for `method`, if any. */
     public fun take(method: String): String? = synchronized(lock) { faults.remove(method) }
 
+    /** The faults armed and not yet taken, by method. */
     public val pending: Map<String, String> get() = synchronized(lock) { faults.toMap() }
 }
 
@@ -64,13 +73,19 @@ public data class MockLatency(val range: ClosedRange<Duration>?) {
     }
 
     public companion object {
+        /** No latency: mocks answer at once and never touch the clock. */
         public val ZERO: MockLatency = MockLatency(null)
+
+        /** 300–800 ms, drawn per call: the app's default. */
         public val LIVE: MockLatency = between(300.milliseconds, 800.milliseconds)
 
+        /** Always [duration]. */
         public fun fixed(duration: Duration): MockLatency = MockLatency(duration..duration)
 
+        /** Drawn per call from [lower] to [upper], both included. */
         public fun between(lower: Duration, upper: Duration): MockLatency = MockLatency(lower..upper)
 
+        /** Fixed at [milliseconds] ms, or [ZERO] when it is not positive: how `mock-latency` is read. */
         public fun milliseconds(milliseconds: Int): MockLatency =
             if (milliseconds <= 0) ZERO else fixed(milliseconds.milliseconds)
     }

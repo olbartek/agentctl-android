@@ -69,10 +69,13 @@ public data class HelpExamples(
     /** The scripts in the two `app run` examples: a plain run, and a `--json` run. */
     val appScripts: List<String> = listOf("<command>; expect <key>=<value>", "<command>"),
 ) {
+    /** The script of the `run` example at [index], or `<command>` past the end of [runScripts]. */
     public fun runScript(index: Int): String = runScripts.getOrElse(index) { "<command>" }
 
+    /** The seed of the `app launch` example at [index], or `<command>` past the end of [appSeeds]. */
     public fun appSeed(index: Int): String = appSeeds.getOrElse(index) { "<command>" }
 
+    /** The script of the `app run` example at [index], or `<command>` past the end of [appScripts]. */
     public fun appScript(index: Int): String = appScripts.getOrElse(index) { "<command>" }
 }
 

@@ -20,4 +20,8 @@ tasks.test {
     inputs.dir(rootProject.file("examples/tinyapp/scenarios"))
     inputs.file(rootProject.file("examples/tinyapp/agent-commands.md"))
     inputs.file(rootProject.file("examples/tinymvvm/agent-commands.md"))
+    // PublicKDocTest reads the library modules' sources; agentctl-bridge is not on this module's classpath.
+    listOf("agentctl-core", "agentctl-runtime", "agentctl-cli", "agentctl-bridge", "agentctl-test-support").forEach {
+        inputs.dir(rootProject.file("$it/src/main")).withPropertyName("$it sources")
+    }
 }

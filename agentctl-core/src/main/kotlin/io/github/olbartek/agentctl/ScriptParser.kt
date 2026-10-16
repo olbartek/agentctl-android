@@ -21,6 +21,7 @@ public class ScriptError(
     public val column: Int,
     message: String,
 ) : Exception(message) {
+    /** The error with its position, as `parse error:` reports it: `line <n>, column <n>: <message>`. */
     public val description: String get() = "line $line, column $column: $message"
 
     override fun equals(other: Any?): Boolean =
@@ -41,6 +42,7 @@ public class ScriptError(
  *   argument so that commands like `expect` can split on unquoted spaces; use [ArgumentText] to unquote.
  */
 public object ScriptParser {
+    /** The commands of [source], in order. Throws [ScriptError] on an unterminated quote. */
     @Throws(ScriptError::class)
     public fun parse(source: String): List<ScriptLine> {
         val result = mutableListOf<ScriptLine>()
@@ -148,8 +150,10 @@ public class AgentDuration private constructor(
     /** The duration in milliseconds, exactly. */
     public val totalMilliseconds: java.math.BigInteger,
 ) : Comparable<AgentDuration> {
+    /** This plus [other]. */
     public operator fun plus(other: AgentDuration): AgentDuration = AgentDuration(totalMilliseconds + other.totalMilliseconds)
 
+    /** This less [other]. */
     public operator fun minus(other: AgentDuration): AgentDuration = AgentDuration(totalMilliseconds - other.totalMilliseconds)
 
     override fun compareTo(other: AgentDuration): Int = totalMilliseconds.compareTo(other.totalMilliseconds)
@@ -168,13 +172,17 @@ public class AgentDuration private constructor(
     override fun toString(): String = "${totalMilliseconds}ms"
 
     public companion object {
+        /** No time. */
         public val ZERO: AgentDuration = AgentDuration(java.math.BigInteger.ZERO)
 
+        /** [milliseconds] milliseconds. */
         public fun ofMilliseconds(milliseconds: Long): AgentDuration = AgentDuration(java.math.BigInteger.valueOf(milliseconds))
 
+        /** [seconds] seconds, exactly, even past the range of [Duration]. */
         public fun ofSeconds(seconds: Long): AgentDuration =
             AgentDuration(java.math.BigInteger.valueOf(seconds) * java.math.BigInteger.valueOf(1000))
 
+        /** [duration] in whole milliseconds; any fraction of a millisecond is dropped. */
         public fun of(duration: Duration): AgentDuration = ofMilliseconds(duration.inWholeMilliseconds)
     }
 }
