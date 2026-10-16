@@ -101,4 +101,37 @@ class BridgeClientGoneTest {
         awaitEvent("cancelled")
         assertEquals(listOf("client gone", "cancelled"), events.toList())
     }
+
+    /**
+     * A connection the bridge closes itself is not a client going away: neither one whose handler threw (closed
+     * unanswered) nor one answered whose client then closes, though its watcher sees both.
+     */
+    @Test
+    fun aConnectionTheBridgeEndsIsNotAClientGone() {
+        val started = CountDownLatch(1)
+        val fail = CompletableDeferred<Unit>()
+        val calls = AtomicInteger(0)
+        val port = start {
+            if (calls.incrementAndGet() == 1) {
+                started.countDown()
+                fail.await()
+                error("the handler failed")
+            }
+            BridgeResponse(200, "ok\n", exitCode = 0)
+        }
+        val failing = sendAndKeep(port)
+        assertTrue(started.await(3, TimeUnit.SECONDS))
+        // Long enough for its watcher to be reading.
+        Thread.sleep(300)
+        fail.complete(Unit)
+        failing.soTimeout = 3_000
+        assertEquals("", failing.getInputStream().readBytes().decodeToString())
+        val answered = sendAndKeep(port)
+        answered.soTimeout = 3_000
+        assertTrue(answered.getInputStream().readBytes().decodeToString().startsWith("HTTP/1.1 200 OK"))
+        answered.close()
+        // Past a watcher's poll, and the linger's end.
+        Thread.sleep(2_500)
+        assertEquals(emptyList(), events.toList())
+    }
 }

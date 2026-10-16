@@ -39,6 +39,9 @@ import kotlinx.coroutines.runBlocking
  * once it has closed. After a few failures in a row it gives up and closes, so clients are refused rather than left
  * hanging.
  *
+ * After an answer, a refusal included, the bridge ends its side of the connection, then drops whatever the client
+ * still sends until it closes its own, for two seconds at most, so the answer is not lost to a reset (CONTRACT.md §8.1).
+ *
  * **Who it answers.** A request is checked before it is queued, from its headers alone, and refused with the
  * connection closed: a malformed one, or one whose body would be over [HttpParser.MAX_BODY_BYTES], with `400 bad
  * request` (exit 2); one whose `Host` does not name the loopback (`127.0.0.1` or `localhost`, any port), that has no
@@ -98,6 +101,12 @@ public class BridgeServer(
 
     /** Queued requests whose connection is watched for the client going away: each holds a thread until its answer. */
     private val watching = Semaphore(MAX_WATCHING)
+
+    /**
+     * Answered or refused connections dropping what their client still sends on a thread of their own (not their
+     * watcher's): each holds that thread for [LINGER] at most.
+     */
+    private val lingering = Semaphore(MAX_LINGERING)
 
     /** Starts listening and returns the bound port (pass 0 for an ephemeral port). */
     @Throws(IOException::class)
@@ -182,9 +191,9 @@ public class BridgeServer(
             thread(name = "AgentCtlBridge-read", isDaemon = true) {
                 val read = try {
                     read(connection).also {
-                        // Not routed, so not queued: answered here, and closed, while this connection still counts
-                        // among those being read.
-                        if (it is Read.Refused) refuse(connection, it.response)
+                        // Not routed, so not queued: answered here, while this connection still counts among those
+                        // being read; it lingers once it no longer does.
+                        if (it is Read.Refused) end(connection, it.response)
                     }
                 } catch (_: IOException) {
                     null
@@ -198,18 +207,12 @@ public class BridgeServer(
                 }
                 when (read) {
                     null -> connection.close()
-                    is Read.Refused -> Unit
+                    is Read.Refused -> linger(connection, TimeSource.Monotonic.markNow())
                     is Read.Routed -> {
                         val exchange = Exchange(connection)
-                        // This thread then waits for the client to go away, until the answer closes the connection.
+                        // This thread then waits for the client to go away until the answer, and lingers after it.
                         // Past the limit, a request is answered without being watched.
-                        if (queue(answering, exchange, read.request) && watching.tryAcquire()) {
-                            try {
-                                watch(exchange)
-                            } finally {
-                                watching.release()
-                            }
-                        }
+                        if (queue(answering, exchange, read.request) && watching.tryAcquire()) watch(exchange)
                     }
                 }
             }
@@ -246,7 +249,25 @@ public class BridgeServer(
 
     /** Queues [exchange]'s answer; `false` (the connection closed) once [stop] has shut the queue. */
     private fun queue(answering: ExecutorService, exchange: Exchange, request: BridgeRequest): Boolean = try {
-        answering.execute { exchange.connection.use { answer(exchange, request) } }
+        answering.execute {
+            val answered = try {
+                answer(exchange, request)
+            } catch (e: Throwable) {
+                exchange.done()
+                exchange.connection.close()
+                throw e
+            }
+            when {
+                !answered -> {
+                    // Closed by the bridge, not its client: its watcher must not report the client gone.
+                    exchange.done()
+                    exchange.connection.close()
+                }
+                // Its watcher lingers and closes it: one thread reads a connection at a time.
+                exchange.handOff() -> Unit
+                else -> linger(exchange.connection, TimeSource.Monotonic.markNow())
+            }
+        }
         true
     } catch (_: RejectedExecutionException) {
         exchange.connection.close()
@@ -254,28 +275,49 @@ public class BridgeServer(
     }
 
     /**
-     * Blocks until [exchange]'s client closes its side, then cancels its request; returns when the connection closes
-     * either way. The request was read whole, so this reads only what comes after it: one request per connection, so
-     * it is dropped.
+     * Holds a [watching] permit, and reads [exchange]'s connection until its client closes its side, which cancels its
+     * request, or until its answer is written; then this thread lingers for it and closes it. The request was read
+     * whole, so this reads only what comes after it: one request per connection, so it is dropped.
+     *
+     * It is the connection's only reader while it watches: on the JVM a second read waits for the first to return,
+     * whatever its timeout, so the answer hands the lingering here rather than reading too. So it reads with a short
+     * timeout ([WATCH_POLL]), to notice the answer.
      */
     private fun watch(exchange: Exchange) {
         val connection = exchange.connection
-        try {
-            connection.soTimeout = 0
-            val input = connection.getInputStream()
-            val scrap = ByteArray(1024)
-            while (input.read(scrap) >= 0) {
-                // Dropped.
+        val written = try {
+            if (!exchange.startWatching()) return // Answered already: the answer's linger has it.
+            try {
+                connection.soTimeout = WATCH_POLL.inWholeMilliseconds.toInt()
+                val input = connection.getInputStream()
+                val scrap = ByteArray(1024)
+                // Checked after every read too: a client that never stops sending never lets a read time out.
+                while (!exchange.isHandedOff) {
+                    val count = try {
+                        input.read(scrap)
+                    } catch (_: SocketTimeoutException) {
+                        continue
+                    }
+                    if (count < 0) break
+                }
+            } catch (_: IOException) {
+                // The client reset it.
             }
-        } catch (_: IOException) {
-            // The answer closed the connection, or the client reset it.
+            exchange.stopWatching()
+        } finally {
+            watching.release()
         }
-        // Closed here: the answer is done, and there is nothing left to cancel.
-        if (!connection.isClosed) events("client gone")
-        exchange.abandon()
+        if (written == null) {
+            // Its answer, if it comes, lingers on its own.
+            if (!exchange.isDone) events("client gone")
+            exchange.abandon()
+            return
+        }
+        connection.use { drain(it, written + LINGER) }
     }
 
-    private fun answer(exchange: Exchange, request: BridgeRequest) {
+    /** Handles [request] and writes its answer; `false` if there is none (cancelled, or the handler threw). */
+    private fun answer(exchange: Exchange, request: BridgeRequest): Boolean {
         val connection = exchange.connection
         val response = try {
             runBlocking {
@@ -290,50 +332,74 @@ public class BridgeServer(
             if (e is CancellationException && exchange.isAbandoned) {
                 System.err.println("AgentCtl bridge: ${request.method} ${request.path} cancelled: its client went away")
                 events("cancelled")
-                return
+                return false
             }
             // Cancellation included: there is no coroutine here to pass it on to, only this request to give up.
             System.err.println("AgentCtl bridge: ${request.method} ${request.path} failed")
             e.printStackTrace()
-            return
+            return false
         }
+        // Before the write: a client that reads its answer and closes is not one that went away.
+        exchange.done()
         write(connection, response)
+        try {
+            connection.shutdownOutput()
+        } catch (_: IOException) {
+            // Gone already.
+        }
+        return true
+    }
+
+    /** Answers a request that is not routed with [response], and ends the bridge's side; [linger] closes it. */
+    private fun end(connection: Socket, response: BridgeResponse) {
+        write(connection, response)
+        try {
+            connection.shutdownOutput()
+        } catch (_: IOException) {
+            // Gone already.
+        }
     }
 
     /**
-     * Answers a request that is not routed with [response], and closes its connection. A client may still be sending
-     * (a body the bridge refused from its headers): closing with its bytes unread would reset the connection, and the
-     * reset can discard the answer before the client reads it. So after the answer the bridge ends its side, then reads
-     * and drops what still comes, for [LINGER] or [LINGER_BYTES] at most, before it closes.
+     * Closes [connection], whose answer is written and whose side the bridge has ended ([since] then), once its client
+     * has closed its own, or [LINGER] after [since] at most (CONTRACT.md §8.1): closing with the client's bytes unread
+     * would reset the connection, and the reset can discard the answer before the client reads it. What the client
+     * still sends (a body the bridge refused from its headers, say) is dropped. It lingers on a thread of its own, so
+     * the next request is not kept waiting; past [MAX_LINGERING] such connections, one closes at once.
      */
-    private fun refuse(connection: Socket, response: BridgeResponse) {
-        connection.use {
-            write(it, response)
-            try {
-                it.shutdownOutput()
-                drain(it)
-            } catch (_: IOException) {
-                // Gone already.
+    private fun linger(connection: Socket, since: TimeSource.Monotonic.ValueTimeMark) {
+        if (!lingering.tryAcquire()) {
+            connection.close()
+            return
+        }
+        try {
+            thread(name = "AgentCtlBridge-linger", isDaemon = true) {
+                try {
+                    connection.use { drain(it, since + LINGER) }
+                } finally {
+                    lingering.release()
+                }
             }
+        } catch (e: Throwable) {
+            lingering.release()
+            connection.close()
+            if (e is VirtualMachineError) throw e
         }
     }
 
-    private fun drain(connection: Socket) {
-        val deadline = TimeSource.Monotonic.markNow() + LINGER
-        val input = connection.getInputStream()
-        val scrap = ByteArray(8 * 1024)
-        var dropped = 0
-        while (dropped < LINGER_BYTES) {
-            val left = -deadline.elapsedNow()
-            if (left <= Duration.ZERO) return
-            connection.soTimeout = left.inWholeMilliseconds.coerceIn(1, Int.MAX_VALUE.toLong()).toInt()
-            val count = try {
-                input.read(scrap)
-            } catch (_: SocketTimeoutException) {
-                return
+    /** Reads and drops what comes on [connection] until its client closes its side, or [deadline] at most. */
+    private fun drain(connection: Socket, deadline: TimeSource.Monotonic.ValueTimeMark) {
+        try {
+            val input = connection.getInputStream()
+            val scrap = ByteArray(8 * 1024)
+            while (true) {
+                val left = -deadline.elapsedNow()
+                if (left <= Duration.ZERO) return
+                connection.soTimeout = left.inWholeMilliseconds.coerceIn(1, Int.MAX_VALUE.toLong()).toInt()
+                if (input.read(scrap) < 0) return
             }
-            if (count < 0) return
-            dropped += count
+        } catch (_: IOException) {
+            // Timed out, or gone already.
         }
     }
 
@@ -400,7 +466,45 @@ public class BridgeServer(
         private var handling: Job? = null
         private var abandoned = false
 
+        /** A thread is watching the connection: the answer hands it the lingering. */
+        private var watched = false
+
+        /** When the answer was written and the bridge's side ended; `null` until then. */
+        private var written: TimeSource.Monotonic.ValueTimeMark? = null
+
+        /**
+         * Set once the answer is ready, or the bridge gives up on the request: nothing is left to cancel, and the
+         * connection closing is not its client going away.
+         */
+        @Volatile var isDone = false
+            private set
+
         val isAbandoned: Boolean get() = synchronized(this) { abandoned }
+
+        val isHandedOff: Boolean get() = synchronized(this) { written != null }
+
+        fun done() {
+            isDone = true
+        }
+
+        /** `false` if the answer is already written: it lingers on its own, and nothing is left to watch. */
+        fun startWatching(): Boolean = synchronized(this) {
+            if (written != null) return false
+            watched = true
+            true
+        }
+
+        /** When the answer was written, if it was handed to this watcher to linger for; `null` if it was not. */
+        fun stopWatching(): TimeSource.Monotonic.ValueTimeMark? = synchronized(this) {
+            watched = false
+            written
+        }
+
+        /** The answer is written: `true` if the watcher takes the lingering, `false` if the caller must. */
+        fun handOff(): Boolean = synchronized(this) {
+            written = TimeSource.Monotonic.markNow()
+            watched
+        }
 
         /** [handling] runs this request; it is cancelled at once if the client has already gone away. */
         fun begin(handling: Job) {
@@ -423,16 +527,22 @@ public class BridgeServer(
         val MALFORMED = BridgeResponse(400, "bad request\n", exitCode = RunStatus.USAGE.code)
         val INCOMPLETE = BridgeResponse(400, "incomplete request\n", exitCode = RunStatus.USAGE.code)
 
-        /** How long a refused connection is read and dropped from, at most, before it closes. */
-        val LINGER: Duration = 1.seconds
-
-        /** How much of a refused connection is read and dropped, at most, before it closes. */
-        const val LINGER_BYTES = 64 * 1024
+        /**
+         * How long an answered or refused connection is read and dropped from, at most, before it closes (CONTRACT.md
+         * §8.1: a few seconds at most, so an answer is not lost to a reset however much the client still sends).
+         */
+        val LINGER: Duration = 2.seconds
 
         /** At most this many connections are sending their request at once. */
         const val MAX_READING = 16
 
         /** At most this many queued requests are watched for their client going away at once. */
         const val MAX_WATCHING = 16
+
+        /** At most this many answered or refused connections linger on threads of their own at once. */
+        const val MAX_LINGERING = 16
+
+        /** How often a watcher stops reading to see whether the answer has been written. */
+        val WATCH_POLL: Duration = 100.milliseconds
     }
 }
