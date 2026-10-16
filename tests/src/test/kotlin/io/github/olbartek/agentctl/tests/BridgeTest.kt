@@ -257,7 +257,8 @@ class BridgeServerTest {
         val app = TinyAppConfig.appCtl.applicationId
         for ((appId, platform, shown) in listOf(
             Triple(app, null, "$app (no X-Appctl-Platform)"),
-            Triple(null, null, "an app without X-Appctl-App"),
+            Triple(null, null, "an app without X-Appctl-App (no X-Appctl-Platform)"),
+            Triple(null, "ios", "an app without X-Appctl-App (ios)"),
         )) {
             val port = startBridge(appId = appId, platform = platform)
             val result = cli("app", "run", "open 2", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_ROOT" to rootWithLaunchState(port).path))
@@ -306,15 +307,26 @@ class BridgeServerTest {
         )
     }
 
+    /**
+     * Checked while the command line is parsed, as agentctl-ios checks it: a usage error with the command's usage line,
+     * before the repo root is looked for (so outside a repo too) and before anything runs.
+     */
     @Test
     fun aPortFlagOutsideOneTo65535IsAUsageError() {
+        val nowhere = Files.createTempDirectory("nowhere").toFile()
         for (command in listOf(listOf("app", "state"), listOf("app", "run", "open 2"), listOf("app", "launch", "--no-build"), listOf("app", "test", "--no-build"))) {
             for (port in listOf("0", "65536")) {
-                val result = cli(*(command + listOf("--port", port)).toTypedArray(), config = TinyAppConfig.appCtl)
-                assertEquals(2, result.status, "${command.joinToString(" ")} --port $port: ${result.err}")
-                assertEquals("error: --port must be a port from 1 to 65535, not $port\n", result.err)
+                for (directory in listOf(repositoryRoot, nowhere)) {
+                    val result = cli(*(command + listOf("--port", port)).toTypedArray(), config = TinyAppConfig.appCtl, workingDirectory = directory)
+                    val name = "${command.joinToString(" ")} --port $port in $directory"
+                    assertEquals(2, result.status, "$name: ${result.err}")
+                    assertEquals("", result.out, name)
+                    assertTrue(result.err.startsWith("Usage: tinyctl app ${command[1]} "), "$name: ${result.err}")
+                    assertTrue(result.err.endsWith("\n\nError: --port must be a port from 1 to 65535, not $port\n"), "$name: ${result.err}")
+                }
             }
         }
+        nowhere.deleteRecursively()
     }
 
     @Test
@@ -343,6 +355,25 @@ class BridgeServerTest {
             assertEquals(2, result.status, "${command.joinToString(" ")}: ${result.err}")
             assertEquals("error: APPCTL_PORT is not a port: 'abc' (expected 1-65535)\n", result.err)
         }
+    }
+
+    /**
+     * The order of the checks, as agentctl-ios makes them: the repo root first, then (for `app test`) the scenario
+     * files, then `APPCTL_PORT`. Where the first fails, its error and exit 3 win over the malformed port's 2.
+     */
+    @Test
+    fun aMalformedAppctlPortComesAfterTheRootAndTheScenarios() {
+        val nowhere = Files.createTempDirectory("nowhere").toFile()
+        for (command in listOf(listOf("check", "--ui"), listOf("app", "test", "--no-build"), listOf("app", "launch", "--no-build"))) {
+            val result = cli(*command.toTypedArray(), config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_PORT" to "abc"), workingDirectory = nowhere)
+            assertEquals(3, result.status, "${command.joinToString(" ")}: ${result.err}")
+            assertTrue(result.err.startsWith("error: cannot find the repo root (no settings.gradle.kts above "), result.err)
+        }
+        File(nowhere, "settings.gradle.kts").writeText("")
+        val noScenarios = cli("app", "test", "--no-build", config = TinyAppConfig.appCtl, environment = mapOf("APPCTL_PORT" to "abc"), workingDirectory = nowhere)
+        assertEquals(3, noScenarios.status, noScenarios.err)
+        assertTrue(noScenarios.err.startsWith("error: no scenario files (*.appctl) in "), noScenarios.err)
+        nowhere.deleteRecursively()
     }
 
     @Test

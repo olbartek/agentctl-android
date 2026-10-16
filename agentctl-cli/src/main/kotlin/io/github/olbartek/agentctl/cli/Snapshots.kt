@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.runtime.RunStatus
 import java.io.File
 
 /**
@@ -8,7 +9,14 @@ import java.io.File
  * outright. They run on the JVM, so unlike the reference's they need no device.
  */
 internal class Snapshots(private val cli: Cli<*, *>, private val root: File) {
-    data class Result(val ok: Boolean, val summary: String, val details: List<String>)
+    /**
+     * [status] is the exit code (CONTRACT.md §5): 0 when the tests passed, 1 when they ran and found a screen that
+     * differs, 3 when they could not run — nothing configured to run, a module whose tasks cannot be listed or that has
+     * no screenshot task, Gradle that could not be started or did not finish.
+     */
+    data class Result(val status: Int, val summary: String, val details: List<String>) {
+        val ok: Boolean get() = status == 0
+    }
 
     fun run(record: Boolean): Result {
         val gradle = cli.config.gradle
@@ -17,9 +25,9 @@ internal class Snapshots(private val cli: Cli<*, *>, private val root: File) {
             // Nothing to verify is not a failure of the app, as the reference's empty `snapshotPackages`; nothing to
             // record with is a failure of the command.
             return if (record) {
-                Result(false, "no snapshot tasks", listOf("the config's gradle.snapshotModules and gradle.snapshotsRecord are empty"))
+                Result(RunStatus.INTERNAL_ERROR.code, "no snapshot tasks", listOf("the config's gradle.snapshotModules and gradle.snapshotsRecord are empty"))
             } else {
-                Result(true, "no snapshot tasks configured", emptyList())
+                Result(0, "no snapshot tasks configured", emptyList())
             }
         }
         val layout = Layout(root, cli.config.outputPath)
@@ -44,16 +52,18 @@ internal class Snapshots(private val cli: Cli<*, *>, private val root: File) {
             }
             tasks.addAll(found.map { taskPath(module, it) })
         }
-        if (problems.isNotEmpty()) return Result(false, "no snapshot tasks found", problems)
+        if (problems.isNotEmpty()) return Result(RunStatus.INTERNAL_ERROR.code, "no snapshot tasks found", problems)
         val log = File(layout.logs, if (record) "L3-snapshots-record.log" else "L3-snapshots.log")
         val status = Shell.run(Gradle.command(root, tasks), root, log)
-        if (status == 0) return Result(true, tasks.joinToString(" "), emptyList())
+        if (status == 0) return Result(0, tasks.joinToString(" "), emptyList())
         val lines = (if (log.isFile) log.readText() else "").split("\n")
         val details = lines
             .filter { "FAILED" in it || "Screenshot" in it || "report" in it.lowercase() && "file://" in it || "What went wrong" in it }
             .take(40)
             .map { "  ${it.trim()}" }
-        return Result(false, "${tasks.joinToString(" ")} failed", listOf("failed; log: ${log.path}") + details)
+        // -1: Gradle could not be started, or did not finish. Anything else is Gradle's own failure: the tests ran.
+        val code = if (status == Shell.NOT_RUN) RunStatus.INTERNAL_ERROR.code else RunStatus.FAILED.code
+        return Result(code, "${tasks.joinToString(" ")} failed", listOf("failed; log: ${log.path}") + details)
     }
 
     companion object {

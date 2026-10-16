@@ -35,7 +35,11 @@ internal class Cli<D : AgentDriver<A, *>, A>(
 ) {
     val invocation: String get() = config.help.invocation
 
-    fun run(script: String, sessionPath: String?, diff: Boolean, json: Boolean): Int = runBlocking {
+    fun run(script: String, sessionPath: String?, diff: Boolean, json: Boolean): Int = withSession {
+        runSession(script, sessionPath, diff, json)
+    }
+
+    private fun runSession(script: String, sessionPath: String?, diff: Boolean, json: Boolean): Int = runBlocking {
         val runner = config.makeRunner()
         val launch = runner.launch()
         // A launch that did not settle fails the run before the script (or a session replay) starts.
@@ -45,7 +49,7 @@ internal class Cli<D : AgentDriver<A, *>, A>(
         }
         val steps = mutableListOf<StepRecord>()
         if (sessionPath != null) {
-            val replay = runner.run(Session.load(resolve(sessionPath)))
+            val replay = runner.run(Session.load(resolve(sessionPath), sessionPath))
             if (replay.status != RunStatus.OK) {
                 val why = replay.message ?: replay.steps.lastOrNull()?.message ?: ""
                 io.error("session replay of $sessionPath failed at ${replay.failedLine?.text ?: "a line"}: $why")
@@ -63,11 +67,13 @@ internal class Cli<D : AgentDriver<A, *>, A>(
             io.print(StepFormatter.text(steps))
         }
         result.message?.let(io::error)
-        if (sessionPath != null) Session.append(result.executed, resolve(sessionPath))
+        if (sessionPath != null) Session.append(result.executed, resolve(sessionPath), sessionPath)
         result.status.code
     }
 
-    fun state(sessionPath: String?): Int = runBlocking {
+    fun state(sessionPath: String?): Int = withSession { stateAfter(sessionPath) }
+
+    private fun stateAfter(sessionPath: String?): Int = runBlocking {
         val runner = config.makeRunner()
         val launch = runner.launch()
         if (launch.status != RunStatus.OK) {
@@ -75,7 +81,7 @@ internal class Cli<D : AgentDriver<A, *>, A>(
             return@runBlocking launch.status.code
         }
         if (sessionPath != null) {
-            val replay = runner.run(Session.load(resolve(sessionPath)))
+            val replay = runner.run(Session.load(resolve(sessionPath), sessionPath))
             if (replay.status != RunStatus.OK) {
                 io.error("session replay of $sessionPath failed")
                 return@runBlocking RunStatus.FAILED.code
@@ -83,6 +89,14 @@ internal class Cli<D : AgentDriver<A, *>, A>(
         }
         io.print(runner.stateDump)
         0
+    }
+
+    /** [body], with a session file that cannot be read or written reported as one error line and exit 3. */
+    private fun withSession(body: () -> Int): Int = try {
+        body()
+    } catch (error: Session.Unusable) {
+        io.error(error.message ?: "")
+        RunStatus.INTERNAL_ERROR.code
     }
 
     fun screens(): Int {
@@ -149,13 +163,14 @@ internal class Cli<D : AgentDriver<A, *>, A>(
         if (record && result.ok && references.isNotEmpty()) {
             io.print("Review the changes: git status --short ${references.joinToString(" ")}")
         }
-        return if (result.ok) 0 else 1
+        return result.status
     }
 
     fun check(ui: Boolean, device: String?): Int {
-        // L4 launches the app: a malformed APPCTL_PORT is a usage error before anything is built.
-        if (ui && launchPort(null) == null) return RunStatus.USAGE.code
         val root = root() ?: return RunStatus.INTERNAL_ERROR.code
+        // L4 launches the app: a malformed APPCTL_PORT is a usage error before anything is built, found once the
+        // root is (as agentctl-ios orders them).
+        if (ui && launchPort(null) == null) return RunStatus.USAGE.code
         return Ladder(this, root, ui, device).run()
     }
 
@@ -176,8 +191,10 @@ internal class Cli<D : AgentDriver<A, *>, A>(
 
     fun appTest(paths: List<String>, options: AppTest.Options): Int {
         val root = root() ?: return RunStatus.INTERNAL_ERROR.code
+        // The scenario files are found before APPCTL_PORT is read, as agentctl-ios orders them.
+        val files = scenarioFiles(paths) ?: return RunStatus.INTERNAL_ERROR.code
         val explicit = launchPort(options.port) ?: return RunStatus.USAGE.code
-        return AppTest(this, root).run(paths, options.copy(port = explicit.port))
+        return AppTest(this, root).run(files, options.copy(port = explicit.port))
     }
 
     fun appGet(path: String, port: Int?): Int = bridgeCall(port, "GET", path, null)
@@ -218,14 +235,14 @@ internal class Cli<D : AgentDriver<A, *>, A>(
         }
     }
 
-    /** A launch's port: `--port` or `APPCTL_PORT` exactly, or `null` inside to find a free one; `null` on a usage error. */
+    /**
+     * A launch's port: `--port` (already checked while parsing) or `APPCTL_PORT` exactly, or `null` inside to find a
+     * free one; `null` on a malformed `APPCTL_PORT`, a usage error.
+     */
     private fun launchPort(flag: Int?): LaunchPort? = try {
         LaunchPort(Ports.explicit(flag, environment))
     } catch (error: Ports.BadEnvironmentPort) {
         io.error(error.message ?: "bad ${Ports.ENVIRONMENT_VARIABLE}")
-        null
-    } catch (error: Ports.BadFlagPort) {
-        io.error(error.message ?: "bad --port")
         null
     }
 
@@ -241,9 +258,6 @@ internal class Cli<D : AgentDriver<A, *>, A>(
             Ports.client(flag, environment) { layout?.let(BridgeState::load) }
         } catch (error: Ports.BadEnvironmentPort) {
             io.error(error.message ?: "bad ${Ports.ENVIRONMENT_VARIABLE}")
-            return RunStatus.USAGE.code
-        } catch (error: Ports.BadFlagPort) {
-            io.error(error.message ?: "bad --port")
             return RunStatus.USAGE.code
         } catch (error: Unreadable) {
             io.error(Message.unreadableBridgeState(this, error.reason))
@@ -314,17 +328,34 @@ internal class Cli<D : AgentDriver<A, *>, A>(
     }
 }
 
-/** `--session` files: one command per line, replayed before each run. */
+/**
+ * `--session` files: one command per line, replayed before each run. A file that does not exist yet is an empty
+ * session; one that cannot be read or written throws [Unusable], named by [path] as the user gave it.
+ */
 internal object Session {
-    fun load(file: File): String = if (file.isFile) file.readText() else ""
+    /** A session file that cannot be read or written: the CLI's one error line, exit 3. */
+    class Unusable(message: String) : Exception(message)
 
-    fun append(lines: List<ScriptLine>, file: File) {
-        file.parentFile?.mkdirs()
-        if (lines.isEmpty()) {
-            if (!file.exists()) file.createNewFile()
-            return
+    fun load(file: File, path: String): String {
+        if (!file.exists()) return ""
+        return try {
+            file.readText()
+        } catch (error: IOException) {
+            throw Unusable(Message.cannotRead(path, error))
         }
-        file.appendText(lines.joinToString("\n") { it.text } + "\n")
+    }
+
+    fun append(lines: List<ScriptLine>, file: File, path: String) {
+        try {
+            file.parentFile?.mkdirs()
+            if (lines.isEmpty()) {
+                if (!file.exists()) file.createNewFile()
+                return
+            }
+            file.appendText(lines.joinToString("\n") { it.text } + "\n")
+        } catch (error: IOException) {
+            throw Unusable(Message.cannotWrite(path, error))
+        }
     }
 }
 
@@ -342,12 +373,16 @@ internal object Message {
         "; the port is from ${cli.config.outputPath}/bridge.json (launched ${state.launchedAt.truncatedTo(ChronoUnit.SECONDS)} on " +
             "${state.device}), which is stale once that app has quit: relaunch with ${cli.invocation} app launch"
 
-    /** How a bridge says who it is: `<app id> (<platform>)`, as agentctl-ios writes it. */
-    private fun identity(app: String, platform: String?): String = "$app (${platform ?: "no ${HttpParser.PLATFORM_HEADER}"})"
+    /**
+     * How a bridge says who it is: `<app id> (<platform>)`, as agentctl-ios writes it (`BridgeIdentity`), with what it
+     * left out named in place: `an app without X-Appctl-App (ios)`, `dev.app (no X-Appctl-Platform)`.
+     */
+    private fun identity(app: String?, platform: String?): String =
+        "${app ?: "an app without ${HttpParser.APP_HEADER}"} (${platform ?: "no ${HttpParser.PLATFORM_HEADER}"})"
 
     /** `app launch`: the bridge on [port] belongs to [other] on [platform], not to this config's [appId] on Android. */
     fun anotherApp(port: Int, other: String?, platform: String?, appId: String): String =
-        "the app's agent bridge on 127.0.0.1:$port answers as ${other?.let { identity(it, platform) } ?: "an app without ${HttpParser.APP_HEADER}"}, " +
+        "the app's agent bridge on 127.0.0.1:$port answers as ${identity(other, platform)}, " +
             "not ${identity(appId, BridgeState.PLATFORM)}: " +
             "another app holds that port; pass --port or set ${Ports.ENVIRONMENT_VARIABLE}" +
             // Without a header, the app may also be an installed one from before it (`--no-build`).
@@ -357,6 +392,14 @@ internal object Message {
                 else -> ""
             }
 
+    /**
+     * `app test`: a scenario's answer came from [other] on [platform], not this config's [appId] on Android, after its
+     * launch was answered by this app: the scenario did not run.
+     */
+    fun anotherAppAnswered(port: Int, other: String?, platform: String?, appId: String): String =
+        "the app's agent bridge on 127.0.0.1:$port answers as ${identity(other, platform)}, " +
+            "not ${identity(appId, BridgeState.PLATFORM)}: another app took the port during the run"
+
     /** `app launch`: the bridge never answered, and something else listens on [port], so it could not listen there. */
     fun couldNotListen(port: Int): String =
         "the app's agent bridge could not listen on 127.0.0.1:$port: another process holds that port; " +
@@ -364,7 +407,7 @@ internal object Message {
 
     /** `app run`/`state`/`screens` on the recorded port: another app, or another platform's build of it, answers there now. */
     fun anotherAppThanRecorded(cli: Cli<*, *>, port: Int, other: String?, platform: String?, recorded: BridgeState): String =
-        "the app's agent bridge on 127.0.0.1:$port answers as ${other?.let { identity(it, platform) } ?: "an app without ${HttpParser.APP_HEADER}"}, " +
+        "the app's agent bridge on 127.0.0.1:$port answers as ${identity(other, platform)}, " +
             "not ${identity(recorded.appId, recorded.platform)} from ${cli.config.outputPath}/bridge.json, " +
             "which is stale: relaunch with ${cli.invocation} app launch"
 
@@ -430,6 +473,23 @@ internal object Message {
     fun deviceDoesNotAnswer(name: String, serial: String): String =
         "$name is running as $serial but does not answer (adb shell timed out after ${Devices.PROBE_SECONDS} s): " +
             "restart it (adb -s $serial emu kill), or pass another --device"
+
+    /** A file the user named (a `--session` file) that cannot be read: its path as given, and the platform's reason. */
+    fun cannotRead(path: String, error: Exception): String = "cannot read $path: ${reason(error)}"
+
+    /** A file the user named (a `--session` file) that cannot be written. */
+    fun cannotWrite(path: String, error: Exception): String = "cannot write $path: ${reason(error)}"
+
+    /**
+     * Why a file could not be used, without its path: the JDK's `FileNotFoundException` says `<absolute path>
+     * (Permission denied)`, and the message already names the path as the user gave it.
+     */
+    private fun reason(error: Exception): String {
+        val message = error.message ?: return error.toString()
+        if (error !is java.io.FileNotFoundException || !message.endsWith(")")) return message
+        val open = message.lastIndexOf(" (")
+        return if (open < 0) message else message.substring(open + 2, message.length - 1)
+    }
 
     fun staleDocs(config: AppCtlConfig<*, *>): String = "${config.docsPath} is stale. Run ${config.help.invocation} docs."
 

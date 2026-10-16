@@ -14,6 +14,7 @@ import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.options.validate
 import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.clikt.parameters.types.double
 import com.github.ajalt.clikt.parameters.types.int
@@ -472,9 +473,17 @@ private fun CoreCliktCommand.deviceOption(cli: Cli<*, *>) = option(
 /** `--port` for `app run`, `app state` and `app screens`: which bridge to talk to. */
 private fun CoreCliktCommand.portOption(outputPath: String) = option(
     help = "The port of the app's agent bridge. Default: APPCTL_PORT, else the last launch's (${outputPath}/bridge.json), else ${BridgeDefaults.PORT}.",
-).int()
+).int().validate { validatePort(it) }
 
 /** `--port` for `app launch` and `app test`: which port to start the bridge on. */
 private fun CoreCliktCommand.launchPortOption() = option(
     help = "The port for the app's agent bridge (the app's agent-port). Default: APPCTL_PORT, else ${BridgeDefaults.PORT} or the next free port.",
-).int()
+).int().validate { validatePort(it) }
+
+/**
+ * `--port` outside 1-65535 is a usage error while the command line is parsed, before the repo root is looked for, as
+ * agentctl-ios checks it: Clikt prints it with the command's usage line, and the CLI exits 2.
+ */
+private fun validatePort(port: Int) {
+    Ports.flagError(port)?.let { throw UsageError(it) }
+}

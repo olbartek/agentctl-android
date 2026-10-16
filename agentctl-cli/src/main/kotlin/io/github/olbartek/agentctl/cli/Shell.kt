@@ -14,7 +14,10 @@ internal class Layout(val root: File, outputPath: String) {
 }
 
 internal object Shell {
-    /** Runs a command with its output in `log`; returns the exit status, or -1 if it could not start. */
+    /** What [run] returns for a command that could not be started or did not finish in time. */
+    const val NOT_RUN: Int = -1
+
+    /** Runs a command with its output in `log`; returns the exit status, or [NOT_RUN] if it could not start or did not finish. */
     fun run(
         command: List<String>,
         directory: File,
@@ -33,10 +36,10 @@ internal object Shell {
             finish(builder.start(), timeoutSeconds) ?: run {
                 // Said where the command's own output ends, so a log that stops short explains itself.
                 log.appendText("\nagentctl: ${command.joinToString(" ")} did not finish within $timeoutSeconds s; stopped it\n")
-                -1
+                NOT_RUN
             }
         } catch (_: IOException) {
-            -1
+            NOT_RUN
         }
     }
 

@@ -41,11 +41,11 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
     }
 
     /**
-     * Exit codes (CONTRACT.md §5): 0 when every scenario that ran passed; 1 when one failed; 3 when there was nothing
-     * to run, the app could not be built or launched, or its bridge did not answer.
+     * Runs [files], found by the caller (`Cli.scenarioFiles`). Exit codes (CONTRACT.md §5): 0 when every scenario that
+     * ran passed; 1 when one failed; 3 when there was nothing to run, the app could not be built or launched, or its
+     * bridge did not answer.
      */
-    fun run(paths: List<String>, options: Options): Int {
-        val files = cli.scenarioFiles(paths) ?: return RunStatus.INTERNAL_ERROR.code
+    fun run(files: List<File>, options: Options): Int {
         val launcher = AppLauncher(cli, root)
         // Once, before any scenario and before the recording. With --no-build a device that is not running is not
         // booted: the not-booted line, exit 3.
@@ -134,11 +134,7 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             if (options.stepDelay != null && index > 0) Thread.sleep((options.stepDelay * 1000).toLong().coerceAtLeast(0))
             try {
                 val response = client.send("POST", "/run", request)
-                // Every answer, not only the launch's: another app (or this app's other platform) that has taken the
-                // port since would otherwise pass its steps off as this app's.
-                if (!response.isFrom(cli.config.applicationId, BridgeState.PLATFORM)) {
-                    return Result(name, Outcome.Broken(Message.anotherApp(launched.port, response.app, response.platform, cli.config.applicationId)))
-                }
+                foreign(response, launched.port, cli.config.applicationId)?.let { return Result(name, it) }
                 body.append(response.body)
                 exitCode = response.exitCode
             } catch (error: IOException) {
@@ -244,6 +240,15 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
     }
 
     companion object {
+        /**
+         * Every answer is checked, not only the launch's: another app (or this app's other platform) that has taken the
+         * port since would otherwise pass its steps off as this app's. Its scenario did not run (as agentctl-ios's
+         * `AppTest.foreign`).
+         */
+        fun foreign(response: BridgeClient.Response, port: Int, appId: String): Outcome? =
+            if (response.isFrom(appId, BridgeState.PLATFORM)) null
+            else Outcome.Broken(Message.anotherAppAnswered(port, response.app, response.platform, appId))
+
         /** What one run through the bridge amounts to, from the steps it printed and its exit code. */
         fun result(name: String, lines: List<ScriptLine>, body: String, exitCode: Int, duration: Duration): Result {
             val blocks = stepBlocks(body)

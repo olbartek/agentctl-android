@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import java.io.File
 import java.util.Locale
@@ -9,6 +10,11 @@ import kotlinx.coroutines.runBlocking
 /**
  * The CLI's `check`: the verification ladder — build, tests, scenarios and the generated docs, then the two UI
  * stages — cheapest first, one line per stage, stopping at the first failure.
+ *
+ * Each rung returns its exit code (CONTRACT.md §5): 0 when it passed; 1 when it ran and found the app wrong (a build
+ * or test that failed, a scenario that failed, stale docs, screenshots that differ, the scenario failing in the app);
+ * 2 for a usage error (an ambiguous `--device`); 3 for an environment error (Gradle that cannot be run, nothing to run,
+ * a scenario the config names that does not exist, no device, an app that could not be launched).
  */
 internal class Ladder(private val cli: Cli<*, *>, private val root: File, private val ui: Boolean, private val device: String?) {
     private val config = cli.config
@@ -17,19 +23,19 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
 
     fun run(): Int {
         layout.logs.mkdirs()
-        if (!build()) return 1
-        if (!test()) return 1
-        if (!scenarios()) return 1
-        if (!docs()) return 1
-        if (ui) {
-            if (!snapshots()) return 1
-            if (!app()) return 1
+        val rungs = listOf(::build, ::test, ::scenarios, ::docs) + if (ui) listOf(::snapshots, ::app) else emptyList()
+        for (rung in rungs) {
+            val status = rung()
+            if (status != 0) return status
         }
         return 0
     }
 
+    /** A Gradle run's exit code as a rung's: Gradle's own failure is the app's (1), one that never ran is not (3). */
+    private fun gradleFailure(status: Int): Int = if (status == Shell.NOT_RUN) RunStatus.INTERNAL_ERROR.code else RunStatus.FAILED.code
+
     /** L0: the config's build tasks. */
-    private fun build(): Boolean {
+    private fun build(): Int {
         val start = TimeSource.Monotonic.markNow()
         val tasks = config.gradle.build
         val log = File(layout.logs, "L0-build.log")
@@ -37,14 +43,14 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
         if (status != 0) {
             report("L0 build", false, "${tasks.joinToString(" ")} failed", start)
             printFailure(log)
-            return false
+            return gradleFailure(status)
         }
         report("L0 build", true, count(tasks.size, "task"), start)
-        return true
+        return 0
     }
 
     /** L1: the config's test tasks, with the number of tests Gradle's JUnit reports counted. */
-    private fun test(): Boolean {
+    private fun test(): Int {
         val start = TimeSource.Monotonic.markNow()
         val tasks = config.gradle.test
         val log = File(layout.logs, "L1-test.log")
@@ -52,55 +58,67 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
         if (status != 0) {
             report("L1 test", false, "${tasks.joinToString(" ")} failed", start)
             printFailure(log)
-            return false
+            return gradleFailure(status)
         }
         report("L1 test", true, "${count(tasks.size, "task")}, ${count(TestReports.count(root), "test")}", start)
-        return true
+        return 0
     }
 
     /** L2: every scenario, in-process. Internal rather than private so a test can run this rung on its own. */
-    fun scenarios(): Boolean = runBlocking {
+    fun scenarios(): Int = runBlocking {
         val start = TimeSource.Monotonic.markNow()
         val directory = File(root, config.scenariosPath)
         val files = ScenarioRunner.files(directory)
         if (files.isEmpty()) {
             report("L2 scenarios", false, "no scenario files", start)
             io.print("  ${Message.noScenarios(directory)}")
-            return@runBlocking false
+            return@runBlocking RunStatus.INTERNAL_ERROR.code
         }
         val results = config.runScenarios(files)
         val failures = results.filter { !it.passed }
         report("L2 scenarios", failures.isEmpty(), "${results.size - failures.size}/${results.size} scenarios", start)
         failures.forEach { failure -> io.print(failure.report.split("\n").joinToString("\n") { "  $it" }) }
-        failures.isEmpty()
+        when {
+            failures.isEmpty() -> 0
+            // A scenario file that could not be read, as `test` counts it.
+            results.any { it.status == RunStatus.INTERNAL_ERROR } -> RunStatus.INTERNAL_ERROR.code
+            else -> RunStatus.FAILED.code
+        }
     }
 
-    private fun docs(): Boolean {
+    private fun docs(): Int {
         val start = TimeSource.Monotonic.markNow()
         val file = File(root, config.docsPath)
         val upToDate = file.isFile && file.readText() == cli.docsMarkdown
         report("docs", upToDate, if (upToDate) "up to date" else Message.staleDocsDetail(config), start)
-        return upToDate
+        return if (upToDate) 0 else RunStatus.FAILED.code
     }
 
     /** L3: the screenshot tests against their references. */
-    private fun snapshots(): Boolean {
+    private fun snapshots(): Int {
         val start = TimeSource.Monotonic.markNow()
         val result = Snapshots(cli, root).run(record = false)
         report("L3 snapshots", result.ok, result.summary, start)
         result.details.forEach { io.print("  $it") }
-        return result.ok
+        return result.status
     }
 
     /** L4: the real app. Launch it seeded on a device, run a scenario through its agent bridge, check it, screenshot. */
-    private fun app(): Boolean {
+    private fun app(): Int {
         val start = TimeSource.Monotonic.markNow()
         val check = config.appCheck
         val scenarios = File(root, config.scenariosPath)
         val scenario = check.scenario ?: ScenarioRunner.files(scenarios).firstOrNull()?.nameWithoutExtension
         if (scenario == null) {
             report("L4 app", false, "no scenario to run", start)
-            return false
+            return RunStatus.INTERNAL_ERROR.code
+        }
+        // A scenario the config names that is not there is found before anything is built.
+        val file = File(scenarios, "$scenario.appctl")
+        if (!file.isFile) {
+            report("L4 app", false, "no scenario to run", start)
+            io.print("  cannot read ${file.path}")
+            return RunStatus.INTERNAL_ERROR.code
         }
         return try {
             val launcher = AppLauncher(cli, root)
@@ -109,31 +127,41 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
             // APPCTL_PORT names the port, as for app launch (a malformed one fails the rung); else a free one is found.
             val port = Ports.explicit(null, cli.environment)
             val launched = launcher.launch(check.seed, device, latency = 0, clearSession = true, build = true, port = port)
-            val script = File(scenarios, "$scenario.appctl").readText()
+            val script = file.readText()
             val bridge = BridgeClient(launched.port)
             val run = bridge.send("POST", "/run", script)
             if (run.exitCode != 0) {
                 report("L4 app", false, "$scenario failed in the app", start)
                 io.print(run.body.trimEnd('\n').split("\n").joinToString("\n") { "  $it" })
-                return false
+                return RunStatus.FAILED.code
             }
             check.expectScreen?.let { expected ->
                 val snapshot = bridge.send("GET", "/snapshot")
                 if ("screen=$expected" !in snapshot.body) {
                     report("L4 app", false, "unexpected final screen", start)
                     io.print("  ${snapshot.body.trimEnd('\n')}")
-                    return false
+                    return RunStatus.FAILED.code
                 }
             }
             val screenshot = File(layout.screenshots, "check-ui-${System.currentTimeMillis() / 1000}.png")
             launcher.screenshot(launched.device, screenshot)
             report("L4 app", true, "$scenario via the agent bridge", start)
             io.print("  ${launched.device.label}, screenshot: ${screenshot.path}")
-            true
-        } catch (error: Exception) {
+            0
+        } catch (error: AppCtlException) {
+            // No device, a build or launch that failed (3), or a --device that names several (2).
             report("L4 app", false, "error", start)
             io.print("  ${error.message ?: error}")
-            false
+            error.status.code
+        } catch (error: Ports.BadEnvironmentPort) {
+            report("L4 app", false, "error", start)
+            io.print("  ${error.message ?: error}")
+            RunStatus.USAGE.code
+        } catch (error: Exception) {
+            // The bridge did not answer, or the scenario could not be read.
+            report("L4 app", false, "error", start)
+            io.print("  ${error.message ?: error}")
+            RunStatus.INTERNAL_ERROR.code
         }
     }
 
