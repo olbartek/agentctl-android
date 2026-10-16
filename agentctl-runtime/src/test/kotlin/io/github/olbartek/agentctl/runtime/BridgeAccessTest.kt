@@ -217,6 +217,74 @@ class BridgeAccessTest {
         assertEquals(0, handled.get())
     }
 
+    /**
+     * The same holds for an answer: a client that sends more after its request (the bridge drops it) gets the answer,
+     * not a reset, and the next request is not held up while the bridge drops what the first one sends.
+     */
+    @Test
+    fun aClientStillSendingGetsItsAnswer() {
+        val port = start()
+        repeat(5) {
+            Socket("127.0.0.1", port).use { socket ->
+                socket.soTimeout = 10_000
+                val more = ByteArray(64 * 1024) { 'a'.code.toByte() }
+                val sending = Thread {
+                    runCatching {
+                        socket.getOutputStream().apply {
+                            write("GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Appctl-Token: $TOKEN\r\n\r\n".toByteArray())
+                            // Still sending when the answer comes, and after: until the bridge closes, or a second.
+                            val until = TimeSource.Monotonic.markNow() + 1.seconds
+                            while (until.hasNotPassedNow()) write(more)
+                            socket.shutdownOutput()
+                        }
+                    }
+                }.apply { start() }
+                val answer = String(socket.getInputStream().readBytes())
+                val next = TimeSource.Monotonic.markNow()
+                assertOk(get(port, "Host: 127.0.0.1", "X-Appctl-Token: $TOKEN"))
+                assertTrue(next.elapsedNow() < 1.seconds)
+                sending.join(10_000)
+                assertOk(answer)
+            }
+        }
+        assertEquals(10, handled.get())
+    }
+
+    /**
+     * A client that neither sends more nor closes, once it has its answer, has the connection closed on it within the
+     * linger, whether the bridge refused it or answered it: it holds no thread of the bridge's for good.
+     */
+    @Test
+    fun anIdleClientIsClosedAfterTheLinger() {
+        val port = start()
+        for (token in listOf(TOKEN, null)) {
+            Socket("127.0.0.1", port).use { socket ->
+                socket.soTimeout = 10_000
+                val tokenLine = token?.let { "X-Appctl-Token: $it\r\n" } ?: ""
+                socket.getOutputStream().apply {
+                    write("GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n$tokenLine\r\n".toByteArray())
+                    flush()
+                }
+                val answer = String(socket.getInputStream().readBytes())
+                if (token == null) assertUnauthorized(answer) else assertOk(answer)
+                // The bridge ended its side with the answer; what is sent now is dropped until it closes its socket,
+                // and once it has, a write is reset.
+                val start = TimeSource.Monotonic.markNow()
+                val closed = runCatching {
+                    while (start.elapsedNow() < 10.seconds) {
+                        socket.getOutputStream().apply {
+                            write('a'.code)
+                            flush()
+                        }
+                        Thread.sleep(50)
+                    }
+                }.isFailure
+                assertTrue(closed, "still open after ${start.elapsedNow()}")
+                assertTrue(start.elapsedNow() < 5.seconds, "closed after ${start.elapsedNow()}")
+            }
+        }
+    }
+
     @Test
     fun theTokenNeverShowsInToString() {
         val request = BridgeRequest("GET", "/snapshot", headers = mapOf("host" to "127.0.0.1", "x-appctl-token" to TOKEN))
