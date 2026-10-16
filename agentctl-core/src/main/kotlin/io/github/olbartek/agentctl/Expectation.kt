@@ -65,15 +65,17 @@ public data class Expectation(val pairs: List<Pair>) {
         /** The keys that are not summary keys, listed first when an `expect` names a key the screen does not have. */
         public val RESERVED_KEYS: List<String> = listOf("screen", "call", "error", "pending", "prompt")
 
-        /** Parses the argument of `expect`. Values containing spaces must be quoted: `name="Alice Smith"`. */
+        /**
+         * Parses the argument of `expect`. Values containing spaces must be quoted: `name="Alice Smith"`. Each token's
+         * first unquoted `=` splits it; a token whose `=` is only inside quotes, or first, is a syntax error.
+         */
         @Throws(ExpectationSyntaxError::class)
         public fun parse(argument: String?): Expectation {
             if (argument == null) throw ExpectationSyntaxError("expect needs at least one key=value pair")
-            val pairs = ArgumentText.tokens(argument).map { token ->
-                // A key is at least one character: the `=` must not be the token's first.
-                val equals = token.indexOf('=')
-                if (equals <= 0) throw ExpectationSyntaxError("expected key=value, got '$token'")
-                Pair(token.substring(0, equals), token.substring(equals + 1))
+            val pairs = ArgumentText.pairs(argument).map { (token, pair) ->
+                // The `=` must be outside quotes: `"title=Second item"` is one quoted value, not a pair (CONTRACT.md §2.1).
+                pair ?: throw ExpectationSyntaxError("expected key=value, got '$token'")
+                Pair(pair.first, pair.second)
             }
             return Expectation(pairs)
         }

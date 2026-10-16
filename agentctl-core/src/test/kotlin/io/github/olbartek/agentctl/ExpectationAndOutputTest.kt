@@ -37,6 +37,26 @@ class ExpectationTest {
         assertFailsWith<ExpectationSyntaxError> { Expectation.parse("=value") }
     }
 
+    /**
+     * A token's `=` must be outside quotes (CONTRACT.md §2.1): `"title=Second item"` used to be read as the pair
+     * `title=Second item`, because the `=` was looked for after the quotes were removed.
+     */
+    @Test
+    fun requiresAnUnquotedEquals() {
+        assertEquals(
+            "expected key=value, got 'title=Second item'",
+            assertFailsWith<ExpectationSyntaxError> { Expectation.parse("\"title=Second item\"") }.message,
+        )
+        assertFailsWith<ExpectationSyntaxError> { Expectation.parse("title\"=x\"") }
+        assertFailsWith<ExpectationSyntaxError> { Expectation.parse("screen=items \"a=b\"") }
+        assertFailsWith<ExpectationSyntaxError> { Expectation.parse("\"\"=x") }
+        // The first unquoted `=` splits the token; a quoted `=` before it belongs to the key.
+        assertEquals(listOf(Expectation.Pair("title", "a=b")), Expectation.parse("title=\"a=b\"").pairs)
+        assertEquals(listOf(Expectation.Pair("a=b", "c")), Expectation.parse("\"a=b\"=c").pairs)
+        assertEquals(listOf(Expectation.Pair("title", "a=b")), Expectation.parse("title=a=b").pairs)
+        assertEquals(listOf(Expectation.Pair("title", "")), Expectation.parse("title=\"\"").pairs)
+    }
+
     @Test
     fun passingExpectation() {
         val expectation = Expectation.parse(

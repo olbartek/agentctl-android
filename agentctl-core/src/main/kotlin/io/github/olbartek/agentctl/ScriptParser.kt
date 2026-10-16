@@ -204,9 +204,26 @@ public object ArgumentText {
      * Splits on unquoted whitespace, then removes quotes and resolves escapes in each token.
      * `name="Alice Smith" email=a` → `["name=Alice Smith", "email=a"]`.
      */
-    public fun tokens(text: String): List<String> {
-        val tokens = mutableListOf<String>()
+    public fun tokens(text: String): List<String> = splitTokens(text).map { it.text }
+
+    /**
+     * Splits [text] into `key=value` pairs at each token's first *unquoted* `=`, the key and value unquoted
+     * (CONTRACT.md §2.1). `null` for a token whose `=` is missing, only inside quotes, or first: `"title=a b"` is not
+     * a pair, `"a=b"=c` is the key `a=b`.
+     */
+    internal fun pairs(text: String): List<kotlin.Pair<String, kotlin.Pair<String, String>?>> = splitTokens(text).map { token ->
+        val equals = token.equals
+        if (equals == null || equals <= 0) token.text to null
+        else token.text to (token.text.substring(0, equals) to token.text.substring(equals + 1))
+    }
+
+    /** A token, unquoted, with the offset in it of its first `=` that was outside quotes. */
+    private class Token(val text: String, val equals: Int?)
+
+    private fun splitTokens(text: String): List<Token> {
+        val tokens = mutableListOf<Token>()
         val current = StringBuilder()
+        var equals: Int? = null
         var hasToken = false
         var inQuotes = false
         var escaping = false
@@ -226,15 +243,18 @@ public object ArgumentText {
                 inQuotes = true
                 hasToken = true
             } else if (character.isWhitespaceGrapheme()) {
-                if (hasToken) tokens.add(current.toString())
+                if (hasToken) tokens.add(Token(current.toString(), equals))
                 current.setLength(0)
+                equals = null
                 hasToken = false
             } else {
+                // A grapheme, not a `Char`: `=` with a combining mark on it is not an `=`, as in the reference.
+                if (character == "=" && equals == null) equals = current.length
                 current.append(character)
                 hasToken = true
             }
         }
-        if (hasToken) tokens.add(current.toString())
+        if (hasToken) tokens.add(Token(current.toString(), equals))
         return tokens
     }
 }
