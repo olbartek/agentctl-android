@@ -1,9 +1,11 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.AppTestSkip
 import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 import kotlin.time.TimeSource
 import kotlinx.coroutines.runBlocking
@@ -109,7 +111,7 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
         val start = TimeSource.Monotonic.markNow()
         val check = config.appCheck
         val scenarios = File(root, config.scenariosPath)
-        val scenario = check.scenario ?: ScenarioRunner.files(scenarios).firstOrNull()?.nameWithoutExtension
+        val scenario = check.scenario ?: firstScenario(ScenarioRunner.files(scenarios))
         if (scenario == null) {
             report("L4 app", false, "no scenario to run", start)
             return RunStatus.INTERNAL_ERROR.code
@@ -131,6 +133,8 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
             val script = ScriptParser.read(file)
             val bridge = BridgeClient(launched.port)
             val run = bridge.send("POST", "/run", script)
+            // Every response is checked, as `app test` checks them (CONTRACT.md §8.6): another app's is not this one's.
+            anotherAppAnswered(run, launched.port, start)?.let { return it }
             if (run.exitCode != 0) {
                 report("L4 app", false, "$scenario failed in the app", start)
                 io.print(run.body.trimEnd('\n').split("\n").joinToString("\n") { "  $it" })
@@ -138,7 +142,8 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
             }
             check.expectScreen?.let { expected ->
                 val snapshot = bridge.send("GET", "/snapshot")
-                if ("screen=$expected" !in snapshot.body) {
+                anotherAppAnswered(snapshot, launched.port, start)?.let { return it }
+                if (!shows(expected, snapshot.body)) {
                     report("L4 app", false, "unexpected final screen", start)
                     io.print("  ${snapshot.body.trimEnd('\n')}")
                     return RunStatus.FAILED.code
@@ -166,6 +171,14 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
         }
     }
 
+    /** L4's exit code (3) when [response] is not from this app on Android, with the rung's line and why; else `null`. */
+    private fun anotherAppAnswered(response: BridgeClient.Response, port: Int, start: TimeSource.Monotonic.ValueTimeMark): Int? {
+        val foreign = AppTest.foreign(response, port, config.applicationId) as? AppTest.Outcome.Broken ?: return null
+        report("L4 app", false, "another app answered", start)
+        io.print("  ${foreign.message}")
+        return RunStatus.INTERNAL_ERROR.code
+    }
+
     private fun report(stage: String, ok: Boolean, detail: String, start: TimeSource.Monotonic.ValueTimeMark) {
         io.print(row(stage, ok, detail, start.elapsedNow().inWholeMilliseconds / 1000.0))
     }
@@ -180,6 +193,26 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
     }
 
     companion object {
+        /**
+         * The scenario L4 runs when the config names none: the first file without a `# app-test: skip` line, which
+         * `app test` would skip too.
+         */
+        fun firstScenario(files: List<File>): String? = files.firstOrNull { file ->
+            val source = try {
+                ScriptParser.read(file)
+            } catch (_: IOException) {
+                return@firstOrNull false
+            }
+            AppTestSkip.reason(source) == null
+        }?.nameWithoutExtension
+
+        /**
+         * Whether a step shows [screen]: a line whose first token is `screen=<screen>`, the whole path. Not
+         * `home/orders/42` for `home/orders`, nor a summary value that contains the text.
+         */
+        fun shows(screen: String, step: String): Boolean =
+            step.split("\n").any { line -> line.trimStart(' ').substringBefore(' ') == "screen=$screen" }
+
         /** "1 task", "6 tasks". */
         fun count(number: Int, noun: String): String = "$number $noun${if (number == 1) "" else "s"}"
 

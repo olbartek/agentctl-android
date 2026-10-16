@@ -2,6 +2,8 @@ package io.github.olbartek.agentctl.cli
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class LadderTest {
     @Test
@@ -18,5 +20,14 @@ class LadderTest {
     fun adbShellQuoting() {
         assertEquals("'open 2; save'", AppLauncher.shellQuoted("open 2; save"))
         assertEquals("'it'\\''s'", AppLauncher.shellQuoted("it's"))
+    }
+
+    /** L4's expected screen is the whole `screen=` token of a line, as agentctl-ios's `Ladder.shows`. */
+    @Test
+    fun theExpectedScreenIsAWholeToken() {
+        assertTrue(Ladder.shows("home/orders", "> snapshot\n  screen=home/orders count=2"))
+        assertTrue(Ladder.shows("home/orders", "screen=home/orders"))
+        assertFalse(Ladder.shows("home/orders", "> snapshot\n  screen=home/orders/42 count=2"))
+        assertFalse(Ladder.shows("home/orders", "> snapshot\n  screen=home note=screen=home/orders"))
     }
 }
