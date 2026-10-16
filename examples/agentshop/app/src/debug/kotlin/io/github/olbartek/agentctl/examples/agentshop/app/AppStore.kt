@@ -79,6 +79,13 @@ class AppStore private constructor(activity: Activity) {
             return instance ?: AppStore(activity).also { instance = it }
         }
 
+        /**
+         * Whether the UI tests launched the app (the `ui-testing` extra): only with the launch's `agent-token`, as for
+         * every other launch extra, since the UI tests pass one.
+         */
+        fun isUiTesting(intent: Intent?): Boolean =
+            AgentLaunchArguments.isRequested(intent) && intent?.getBooleanExtra(UiTesting.EXTRA, false) == true
+
         /** `mock-fault` specs (`orders.placeOrder#1=network`): a string array, or one string. */
         private fun faults(intent: Intent?): List<String> {
             val extras = intent?.extras ?: return emptyList()

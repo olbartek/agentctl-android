@@ -1,6 +1,7 @@
 package io.github.olbartek.agentctl.examples.agentshop.app
 
 import android.app.Activity
+import android.content.Intent
 import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.AgentStore
 import io.github.olbartek.agentctl.examples.agentshop.clients.SessionStorage
@@ -24,6 +25,10 @@ class AppStore private constructor(activity: Activity) {
 
     companion object {
         private var instance: AppStore? = null
+
+        /** Never: the UI tests run on the debug build, and a release build reads no launch extra. */
+        @Suppress("UNUSED_PARAMETER")
+        fun isUiTesting(intent: Intent?): Boolean = false
 
         @Suppress("UNUSED_PARAMETER")
         fun get(activity: Activity, isFreshLaunch: Boolean): AppStore = instance ?: AppStore(activity).also { instance = it }
