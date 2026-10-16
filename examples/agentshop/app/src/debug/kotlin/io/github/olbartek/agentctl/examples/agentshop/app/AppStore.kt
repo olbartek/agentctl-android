@@ -2,8 +2,10 @@ package io.github.olbartek.agentctl.examples.agentshop.app
 
 import android.app.Activity
 import android.content.Intent
+import io.github.olbartek.agentctl.AgentEnvironment
 import io.github.olbartek.agentctl.AgentStore
 import io.github.olbartek.agentctl.bridge.AgentLaunch
+import io.github.olbartek.agentctl.bridge.AgentLaunchArguments
 import io.github.olbartek.agentctl.examples.agentshop.app.design.UiTesting
 import io.github.olbartek.agentctl.examples.agentshop.clients.SessionStorage
 import io.github.olbartek.agentctl.examples.agentshop.ctl.AgentShopConfig
@@ -11,13 +13,16 @@ import io.github.olbartek.agentctl.examples.agentshop.models.ScheduledFaults
 import java.io.File
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * The debug build's store: AgentShop's live store behind the agent bridge. Everything app-specific comes from
- * [AgentShopConfig.appCtl], the same value `shopctl` runs on, given the app's session file (which the `clear-session`
- * extra empties) and the calls a UI test fails (the `mock-fault` extras).
+ * The debug build's store: AgentShop's live store behind the agent bridge when an agent launched it (`appctl app
+ * launch`, or a UI test, whose intent carries the launch's `agent-token`), and the plain app, as the release build has
+ * it, when it was launched any other way. Everything app-specific comes from [AgentShopConfig.appCtl], the same value
+ * `shopctl` runs on, given the app's session file (which the `clear-session` extra empties) and the calls a UI test
+ * fails (the `mock-fault` extras).
  *
  * One per process, and started in a scope of its own rather than the activity's: an activity recreated after a
  * configuration change must neither cancel a seed half-way nor start a second bridge on the same port. The one
@@ -25,32 +30,43 @@ import kotlinx.coroutines.launch
  * as a relaunched app would.
  */
 class AppStore private constructor(activity: Activity) {
-    private val launch = AgentLaunch(
-        AgentShopConfig.appCtl(SessionStorage.file(sessionFile(activity)), ScheduledFaults(faults(activity.intent))),
-        activity.intent,
-    )
+    private val launch = if (AgentLaunchArguments.isRequested(activity.intent)) {
+        AgentLaunch(
+            AgentShopConfig.appCtl(SessionStorage.file(sessionFile(activity)), ScheduledFaults(faults(activity.intent))),
+            activity.intent,
+        )
+    } else {
+        null
+    }
+
+    /** The plain app's store, when no agent launched it: no bridge, nothing to seed, no scheduled faults. */
+    private val plain = if (launch == null) {
+        MutableStateFlow(AgentShop.store(AgentEnvironment.system(MainScope()), SessionStorage.file(sessionFile(activity))))
+    } else {
+        null
+    }
 
     /** Where the seed is applied and the bridge started; cancelled with the store when a UI test relaunches. */
     private val startup = MainScope()
 
     init {
         // Applies the seed, then starts the bridge.
-        startup.launch { launch.start() }
+        launch?.let { startup.launch { it.start() } }
     }
 
     /** Ends this store: the bridge, the store's effects and a seed still being applied. */
     private fun close() {
         startup.cancel()
-        launch.stop()
+        launch?.stop()
     }
 
-    val store: AgentStore<AppFeature.State, AppFeature.Action> get() = launch.app
+    val store: AgentStore<AppFeature.State, AppFeature.Action> get() = stores.value
 
     /** The store over time: `device relaunch` replaces it with a fresh one. */
-    val stores: StateFlow<AgentStore<AppFeature.State, AppFeature.Action>> get() = launch.apps
+    val stores: StateFlow<AgentStore<AppFeature.State, AppFeature.Action>> = launch?.apps ?: plain!!
 
     /** False while a launch seed is being applied. */
-    val isReady: StateFlow<Boolean> get() = launch.isReady
+    val isReady: StateFlow<Boolean> = launch?.isReady ?: MutableStateFlow(true)
 
     companion object {
         private var instance: AppStore? = null
