@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.testsupport
 
+import io.github.olbartek.agentctl.AgentText
 import io.github.olbartek.agentctl.ArgumentText
 import io.github.olbartek.agentctl.ScriptError
 import io.github.olbartek.agentctl.ScriptLine
@@ -149,12 +150,12 @@ public class AgentScenarioChecks<D : AgentDriver<A, *>, A>(
         val file = File(root ?: this.root, path)
         val regenerate = "Run ${config.help.invocation} docs."
         val existing = try {
-            file.readText()
+            ScriptParser.read(file)
         } catch (_: IOException) {
             return listOf("$path does not exist at ${file.path}. $regenerate")
         }
         val generated = config.docsMarkdown
-        if (existing == generated) return emptyList()
+        if (AgentText.equivalent(existing, generated)) return emptyList()
         return listOf("$path is stale. $regenerate " + firstDifference(existing, generated, "committed" to "generated"))
     }
 
@@ -171,7 +172,7 @@ public class AgentScenarioChecks<D : AgentDriver<A, *>, A>(
     public fun readmeListsAll(readme: File? = null): List<String> {
         val file = readme ?: File(scenarios, "README.md")
         val text = try {
-            file.readText()
+            ScriptParser.read(file)
         } catch (_: IOException) {
             return listOf("cannot read ${file.path}: the scenarios README must list every scenario file")
         }
@@ -245,7 +246,7 @@ public class AgentScenarioChecks<D : AgentDriver<A, *>, A>(
 
     private fun run(file: File): ScenarioResult = runBlocking { ScenarioRunner.run(file) { config.makeRunner() } }
 
-    private fun parse(file: File): List<ScriptLine> = ScriptParser.parse(file.readText())
+    private fun parse(file: File): List<ScriptLine> = ScriptParser.parse(ScriptParser.read(file))
 
     private fun describe(error: Exception): String = if (error is ScriptError) error.description else error.toString()
 

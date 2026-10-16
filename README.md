@@ -140,7 +140,10 @@ On the contract's open questions, this port follows the reference in every case,
 - the JSON uses sorted keys laid out as Foundation's encoder lays them out;
 - the "Valid here" list ends in the same tail.
 
-It also counts script columns in grapheme clusters, as Swift does.
+It also counts script columns in grapheme clusters, and compares a script's text by canonical equivalence
+(`AgentText`), as Swift does. Two public helpers have no Swift counterpart, because the modules that need them are
+separate here: `AgentText` (Swift's `String ==` is canonical already) and `ScriptParser.read` (strict UTF-8, as
+`String(contentsOf:encoding: .utf8)` reads).
 
 ## Differences from agentctl-ios
 

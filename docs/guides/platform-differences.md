@@ -63,6 +63,10 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   location` needs an emulator (exit 3 on a phone) and `app location clear` is a usage error (exit 2: an emulator
   keeps its last location); `app push` is always a usage error (exit 2), since nothing delivers a push to one app;
   `app openurl` fails when no activity takes the link, which `am start` reports only in its output.
+- A `mock` method and error code, a permission and a push that a script names by canonical equivalence (`e` +
+  U+0301 for `é`) reach the app in the app's own declared spelling, where the reference passes them as typed: a Swift
+  `switch` on them is canonical too, a Kotlin `when` compares code units, so only the declared spelling matches the
+  same way.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.

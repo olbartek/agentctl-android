@@ -22,18 +22,23 @@ public object AppTestSkip {
      * still skips, with "no reason given".
      */
     public fun reason(source: String): String? {
-        for (rawLine in source.split("\n")) {
-            val line = rawLine.trim()
+        // A line ends at `\n` or `\r\n`, as in a script (CONTRACT.md §1.1).
+        for (rawLine in source.split("\r\n", "\n")) {
+            val line = blanksTrimmed(rawLine)
             if (!line.startsWith("#")) continue
-            val comment = line.drop(1).trim()
+            val comment = blanksTrimmed(line.drop(1))
             for (marker in markers) {
                 if (!comment.startsWith(marker)) continue
-                val directive = comment.drop(marker.length).trim()
+                val directive = blanksTrimmed(comment.drop(marker.length))
                 if (directive != "skip" && !directive.startsWith("skip ")) continue
-                val reason = directive.drop("skip".length).trim()
+                val reason = blanksTrimmed(directive.drop("skip".length))
                 return reason.ifEmpty { "no reason given" }
             }
         }
         return null
     }
+
+    /** Trimmed of spaces and tabs only (Unicode's Zs, and `\t`), as the reference's `.whitespaces`: a `\r` stays. */
+    private fun blanksTrimmed(text: String): String =
+        text.trim { it == '\t' || Character.getType(it) == Character.SPACE_SEPARATOR.toInt() }
 }

@@ -1,7 +1,23 @@
 package io.github.olbartek.agentctl
 
 import java.text.BreakIterator
+import java.text.Normalizer
 import java.util.Locale
+
+/**
+ * Text compared as the Swift reference compares it: by canonical equivalence, as Swift's `String ==` does, so `é`
+ * typed as `e` + U+0301 is the same as a precomposed `é`. Every lookup a script's text goes through (command names,
+ * mock methods and errors, choice words, permissions, pushes, summary keys) and every `expect` value uses it. It
+ * compares only; what a step prints is the script as typed and the values as the app gives them.
+ */
+public object AgentText {
+    /** [text] in Unicode Normalization Form C: the one spelling of every canonically equivalent string. */
+    public fun canonical(text: String): String =
+        if (Normalizer.isNormalized(text, Normalizer.Form.NFC)) text else Normalizer.normalize(text, Normalizer.Form.NFC)
+
+    /** Whether [a] and [b] are canonically equivalent: Swift's `a == b` on two `String`s. */
+    public fun equivalent(a: String, b: String): Boolean = a == b || canonical(a) == canonical(b)
+}
 
 /**
  * Text as the Swift reference sees it: a sequence of grapheme clusters (Swift's `Character`), not of UTF-16
@@ -40,6 +56,12 @@ internal fun Int.isUnicodeWhiteSpace(): Boolean = when (this) {
     in 0x09..0x0D, 0x20, 0x85, 0xA0, 0x1680, in 0x2000..0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000 -> true
     else -> false
 }
+
+/**
+ * A line break in a script (CONTRACT.md §1.1): `\n`, or `\r\n`, which is one grapheme as it is one Swift `Character`.
+ * A lone `\r` is not one: it is whitespace.
+ */
+internal fun String.isScriptNewline(): Boolean = this == "\n" || this == "\r\n"
 
 /** `true` when `text` contains a whitespace grapheme, the rule of CONTRACT.md §3.2. */
 internal fun containsWhitespace(text: String): Boolean = Graphemes.of(text).any { it.isWhitespaceGrapheme() }

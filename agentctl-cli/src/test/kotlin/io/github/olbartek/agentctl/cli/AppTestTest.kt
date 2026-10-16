@@ -25,6 +25,13 @@ class AppTestTest {
         assertEquals("no reason given", AppTestSkip.reason("# app-test: skip"))
     }
 
+    /** A file with CRLF line endings: the marker line ends at `\r\n` like at `\n` (CONTRACT.md §1.1). */
+    @Test
+    fun aMarkerInACrlfFile() {
+        assertEquals("because", AppTestSkip.reason("open 2\r\n# app-test: skip because\r\nsave\r\n"))
+        assertEquals("no reason given", AppTestSkip.reason("# app-test: skip\r\nopen 2\r\n"))
+    }
+
     @Test
     fun noMarkerNoSkip() {
         assertNull(AppTestSkip.reason("# Logging in with a code.\nopen 2"))

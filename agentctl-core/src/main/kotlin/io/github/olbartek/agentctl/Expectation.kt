@@ -25,9 +25,9 @@ public data class Expectation(val pairs: List<Pair>) {
 
     /** Returns one failure message per unmet pair; empty when everything matches. */
     public fun evaluate(snapshot: StepSnapshot): List<String> = pairs.mapNotNull { pair ->
-        when (pair.key) {
-            "screen" -> if (snapshot.screen == pair.value) null else mismatch(pair, snapshot.screen)
-            "call" -> if (pair.value in snapshot.calls) {
+        when (AgentText.canonical(pair.key)) {
+            "screen" -> if (AgentText.equivalent(snapshot.screen, pair.value)) null else mismatch(pair, snapshot.screen)
+            "call" -> if (snapshot.calls.any { AgentText.equivalent(it, pair.value) }) {
                 null
             } else {
                 val calls = if (snapshot.calls.isEmpty()) "none" else snapshot.calls.joinToString(",")
@@ -35,22 +35,22 @@ public data class Expectation(val pairs: List<Pair>) {
             }
             "error" -> {
                 val actual = snapshot.error ?: "none"
-                if (actual == pair.value) null else mismatch(pair, actual)
+                if (AgentText.equivalent(actual, pair.value)) null else mismatch(pair, actual)
             }
             "pending" -> {
                 val actual = snapshot.pending.toString()
-                if (actual == pair.value) null else mismatch(pair, actual)
+                if (AgentText.equivalent(actual, pair.value)) null else mismatch(pair, actual)
             }
             "prompt" -> {
                 val actual = snapshot.prompt ?: "none"
-                if (actual == pair.value) null else mismatch(pair, actual)
+                if (AgentText.equivalent(actual, pair.value)) null else mismatch(pair, actual)
             }
             else -> {
-                val item = snapshot.summary.firstOrNull { it.key == pair.key }
+                val item = snapshot.summary.firstOrNull { AgentText.equivalent(it.key, pair.key) }
                 if (item == null) {
                     val available = (RESERVED_KEYS + snapshot.summary.map { it.key }).joinToString(", ")
                     "unknown key '${pair.key}' on ${snapshot.screen}; available: $available"
-                } else if (item.value == pair.value) {
+                } else if (AgentText.equivalent(item.value, pair.value)) {
                     null
                 } else {
                     mismatch(pair, item.value)
@@ -65,15 +65,17 @@ public data class Expectation(val pairs: List<Pair>) {
         /** The keys that are not summary keys, listed first when an `expect` names a key the screen does not have. */
         public val RESERVED_KEYS: List<String> = listOf("screen", "call", "error", "pending", "prompt")
 
-        /** Parses the argument of `expect`. Values containing spaces must be quoted: `name="Alice Smith"`. */
+        /**
+         * Parses the argument of `expect`. Values containing spaces must be quoted: `name="Alice Smith"`. Each token's
+         * first unquoted `=` splits it; a token whose `=` is only inside quotes, or first, is a syntax error.
+         */
         @Throws(ExpectationSyntaxError::class)
         public fun parse(argument: String?): Expectation {
             if (argument == null) throw ExpectationSyntaxError("expect needs at least one key=value pair")
-            val pairs = ArgumentText.tokens(argument).map { token ->
-                // A key is at least one character: the `=` must not be the token's first.
-                val equals = token.indexOf('=')
-                if (equals <= 0) throw ExpectationSyntaxError("expected key=value, got '$token'")
-                Pair(token.substring(0, equals), token.substring(equals + 1))
+            val pairs = ArgumentText.pairs(argument).map { (token, pair) ->
+                // The `=` must be outside quotes: `"title=Second item"` is one quoted value, not a pair (CONTRACT.md §2.1).
+                pair ?: throw ExpectationSyntaxError("expected key=value, got '$token'")
+                Pair(pair.first, pair.second)
             }
             return Expectation(pairs)
         }

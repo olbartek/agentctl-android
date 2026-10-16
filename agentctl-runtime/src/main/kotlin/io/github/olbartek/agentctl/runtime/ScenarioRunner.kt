@@ -1,6 +1,7 @@
 package io.github.olbartek.agentctl.runtime
 
 import io.github.olbartek.agentctl.ScriptLine
+import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.StepFormatter
 import io.github.olbartek.agentctl.StepRecord
 import java.io.File
@@ -63,9 +64,10 @@ public object ScenarioRunner {
      */
     public suspend fun <A> run(file: File, make: () -> ScriptRunner<A>): ScenarioResult {
         val name = file.nameWithoutExtension
-        // A missing or unreadable file is an environment problem, not a script's: exit code 3 (CONTRACT.md §5).
+        // A missing or unreadable file, or one that is not UTF-8, is an environment problem, not a script's: exit code 3
+        // (CONTRACT.md §5).
         val source = try {
-            file.readText()
+            ScriptParser.read(file)
         } catch (_: IOException) {
             return ScenarioResult(name, emptyList(), RunStatus.INTERNAL_ERROR, null, "cannot read ${file.path}", 0)
         }

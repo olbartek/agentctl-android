@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.runtime.RunStatus
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import java.io.File
@@ -127,7 +128,7 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
             // APPCTL_PORT names the port, as for app launch (a malformed one fails the rung); else a free one is found.
             val port = Ports.explicit(null, cli.environment)
             val launched = launcher.launch(check.seed, device, latency = 0, clearSession = true, build = true, port = port)
-            val script = file.readText()
+            val script = ScriptParser.read(file)
             val bridge = BridgeClient(launched.port)
             val run = bridge.send("POST", "/run", script)
             if (run.exitCode != 0) {

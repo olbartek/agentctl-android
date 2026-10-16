@@ -69,7 +69,7 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             for (file in files) {
                 val name = file.nameWithoutExtension
                 val source = try {
-                    file.readText()
+                    ScriptParser.read(file)
                 } catch (_: IOException) {
                     null
                 }

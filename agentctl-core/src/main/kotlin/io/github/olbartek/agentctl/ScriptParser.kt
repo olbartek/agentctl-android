@@ -36,7 +36,7 @@ public class ScriptError(
  * Parses the script language shared by the CLI's `run`, scenarios, `-appctl-seed` and the agent bridge
  * (CONTRACT.md §1).
  *
- * - Commands are separated by `;` or newlines.
+ * - Commands are separated by `;` or newlines. A newline is `\n` or `\r\n`; a lone `\r` is whitespace.
  * - `#` starts a comment that runs to the end of the line.
  * - Double quotes protect `;` and `#`; inside quotes `\` escapes the next character. Quotes are kept in the
  *   argument so that commands like `expect` can split on unquoted spaces; use [ArgumentText] to unquote.
@@ -69,7 +69,7 @@ public object ScriptParser {
 
         for (character in Graphemes.of(source)) {
             column += 1
-            if (character == "\n") {
+            if (character.isScriptNewline()) {
                 if (inQuotes) throw ScriptError(quoteLine, quoteColumn, "unterminated quote")
                 inComment = false
                 flush()
@@ -90,7 +90,8 @@ public object ScriptParser {
                 }
                 continue
             }
-            when (character) {
+            // By canonical equivalence, as Swift compares a `Character`: U+037E GREEK QUESTION MARK is a `;`.
+            when (AgentText.canonical(character)) {
                 "\"" -> {
                     inQuotes = true
                     quoteLine = line
@@ -112,6 +113,22 @@ public object ScriptParser {
         flush()
         return result
     }
+
+    /**
+     * Reads a script or scenario file as strict UTF-8, as the reference's `String(contentsOf:encoding: .utf8)` does: a
+     * file that is not valid UTF-8 cannot be read (a [java.nio.charset.CharacterCodingException]), rather than run with
+     * U+FFFD in place of its bad bytes. A leading byte order mark is dropped, as the reference's decoding drops it.
+     *
+     * @throws java.io.IOException when the file is missing, unreadable or not UTF-8.
+     */
+    @Throws(java.io.IOException::class)
+    public fun read(file: java.io.File): String =
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+            .decode(java.nio.ByteBuffer.wrap(file.readBytes()))
+            .toString()
+            .removePrefix("\uFEFF")
 
     /**
      * Parses the argument of `advance`: an unsigned integer immediately followed by one unit — `ms`, `s`, `m` or
@@ -191,22 +208,55 @@ public class AgentDuration private constructor(
 public object ArgumentText {
     /**
      * Removes surrounding quotes and resolves escapes when the whole argument is one quoted string.
-     * `"a;b"` → `a;b`, `Alice Smith` → `Alice Smith`.
+     * `"a;b"` → `a;b`, `Alice Smith` → `Alice Smith`. Only one quoted span counts: the quote that closes the opening
+     * one must be the last character, so `"a"b"c"` and `"a" "b"` stay as written (CONTRACT.md §1.2).
      */
     public fun unquoted(text: String): String {
         val characters = Graphemes.of(text)
-        if (characters.size < 2 || characters.first() != "\"" || characters.last() != "\"") return text
-        val tokens = tokens(text)
-        return if (tokens.size == 1) tokens[0] else text
+        if (characters.firstOrNull() != "\"") return text
+        val content = StringBuilder()
+        var escaping = false
+        for (index in 1 until characters.size) {
+            val character = characters[index]
+            if (escaping) {
+                content.append(character)
+                escaping = false
+            } else if (character == "\\") {
+                escaping = true
+            } else if (character == "\"") {
+                // The closing quote: the argument is one quoted span only if nothing follows it.
+                return if (index == characters.lastIndex) content.toString() else text
+            } else {
+                content.append(character)
+            }
+        }
+        return text
     }
 
     /**
      * Splits on unquoted whitespace, then removes quotes and resolves escapes in each token.
      * `name="Alice Smith" email=a` → `["name=Alice Smith", "email=a"]`.
      */
-    public fun tokens(text: String): List<String> {
-        val tokens = mutableListOf<String>()
+    public fun tokens(text: String): List<String> = splitTokens(text).map { it.text }
+
+    /**
+     * Splits [text] into `key=value` pairs at each token's first *unquoted* `=`, the key and value unquoted
+     * (CONTRACT.md §2.1). `null` for a token whose `=` is missing, only inside quotes, or first: `"title=a b"` is not
+     * a pair, `"a=b"=c` is the key `a=b`.
+     */
+    internal fun pairs(text: String): List<kotlin.Pair<String, kotlin.Pair<String, String>?>> = splitTokens(text).map { token ->
+        val equals = token.equals
+        if (equals == null || equals <= 0) token.text to null
+        else token.text to (token.text.substring(0, equals) to token.text.substring(equals + 1))
+    }
+
+    /** A token, unquoted, with the offset in it of its first `=` that was outside quotes. */
+    private class Token(val text: String, val equals: Int?)
+
+    private fun splitTokens(text: String): List<Token> {
+        val tokens = mutableListOf<Token>()
         val current = StringBuilder()
+        var equals: Int? = null
         var hasToken = false
         var inQuotes = false
         var escaping = false
@@ -226,15 +276,18 @@ public object ArgumentText {
                 inQuotes = true
                 hasToken = true
             } else if (character.isWhitespaceGrapheme()) {
-                if (hasToken) tokens.add(current.toString())
+                if (hasToken) tokens.add(Token(current.toString(), equals))
                 current.setLength(0)
+                equals = null
                 hasToken = false
             } else {
+                // A grapheme, not a `Char`: `=` with a combining mark on it is not an `=`, as in the reference.
+                if (character == "=" && equals == null) equals = current.length
                 current.append(character)
                 hasToken = true
             }
         }
-        if (hasToken) tokens.add(current.toString())
+        if (hasToken) tokens.add(Token(current.toString(), equals))
         return tokens
     }
 }
