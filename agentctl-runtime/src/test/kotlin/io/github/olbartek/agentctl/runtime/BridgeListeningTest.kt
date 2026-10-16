@@ -69,7 +69,7 @@ class BridgeListeningTest {
 
     /** A started server whose listening sockets [makeSocket] makes, given how many it made before; returns its port. */
     private fun start(makeSocket: (Int) -> ServerSocket): Int {
-        val server = BridgeServer(executor.asCoroutineDispatcher(), "app", "android") { BridgeResponse(200, "ok\n", exitCode = 0) }
+        val server = BridgeServer(executor.asCoroutineDispatcher(), "app", "android", TOKEN) { BridgeResponse(200, "ok\n", exitCode = 0) }
         server.makeSocket = { makeSocket(made.getAndIncrement()) }
         server.relistenDelays = listOf(10.milliseconds, 10.milliseconds, 10.milliseconds)
         server.events = { if (it == "gave up") gaveUp.countDown() }
@@ -80,7 +80,7 @@ class BridgeListeningTest {
     /** The status line of the answer to a GET. */
     private fun get(port: Int): String = Socket("127.0.0.1", port).use { socket ->
         socket.soTimeout = 3_000
-        socket.getOutputStream().apply { write("GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".toByteArray()); flush() }
+        socket.getOutputStream().apply { write("GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Appctl-Token: $TOKEN\r\n\r\n".toByteArray()); flush() }
         socket.getInputStream().readBytes().decodeToString().substringBefore("\r\n")
     }
 
@@ -144,3 +144,6 @@ class BridgeListeningTest {
         assertEquals(1, made.get())
     }
 }
+
+/** The token the test bridge expects, as `app launch` would have passed it. */
+private const val TOKEN = "0123456789abcdef0123456789abcdef"

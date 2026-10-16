@@ -44,7 +44,7 @@ class BridgeConnectionsTest {
     }
 
     private fun start(handler: suspend () -> BridgeResponse = { BridgeResponse(200, "ok\n", exitCode = 0) }): Pair<BridgeServer, Int> {
-        val server = BridgeServer(executor.asCoroutineDispatcher(), "app", "android") { handler() }
+        val server = BridgeServer(executor.asCoroutineDispatcher(), "app", "android", TOKEN) { handler() }
         servers += server
         return server to server.start(0)
     }
@@ -58,7 +58,7 @@ class BridgeConnectionsTest {
 
     private fun idle(port: Int): Socket = Socket("127.0.0.1", port).also { sockets += it }
 
-    private val get = "GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+    private val get = "GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Appctl-Token: $TOKEN\r\n\r\n"
 
     @Test
     fun anIdleConnectionHoldsUpNoOtherRequest() {
@@ -88,7 +88,7 @@ class BridgeConnectionsTest {
     @Test
     fun aHeaderBlockOverTheLimitIsMalformedEvenWhenItArrivesWhole() {
         val padding = "X-Pad: " + "a".repeat(HttpParser.MAX_HEADER_BYTES) + "\r\n"
-        val request = "GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n$padding\r\n".toByteArray()
+        val request = "GET /snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Appctl-Token: $TOKEN\r\n$padding\r\n".toByteArray()
         assertEquals(HttpParser.Result.Malformed, HttpParser.parse(request))
         val atTheLimit = "GET / HTTP/1.1\r\nX: ".toByteArray().let { head ->
             head + ByteArray(HttpParser.MAX_HEADER_BYTES - head.size - 4) { 'a'.code.toByte() } + "\r\n\r\n".toByteArray()
@@ -117,7 +117,7 @@ class BridgeConnectionsTest {
         getOutputStream().apply { write(request.toByteArray()); flush() }
     }
 
-    private fun post(script: String) = "POST /run HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: ${script.length}\r\n\r\n$script"
+    private fun post(script: String) = "POST /run HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Appctl-Token: $TOKEN\r\nContent-Length: ${script.length}\r\n\r\n$script"
 
     @Test
     fun aRequestWhoseClientGoesAwayIsCancelled() {
@@ -165,7 +165,7 @@ class BridgeConnectionsTest {
         val runner = app.makeRunner(synthesizesAppearance = true)
         runBlocking { withContext(dispatcher) { runner.launch() } }
         val router = BridgeRouter(runner) { "" }
-        val server = BridgeServer(dispatcher, "app", "android") { router.handle(it) }
+        val server = BridgeServer(dispatcher, "app", "android", TOKEN) { router.handle(it) }
         servers += server
         val port = server.start(0)
         val gone = sendAndKeep(port, post(List(40) { "refresh" }.joinToString("; ")))
@@ -238,3 +238,6 @@ class BridgeConnectionsTest {
         assertFalse(finished.get(), "the handler ran to its end")
     }
 }
+
+/** The token the test bridge expects, as `app launch` would have passed it. */
+private const val TOKEN = "0123456789abcdef0123456789abcdef"

@@ -188,8 +188,8 @@ token of its own): relaunch it, or set `APPCTL_TOKEN`. The second should not hap
 that carry an `Origin`; a request that gets past them (a web page's no-cors `GET`, say, which carries a loopback
 `Host` and no `Origin`) still lacks the token.
 
-A `BridgeServer` you construct yourself checks a token only when you give it one; the host and size checks always
-apply.
+A `BridgeServer` you construct yourself takes the token it checks, as the launch's does. The constructors from 0.8,
+which take none and check none, are deprecated and go in 1.0.
 
 ### Launching the app from a test runner
 

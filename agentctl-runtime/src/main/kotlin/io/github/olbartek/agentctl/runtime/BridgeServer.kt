@@ -46,36 +46,56 @@ import kotlinx.coroutines.runBlocking
  * connection closed: a malformed one, or one whose body would be over [HttpParser.MAX_BODY_BYTES], with `400 bad
  * request` (exit 2); one whose `Host` does not name the loopback (`127.0.0.1` or `localhost`, any port), that has no
  * `Host`, or that has an `Origin`, with `403 forbidden` (exit 3); and one without the expected token in
- * `X-Appctl-Token`, with `401 unauthorized` (exit 3). Only the token check depends on how the server was made: one
- * made with a token (as [AgentLaunchSession] makes it, with the launch's `agent-token`) checks it, and one made
- * without (`token` `null`, or the constructors from before 0.9) checks none, for a host or a test that runs the bridge
- * itself. The other checks always apply.
+ * `X-Appctl-Token`, with `401 unauthorized` (exit 3): the launch's `agent-token`, as [AgentLaunchSession] passes it.
+ * The constructors from before 0.9, deprecated until 1.0 removes them, make a server that checks every request but the
+ * token (CONTRACT.md §8.2 has none: no token, no bridge).
  */
-public class BridgeServer(
+public class BridgeServer private constructor(
+    /** The token every request must carry in `X-Appctl-Token` (compared in constant time); `null` checks none. */
+    private val token: String?,
     /** Where [handler] runs: the store's own thread. */
     private val dispatcher: CoroutineDispatcher,
     /** The app's application id, sent as `X-Appctl-App` on every response; `null` sends no such header. */
     private val appId: String?,
     /** The platform, sent as `X-Appctl-Platform` on every response; `null` sends no such header. */
     private val platform: String?,
-    /**
-     * The token every request must carry in `X-Appctl-Token` (compared in constant time), or `null` to check none: the
-     * launch's `agent-token`.
-     */
-    private val token: String?,
     private val handler: suspend (BridgeRequest) -> BridgeResponse,
 ) {
-    /** A server that checks no token, as before 0.9 (kept so code built against 0.8 still links). */
+    /**
+     * A server that answers only requests carrying [token] in `X-Appctl-Token` (compared in constant time): the
+     * launch's `agent-token`. [dispatcher] is where [handler] runs, the store's own thread; [appId] and [platform] are
+     * sent as `X-Appctl-App` and `X-Appctl-Platform` on every response (`null` sends no such header).
+     */
+    public constructor(
+        dispatcher: CoroutineDispatcher,
+        appId: String?,
+        platform: String?,
+        token: String,
+        handler: suspend (BridgeRequest) -> BridgeResponse,
+    ) : this(token, dispatcher, appId, platform, handler)
+
+    /** A server that checks no token, as before 0.9 (kept so code built against 0.8 still links, until 1.0). */
+    @Deprecated(
+        "A bridge checks the launch's token (CONTRACT.md §8.2); pass it. Removed in 1.0.",
+        ReplaceWith("BridgeServer(dispatcher, appId, platform, token, handler)"),
+    )
     public constructor(
         dispatcher: CoroutineDispatcher,
         appId: String? = null,
         platform: String? = BridgeDefaults.PLATFORM,
         handler: suspend (BridgeRequest) -> BridgeResponse,
-    ) : this(dispatcher, appId, platform, null, handler)
+    ) : this(null, dispatcher, appId, platform, handler)
 
-    /** A server that sends no `X-Appctl-App`, as before 0.5 (kept so code built against 0.4 still links). */
+    /**
+     * A server that sends no `X-Appctl-App` and checks no token, as before 0.5 (kept so code built against 0.4 still
+     * links, until 1.0).
+     */
+    @Deprecated(
+        "A bridge checks the launch's token (CONTRACT.md §8.2); pass it. Removed in 1.0.",
+        ReplaceWith("BridgeServer(dispatcher, null, null, token, handler)"),
+    )
     public constructor(dispatcher: CoroutineDispatcher, handler: suspend (BridgeRequest) -> BridgeResponse) :
-        this(dispatcher, null, null, null, handler)
+        this(null, dispatcher, null, null, handler)
 
     /** How long a connection has, from its accept, to send its whole request. */
     @Volatile public var requestDeadline: Duration = 10.seconds

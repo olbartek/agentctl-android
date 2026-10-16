@@ -36,6 +36,8 @@ class BridgeAccessTest {
             BridgeResponse(200, "ok\n", exitCode = 0)
         }
         val server = if (token == null) {
+            // The constructor from 0.8, deprecated until 1.0: it checks no token.
+            @Suppress("DEPRECATION")
             BridgeServer(executor.asCoroutineDispatcher(), "dev.app", "android", handler)
         } else {
             BridgeServer(executor.asCoroutineDispatcher(), "dev.app", "android", token, handler)
