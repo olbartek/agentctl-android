@@ -4,7 +4,7 @@ import io.github.olbartek.agentctl.ActiveScreen
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentCoordinator
 import io.github.olbartek.agentctl.AgentEnvironment
-import io.github.olbartek.agentctl.AppIntent
+import io.github.olbartek.agentctl.AgentIntent
 import io.github.olbartek.agentctl.CommandDoc
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.activeScreen
@@ -53,9 +53,9 @@ class AppCoordinator(private val environment: AgentEnvironment) : AgentCoordinat
     /** A deep link or a tapped push: open that item on top of whatever is shown, as tapping it in the list would. */
     fun openItem(id: Int): Unit = items.openTapped(id)
 
-    override fun activeScreen(): ActiveScreen<AppIntent<AppCoordinator>> {
+    override fun activeScreen(): ActiveScreen<AgentIntent<AppCoordinator>> {
         val top = backStack.value.lastOrNull() ?: return items.activeScreen()
-        val back = AgentCommand.action<Unit, AppIntent<AppCoordinator>>("back", help = BACK_HELP, action = AppIntent { it.pop() })
+        val back = AgentCommand.action<Unit, AgentIntent<AppCoordinator>>("back", help = BACK_HELP, action = AgentIntent { it.pop() })
             .resolve(Unit, source = "AppCoordinator")
         return top.detail.activeScreen<ItemDetailViewModel.UiState, ItemDetailViewModel, AppCoordinator>()
             .identified("#${top.id}")

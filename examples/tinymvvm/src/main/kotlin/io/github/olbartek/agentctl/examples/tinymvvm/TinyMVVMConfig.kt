@@ -1,23 +1,23 @@
 package io.github.olbartek.agentctl.examples.tinymvvm
 
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
-import io.github.olbartek.agentctl.AgentPush
-import io.github.olbartek.agentctl.AppIntent
+import io.github.olbartek.agentctl.AgentIntent
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
 import io.github.olbartek.agentctl.ScreenDoc
+import io.github.olbartek.agentctl.runtime.AgentViewModelDriver
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
 import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.HelpExamples
 import io.github.olbartek.agentctl.runtime.LiveHost
-import io.github.olbartek.agentctl.runtime.ViewModelDriver
 import kotlinx.coroutines.CoroutineDispatcher
 
 /**
  * TinyMVVM's integration: TinyApp rebuilt as MVVM — Jetpack ViewModels under a coordinator, no store — and driven
- * through a [ViewModelDriver]. It runs TinyApp's own scenario files and prints what TinyApp prints.
+ * through an [AgentViewModelDriver]. It runs TinyApp's own scenario files and prints what TinyApp prints.
  */
 object TinyMVVMConfig {
     val screens: List<ScreenDoc> get() = AppCoordinator.registry
@@ -25,20 +25,20 @@ object TinyMVVMConfig {
     val mockMethods: List<MockMethod> get() = ItemsClient.mockMethods
 
     /** The same links and push as TinyApp's, as intents on the coordinator. */
-    val device: AgentDeviceConfig<AppIntent<AppCoordinator>>
+    val device: AgentDeviceConfig<AgentIntent<AppCoordinator>>
         get() = AgentDeviceConfig(
             openUrl = { url ->
                 val path = url.path?.split("/")?.filter { it.isNotEmpty() }
                 // ASCII digits only, as Swift's `Int(_:)` reads them; `toIntOrNull` alone takes any Unicode digit.
                 val id = path?.singleOrNull()?.takeIf { it.matches(Regex("[+-]?[0-9]+")) }?.toIntOrNull()
-                if (url.scheme == "tinyapp" && url.host == "items" && id != null) AppIntent { it.openItem(id) } else null
+                if (url.scheme == "tinyapp" && url.host == "items" && id != null) AgentIntent { it.openItem(id) } else null
             },
             pushes = listOf(
-                AgentPush(
+                AgentDevice.Push(
                     "item-updated",
                     help = "Item 2 was updated.",
-                    received = AppIntent { it.items.refresh() },
-                    opened = AppIntent { it.openItem(2) },
+                    received = AgentIntent { it.items.refresh() },
+                    opened = AgentIntent { it.openItem(2) },
                 ),
             ),
         )
@@ -60,7 +60,7 @@ object TinyMVVMConfig {
     )
 
     /** The value `tinymvvmctl` runs on. TinyMVVM has no Android app: everything runs headlessly, with no device. */
-    val appCtl: AppCtlConfig<ViewModelDriver<AppCoordinator>, AppIntent<AppCoordinator>>
+    val appCtl: AppCtlConfig<AgentViewModelDriver<AppCoordinator>, AgentIntent<AppCoordinator>>
         get() = AppCtlConfig(
             name = "TinyMVVM",
             rootMarker = "settings.gradle.kts",
@@ -93,14 +93,14 @@ object TinyMVVMConfig {
 
     /** A deterministic app on the JVM: a virtual clock, a fixed date, and everything else [HeadlessHost] pins. */
     fun headless(
-        device: AgentDeviceConfig<AppIntent<AppCoordinator>> = this.device,
-    ): HeadlessHost<ViewModelDriver<AppCoordinator>, AppIntent<AppCoordinator>> =
+        device: AgentDeviceConfig<AgentIntent<AppCoordinator>> = this.device,
+    ): HeadlessHost<AgentViewModelDriver<AppCoordinator>, AgentIntent<AppCoordinator>> =
         HeadlessHost(mockMethods, device) { AppCoordinator(it) }
 
     /** The app as it would run behind the bridge in a debug build: real time and real mock latency. */
     fun live(
         latency: MockLatency,
         dispatcher: CoroutineDispatcher,
-    ): LiveHost<ViewModelDriver<AppCoordinator>, AppIntent<AppCoordinator>> =
+    ): LiveHost<AgentViewModelDriver<AppCoordinator>, AgentIntent<AppCoordinator>> =
         LiveHost(mockMethods, latency, dispatcher, device) { AppCoordinator(it) }
 }

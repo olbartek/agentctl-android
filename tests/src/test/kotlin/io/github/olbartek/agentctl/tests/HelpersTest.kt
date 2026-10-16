@@ -18,8 +18,8 @@ import io.github.olbartek.agentctl.appending
 import io.github.olbartek.agentctl.appendingBackFallback
 import io.github.olbartek.agentctl.next
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
+import io.github.olbartek.agentctl.runtime.AgentStoreDriver
 import io.github.olbartek.agentctl.runtime.HeadlessHost
-import io.github.olbartek.agentctl.runtime.StoreDriver
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -99,7 +99,7 @@ class HelpersTest {
             }
         }
 
-        fun host(mockMethods: List<MockMethod> = emptyList()): HeadlessHost<StoreDriver<Desk, DeskAction>, DeskAction> =
+        fun host(mockMethods: List<MockMethod> = emptyList()): HeadlessHost<AgentStoreDriver<Desk, DeskAction>, DeskAction> =
             HeadlessHost(DeskAgent, mockMethods) { environment -> Store(Desk(), reducer, environment.scope) }
     }
 

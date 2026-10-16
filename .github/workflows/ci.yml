@@ -38,7 +38,7 @@ jobs:
       - name: Generated command reference is current
         run: ./tinyctl docs --check
 
-      # TinyMVVM is TinyApp as MVVM (ViewModelDriver): it runs TinyApp's scenario files unchanged, through its own CLI.
+      # TinyMVVM is TinyApp as MVVM (AgentViewModelDriver): it runs TinyApp's scenario files unchanged, through its own CLI.
       - name: TinyApp's scenarios on the MVVM app
         run: ./tinymvvmctl test
 

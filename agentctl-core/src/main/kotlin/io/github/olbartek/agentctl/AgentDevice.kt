@@ -10,86 +10,6 @@ import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-/** A permission's status, as the app's permission fakes report it (CONTRACT.md §2.4). */
-public enum class PermissionStatus(
-    /** How scripts and steps spell it, e.g. `not-determined`. */
-    public val rawValue: String,
-) {
-    /** Never asked: a request shows the prompt. */
-    NOT_DETERMINED("not-determined"),
-
-    /** Allowed. */
-    GRANTED("granted"),
-
-    /** Refused. */
-    DENIED("denied"),
-
-    /** Allowed in part, e.g. some photos or an approximate location. */
-    LIMITED("limited"),
-    ;
-
-    public companion object {
-        /** The status spelled [rawValue], or `null`. */
-        public fun of(rawValue: String): PermissionStatus? = entries.firstOrNull { it.rawValue == rawValue }
-    }
-}
-
-/** What a biometric authentication (a fingerprint, face unlock) came to. */
-public enum class BiometryResult {
-    /** The user was recognised. */
-    SUCCESS,
-
-    /** The user was not recognised, or the prompt was withdrawn. */
-    FAILURE,
-
-    /** No biometry is enrolled, so no prompt was shown. */
-    UNAVAILABLE,
-}
-
-/** Whether the app is in front. */
-public enum class DevicePhase(
-    /** How scripts spell it: `foreground` or `background`. */
-    public val rawValue: String,
-) {
-    /** In front: screen commands work. */
-    FOREGROUND("foreground"),
-
-    /** Behind something else: screen commands fail until `device foreground`. */
-    BACKGROUND("background"),
-}
-
-/** A position on Earth, in degrees. */
-public data class DeviceLocation(
-    /** Degrees north, from -90 to 90. */
-    val latitude: Double,
-    /** Degrees east, from -180 to 180. */
-    val longitude: Double,
-) {
-    public companion object {
-        private val DECIMAL = Regex("-?[0-9]+(\\.[0-9]+)?")
-
-        /**
-         * `<lat>,<lon>`: each an optional `-`, digits, and an optional `.` and digits; latitude within [-90, 90],
-         * longitude within [-180, 180]; no spaces (CONTRACT.md §2.4). `null` for anything else.
-         */
-        public fun parse(text: String): DeviceLocation? {
-            val parts = text.split(",")
-            if (parts.size != 2 || !parts.all(DECIMAL::matches)) return null
-            val latitude = parts[0].toDouble()
-            val longitude = parts[1].toDouble()
-            if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
-            return DeviceLocation(latitude, longitude)
-        }
-
-        /** `device location`'s argument: a location, or `none` (a [Setting] of `null`); `null` when it is neither. */
-        public fun parseArgument(text: String): Setting? =
-            if (text == "none") Setting(null) else parse(text)?.let(::Setting)
-    }
-
-    /** A location to set, or `null` to remove it. */
-    public data class Setting(val location: DeviceLocation?)
-}
-
 /**
  * The simulated device an app's environment fakes read: permissions and their system prompts, connectivity,
  * location, biometry and whether the app is in front. The `device` runtime command changes it (CONTRACT.md §2.4).
@@ -116,6 +36,180 @@ public class AgentDevice(
     public val isDriven: Boolean = false,
     public val offlineErrorCode: String? = null,
 ) {
+    /** A permission's status, as the app's permission fakes report it (CONTRACT.md §2.4). */
+    public enum class PermissionStatus(
+        /** How scripts and steps spell it, e.g. `not-determined`. */
+        public val rawValue: String,
+    ) {
+        /** Never asked: a request shows the prompt. */
+        NOT_DETERMINED("not-determined"),
+
+        /** Allowed. */
+        GRANTED("granted"),
+
+        /** Refused. */
+        DENIED("denied"),
+
+        /** Allowed in part, e.g. some photos or an approximate location. */
+        LIMITED("limited"),
+        ;
+
+        public companion object {
+            /** The status spelled [rawValue], or `null`. */
+            public fun of(rawValue: String): PermissionStatus? = entries.firstOrNull { it.rawValue == rawValue }
+        }
+    }
+
+    /** What a biometric authentication (a fingerprint, face unlock) came to. */
+    public enum class BiometryResult {
+        /** The user was recognised. */
+        SUCCESS,
+
+        /** The user was not recognised, or the prompt was withdrawn. */
+        FAILURE,
+
+        /** No biometry is enrolled, so no prompt was shown. */
+        UNAVAILABLE,
+    }
+
+    /** Whether the app is in front. */
+    public enum class Phase(
+        /** How scripts spell it: `foreground` or `background`. */
+        public val rawValue: String,
+    ) {
+        /** In front: screen commands work. */
+        FOREGROUND("foreground"),
+
+        /** Behind something else: screen commands fail until `device foreground`. */
+        BACKGROUND("background"),
+    }
+
+    /** A position on Earth, in degrees. */
+    public data class Location(
+        /** Degrees north, from -90 to 90. */
+        val latitude: Double,
+        /** Degrees east, from -180 to 180. */
+        val longitude: Double,
+    ) {
+        public companion object {
+            private val DECIMAL = Regex("-?[0-9]+(\\.[0-9]+)?")
+
+            /**
+             * `<lat>,<lon>`: each an optional `-`, digits, and an optional `.` and digits; latitude within [-90, 90],
+             * longitude within [-180, 180]; no spaces (CONTRACT.md §2.4). `null` for anything else.
+             */
+            public fun parse(text: String): Location? {
+                val parts = text.split(",")
+                if (parts.size != 2 || !parts.all(DECIMAL::matches)) return null
+                val latitude = parts[0].toDouble()
+                val longitude = parts[1].toDouble()
+                if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+                return Location(latitude, longitude)
+            }
+
+            /** `device location`'s argument: a location, or `none` (a [Setting] of `null`); `null` when it is neither. */
+            public fun parseArgument(text: String): Setting? =
+                if (text == "none") Setting(null) else parse(text)?.let(::Setting)
+        }
+
+        /** A location to set, or `null` to remove it. */
+        public data class Setting(val location: Location?)
+    }
+
+    /** A push notification `device push <name> [tap]` delivers. */
+    public class Push<A>(
+        /** What `device push` calls it, e.g. `order-shipped`. */
+        public val name: String,
+        /** One line for the docs, e.g. `Order #1002 has shipped.` */
+        public val help: String,
+        /** Sent when the push arrives while the app is in front; `null` when the app does nothing then. */
+        public val received: A? = null,
+        /** Sent when the user taps the notification (`device push <name> tap`). */
+        public val opened: A,
+    )
+
+    /** The `device` subcommands an app has, and the names they take: an [AgentDeviceConfig] without its actions. */
+    public data class Surface(
+        /** The subcommands this app has, in the fixed order. */
+        val subcommands: List<Subcommand>,
+        /** The permission services `device permission` takes. */
+        val services: List<String>,
+        /** The pushes `device push` delivers. */
+        val pushes: List<Push>,
+        /** The error code mocked calls fail with offline, or `null` without `device network`. */
+        val offlineErrorCode: String?,
+    ) {
+        /** In the contract's fixed order (CONTRACT.md §2.4). */
+        public enum class Subcommand(
+            /** How scripts spell it, e.g. `open-url`. */
+            public val rawValue: String,
+        ) {
+            PERMISSION("permission"),
+            PROMPT("prompt"),
+            OPEN_URL("open-url"),
+            PUSH("push"),
+            BACKGROUND("background"),
+            FOREGROUND("foreground"),
+            RELAUNCH("relaunch"),
+            NETWORK("network"),
+            LOCATION("location"),
+            BIOMETRY("biometry"),
+            ;
+
+            public companion object {
+                /** The subcommand spelled [rawValue], or `null`. */
+                public fun of(rawValue: String): Subcommand? = entries.firstOrNull { it.rawValue == rawValue }
+            }
+        }
+
+        /** A push's name and its line in the docs. */
+        public data class Push(
+            /** What `device push` calls it. */
+            val name: String,
+            /** Its line in the docs. */
+            val help: String,
+        )
+
+        /** Whether `device` is a runtime command here. */
+        val exists: Boolean get() = subcommands.isNotEmpty()
+
+        /** Whether the app can show a system prompt (a permission's, or the biometric one): what `prompt=` reports. */
+        val hasPrompts: Boolean get() = Subcommand.PROMPT in subcommands || Subcommand.BIOMETRY in subcommands
+
+        /** The [CommandDoc]s of `device`, one per subcommand, as `screens` and the docs list them. */
+        val commandDocs: List<CommandDoc>
+            get() = subcommands.map { sub ->
+                val (argument, help) = when (sub) {
+                    Subcommand.PERMISSION -> "permission <service> <not-determined|granted|denied|limited>" to
+                        "Set a permission as if changed in Settings. Services: ${services.joinToString(", ")}."
+                    Subcommand.PROMPT -> "prompt <allow|deny|limited>" to
+                        "Answer the system permission prompt the app is showing (prompt=<service>)."
+                    Subcommand.OPEN_URL -> "open-url <url>" to "Open a link in the app, as a tapped deep link or universal link."
+                    Subcommand.PUSH -> "push <name> [tap]" to
+                        "Deliver a push notification while the app is in front; with tap, open the app from it. Pushes: " +
+                        pushes.joinToString(", ") { "${it.name} (${it.help})" } + "."
+                    Subcommand.BACKGROUND -> "background" to
+                        "Send the app to the background; screen commands fail until device foreground."
+                    Subcommand.FOREGROUND -> "foreground" to "Bring the app back to the foreground."
+                    Subcommand.RELAUNCH -> "relaunch" to
+                        "Quit and relaunch the app: its state starts over, while what its clients stored and the device's " +
+                        "settings stay."
+                    Subcommand.NETWORK -> "network <online|offline>" to
+                        "Turn the network off or on. Offline, every mocked call fails with ${offlineErrorCode ?: ""}."
+                    Subcommand.LOCATION -> "location <lat>,<lon>|none" to
+                        "Set the device's location, e.g. 52.2297,21.0122, or none."
+                    Subcommand.BIOMETRY -> "biometry <enrolled|unenrolled|match|fail>" to
+                        "Enroll or remove Face ID / Touch ID, or answer the biometric prompt the app is showing (prompt=biometry)."
+                }
+                CommandDoc(name = "device", argument = argument, help = help, source = "runtime")
+            }
+
+        public companion object {
+            /** No `device` command. */
+            public val NONE: Surface = Surface(emptyList(), emptyList(), emptyList(), null)
+        }
+    }
+
     private sealed interface Prompt {
         val name: String
 
@@ -139,11 +233,11 @@ public class AgentDevice(
     private val statuses = mutableMapOf<String, PermissionStatus>()
     private val waiting = mutableListOf<Waiting>()
     private var online = true
-    private var currentLocation: DeviceLocation? = null
+    private var currentLocation: Location? = null
     private var biometryEnrolled = true
-    private var currentPhase = DevicePhase.FOREGROUND
+    private var currentPhase = Phase.FOREGROUND
     private val onlineObservers = mutableListOf<SendChannel<Boolean>>()
-    private val locationObservers = mutableListOf<SendChannel<DeviceLocation?>>()
+    private val locationObservers = mutableListOf<SendChannel<Location?>>()
 
     // What the app's fakes read
 
@@ -178,10 +272,10 @@ public class AgentDevice(
     public fun onlineUpdates(): Flow<Boolean> = observe(onlineObservers) { online }
 
     /** The device's location, or `null` when it has none. */
-    public val location: DeviceLocation? get() = synchronized(lock) { currentLocation }
+    public val location: Location? get() = synchronized(lock) { currentLocation }
 
     /** The location: the current value first, then each change. */
-    public fun locationUpdates(): Flow<DeviceLocation?> = observe(locationObservers) { currentLocation }
+    public fun locationUpdates(): Flow<Location?> = observe(locationObservers) { currentLocation }
 
     /** Whether a fingerprint or face is enrolled. */
     public val isBiometryEnrolled: Boolean get() = synchronized(lock) { biometryEnrolled }
@@ -202,7 +296,7 @@ public class AgentDevice(
     }
 
     /** Whether the app is in front. */
-    public val phase: DevicePhase get() = synchronized(lock) { currentPhase }
+    public val phase: Phase get() = synchronized(lock) { currentPhase }
 
     // What the runtime changes
 
@@ -261,7 +355,7 @@ public class AgentDevice(
     }
 
     /** Sets the location, or removes it. */
-    public fun setLocation(location: DeviceLocation?) {
+    public fun setLocation(location: Location?) {
         val observers = synchronized(lock) {
             currentLocation = location
             locationObservers.toList()
@@ -273,7 +367,7 @@ public class AgentDevice(
     public fun setBiometryEnrolled(enrolled: Boolean): Unit = synchronized(lock) { biometryEnrolled = enrolled }
 
     /** Sends the app to the background or brings it back. */
-    public fun setPhase(phase: DevicePhase): Unit = synchronized(lock) { currentPhase = phase }
+    public fun setPhase(phase: Phase): Unit = synchronized(lock) { currentPhase = phase }
 
     /** Withdraws every prompt, as quitting the app does; each request returns as if cancelled. */
     public fun withdrawAllPrompts() {

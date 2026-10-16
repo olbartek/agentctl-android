@@ -9,16 +9,16 @@ import kotlinx.coroutines.launch
  * What a command, an appearance or a device event does to an MVVM app: a function of its coordinator. A value, so
  * the device configuration can build one without a reference to the running app, which a relaunch replaces.
  */
-public fun interface AppIntent<App> {
+public fun interface AgentIntent<App> {
     /** Does it, on the app's own thread. */
     public fun run(app: App)
 }
 
 /**
  * A screen's command in an MVVM app: a function of its own view model. [activeScreen] binds it to the instance on
- * screen and lifts it to the app's [AppIntent].
+ * screen and lifts it to the app's [AgentIntent].
  */
-public fun interface ScreenIntent<VM> {
+public fun interface AgentScreenIntent<VM> {
     /** Does it, on the app's own thread. */
     public fun run(viewModel: VM)
 }
@@ -26,14 +26,14 @@ public fun interface ScreenIntent<VM> {
 /**
  * A screen of an MVVM app: a view model (a Jetpack `ViewModel`, say). Its agent surface is an [AgentScreen] unchanged
  * — path, summary, error, gates and commands are functions of a value, [agentState], exactly as a store screen's are
- * of its state — so the command builders, gates and docs are shared. Its commands are [ScreenIntent]s; the screen is
+ * of its state — so the command builders, gates and docs are shared. Its commands are [AgentScreenIntent]s; the screen is
  * usually the view model's companion object.
  *
  * ```kotlin
  * class ItemsViewModel(environment: AgentEnvironment) : ViewModel(), AgentViewModel<ItemsViewModel.AgentState, ItemsViewModel> {
  *     override val agentState get() = AgentState(items.size, isLoading, error)
  *     override val agentScreen get() = Companion
- *     companion object : AgentScreen<AgentState, ScreenIntent<ItemsViewModel>> { … }
+ *     companion object : AgentScreen<AgentState, AgentScreenIntent<ItemsViewModel>> { … }
  * }
  * ```
  */
@@ -42,13 +42,13 @@ public interface AgentViewModel<S, VM : AgentViewModel<S, VM>> {
     public val agentState: S
 
     /** The screen this view model is: its paths, summary, error and commands. */
-    public val agentScreen: AgentScreen<S, ScreenIntent<VM>>
+    public val agentScreen: AgentScreen<S, AgentScreenIntent<VM>>
 }
 
 /** This screen, with its intents bound to this instance and lifted to the app's. */
-public fun <S, VM : AgentViewModel<S, VM>, App> VM.activeScreen(): ActiveScreen<AppIntent<App>> {
+public fun <S, VM : AgentViewModel<S, VM>, App> VM.activeScreen(): ActiveScreen<AgentIntent<App>> {
     val viewModel = this
-    return agentScreen.activeScreen(agentState).map { intent -> AppIntent { intent.run(viewModel) } }
+    return agentScreen.activeScreen(agentState).map { intent -> AgentIntent { intent.run(viewModel) } }
 }
 
 /**
@@ -63,7 +63,7 @@ public fun <S, VM : AgentViewModel<S, VM>, App> VM.activeScreen(): ActiveScreen<
  */
 public interface AgentCoordinator<C : AgentCoordinator<C>> {
     /** The screen on top, with the coordinator's own commands (`back`) appended. */
-    public fun activeScreen(): ActiveScreen<AppIntent<C>>
+    public fun activeScreen(): ActiveScreen<AgentIntent<C>>
 
     /** Cancels the work of every view model it holds: a relaunch throws the app away. */
     public fun cancelAllWork()

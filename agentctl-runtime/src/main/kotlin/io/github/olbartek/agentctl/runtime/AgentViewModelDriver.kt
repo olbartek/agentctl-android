@@ -3,7 +3,7 @@ package io.github.olbartek.agentctl.runtime
 import io.github.olbartek.agentctl.ActiveScreen
 import io.github.olbartek.agentctl.AgentCoordinator
 import io.github.olbartek.agentctl.AgentEnvironment
-import io.github.olbartek.agentctl.AppIntent
+import io.github.olbartek.agentctl.AgentIntent
 import io.github.olbartek.agentctl.SummaryItem
 import kotlinx.coroutines.cancel
 
@@ -21,10 +21,10 @@ import kotlinx.coroutines.cancel
  * @param coordinator builds the coordinator on a launch's environment; called again on every relaunch. Whatever it
  *   builds starts over; what outlives a relaunch (a client's storage) is built outside it.
  */
-public class ViewModelDriver<C : AgentCoordinator<C>>(
+public class AgentViewModelDriver<C : AgentCoordinator<C>>(
     private val hostEnvironment: AgentEnvironment,
     private val coordinator: (AgentEnvironment) -> C,
-) : AgentDriver<AppIntent<C>, C> {
+) : AgentDriver<AgentIntent<C>, C> {
     /** What the current coordinator was built on. A relaunch replaces it, with a fresh scope. */
     public var environment: AgentEnvironment = hostEnvironment.withScope(childScope(hostEnvironment.scope))
         private set
@@ -35,9 +35,9 @@ public class ViewModelDriver<C : AgentCoordinator<C>>(
 
     override var onRelaunch: (() -> Unit)? = null
 
-    override fun activeScreen(): ActiveScreen<AppIntent<C>> = app.activeScreen()
+    override fun activeScreen(): ActiveScreen<AgentIntent<C>> = app.activeScreen()
 
-    override fun send(action: AppIntent<C>): Unit = action.run(app)
+    override fun send(action: AgentIntent<C>): Unit = action.run(app)
 
     private data class Fingerprint(
         val identity: String,

@@ -1,18 +1,17 @@
 package io.github.olbartek.agentctl.examples.agentshop.home
 
-import io.github.olbartek.agentctl.BiometryResult
-import io.github.olbartek.agentctl.PermissionStatus
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.examples.agentshop.TestStore
 import io.github.olbartek.agentctl.examples.agentshop.clients.AccountClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.BiometricsClient
-import io.github.olbartek.agentctl.examples.agentshop.clients.FaceIDVault
-import io.github.olbartek.agentctl.examples.agentshop.clients.NotificationsClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.CartClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.Catalog
 import io.github.olbartek.agentctl.examples.agentshop.clients.CatalogClient
+import io.github.olbartek.agentctl.examples.agentshop.clients.FaceIDVault
 import io.github.olbartek.agentctl.examples.agentshop.clients.MockAccounts
 import io.github.olbartek.agentctl.examples.agentshop.clients.MockOrders
+import io.github.olbartek.agentctl.examples.agentshop.clients.NotificationsClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.OrdersClient
 import io.github.olbartek.agentctl.examples.agentshop.models.CartLine
 import io.github.olbartek.agentctl.examples.agentshop.models.Order
@@ -169,12 +168,12 @@ class ProfileTest {
 
     @Test
     fun orderUpdatesNeedTheNotificationsPermission() {
-        var answer = PermissionStatus.DENIED
+        var answer = AgentDevice.PermissionStatus.DENIED
         val store = TestStore(Profile.State(alice), reducer = Profile.reducer(NotificationsClient(requestAuthorization = { answer })))
         store.send(Profile.Action.OrderUpdatesToggled(true))
         assertEquals(Profile.Error.NOTIFICATIONS_DENIED, store.state.error)
         assertFalse(store.state.orderUpdates)
-        answer = PermissionStatus.GRANTED
+        answer = AgentDevice.PermissionStatus.GRANTED
         store.send(Profile.Action.OrderUpdatesToggled(true))
         assertNull(store.state.error)
         assertTrue(store.state.orderUpdates)
@@ -186,14 +185,14 @@ class ProfileTest {
     fun faceIDKeepsTheSessionForTheLoginScreen() {
         val session = MockAccounts.session(alice)
         val vault = FaceIDVault()
-        var result = BiometryResult.FAILURE
+        var result = AgentDevice.BiometryResult.FAILURE
         val store = TestStore(
             Profile.State(alice, session = session),
             reducer = Profile.reducer(biometricsClient = BiometricsClient(authenticate = { result }), faceIDVault = vault),
         )
         store.send(Profile.Action.FaceIDToggled(true))
         assertEquals(Profile.Error.BIOMETRY_FAILED, store.state.error)
-        result = BiometryResult.SUCCESS
+        result = AgentDevice.BiometryResult.SUCCESS
         store.send(Profile.Action.FaceIDToggled(true))
         assertNull(store.state.error)
         assertTrue(store.state.faceID)

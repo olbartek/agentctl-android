@@ -1,9 +1,6 @@
 package io.github.olbartek.agentctl.examples.agentshop.clients
 
 import io.github.olbartek.agentctl.AgentDevice
-import io.github.olbartek.agentctl.BiometryResult
-import io.github.olbartek.agentctl.DeviceLocation
-import io.github.olbartek.agentctl.PermissionStatus
 import io.github.olbartek.agentctl.examples.agentshop.models.Session
 
 /**
@@ -12,7 +9,7 @@ import io.github.olbartek.agentctl.examples.agentshop.models.Session
  * Android for `POST_NOTIFICATIONS` instead.
  */
 class NotificationsClient(
-    val requestAuthorization: suspend () -> PermissionStatus = { PermissionStatus.NOT_DETERMINED },
+    val requestAuthorization: suspend () -> AgentDevice.PermissionStatus = { AgentDevice.PermissionStatus.NOT_DETERMINED },
 ) {
     companion object {
         fun live(device: AgentDevice): NotificationsClient =
@@ -22,8 +19,8 @@ class NotificationsClient(
 
 /** The device's location and the permission to read it, through the simulated device (`device location`, `device permission location …`). */
 class LocationClient(
-    val requestAuthorization: suspend () -> PermissionStatus = { PermissionStatus.NOT_DETERMINED },
-    val current: suspend () -> DeviceLocation? = { null },
+    val requestAuthorization: suspend () -> AgentDevice.PermissionStatus = { AgentDevice.PermissionStatus.NOT_DETERMINED },
+    val current: suspend () -> AgentDevice.Location? = { null },
 ) {
     companion object {
         fun live(device: AgentDevice): LocationClient = LocationClient(
@@ -35,7 +32,7 @@ class LocationClient(
 
 /** Face ID, through the simulated device (`device biometry …`). */
 class BiometricsClient(
-    val authenticate: suspend () -> BiometryResult = { BiometryResult.UNAVAILABLE },
+    val authenticate: suspend () -> AgentDevice.BiometryResult = { AgentDevice.BiometryResult.UNAVAILABLE },
 ) {
     companion object {
         fun live(device: AgentDevice): BiometricsClient = BiometricsClient(authenticate = { device.authenticateBiometry() })

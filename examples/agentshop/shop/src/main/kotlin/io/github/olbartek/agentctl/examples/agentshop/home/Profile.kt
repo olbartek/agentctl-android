@@ -1,11 +1,10 @@
 package io.github.olbartek.agentctl.examples.agentshop.home
 
 import io.github.olbartek.agentctl.AgentCommand
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentScreen
-import io.github.olbartek.agentctl.BiometryResult
 import io.github.olbartek.agentctl.CommandGate
 import io.github.olbartek.agentctl.Effect
-import io.github.olbartek.agentctl.PermissionStatus
 import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.examples.agentshop.clients.BiometricsClient
@@ -47,9 +46,9 @@ object Profile {
     sealed interface Action {
         data object OnAppear : Action
         data class OrderUpdatesToggled(val on: Boolean) : Action
-        data class NotificationsAnswered(val status: PermissionStatus) : Action
+        data class NotificationsAnswered(val status: AgentDevice.PermissionStatus) : Action
         data class FaceIDToggled(val on: Boolean) : Action
-        data class FaceIDAnswered(val result: BiometryResult) : Action
+        data class FaceIDAnswered(val result: AgentDevice.BiometryResult) : Action
         data object LogoutTapped : Action
 
         /** The alert's destructive button. Like any alert button, it also dismisses the alert. */
@@ -82,7 +81,7 @@ object Profile {
                 }
 
             is Action.NotificationsAnswered -> {
-                val on = action.status == PermissionStatus.GRANTED || action.status == PermissionStatus.LIMITED
+                val on = action.status == AgentDevice.PermissionStatus.GRANTED || action.status == AgentDevice.PermissionStatus.LIMITED
                 next(state.copy(orderUpdates = on, error = if (on) null else Error.NOTIFICATIONS_DENIED))
             }
 
@@ -95,12 +94,12 @@ object Profile {
                 }
 
             is Action.FaceIDAnswered -> when (action.result) {
-                BiometryResult.SUCCESS -> {
+                AgentDevice.BiometryResult.SUCCESS -> {
                     state.session?.let(faceIDVault::enable)
                     next(state.copy(faceID = true))
                 }
-                BiometryResult.FAILURE -> next(state.copy(error = Error.BIOMETRY_FAILED))
-                BiometryResult.UNAVAILABLE -> next(state.copy(error = Error.BIOMETRY_UNAVAILABLE))
+                AgentDevice.BiometryResult.FAILURE -> next(state.copy(error = Error.BIOMETRY_FAILED))
+                AgentDevice.BiometryResult.UNAVAILABLE -> next(state.copy(error = Error.BIOMETRY_UNAVAILABLE))
             }
 
             Action.LogoutTapped -> next(state.copy(alert = Alert.CONFIRM_LOGOUT))

@@ -2,17 +2,13 @@ package io.github.olbartek.agentctl.tests
 
 import io.github.olbartek.agentctl.AgentCommand
 import io.github.olbartek.agentctl.AgentContainer
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentEnvironment
-import io.github.olbartek.agentctl.AgentPush
 import io.github.olbartek.agentctl.AgentRegistry
 import io.github.olbartek.agentctl.AgentScreen
-import io.github.olbartek.agentctl.BiometryResult
-import io.github.olbartek.agentctl.DeviceLocation
-import io.github.olbartek.agentctl.DevicePhase
 import io.github.olbartek.agentctl.Effect
 import io.github.olbartek.agentctl.MockMethod
-import io.github.olbartek.agentctl.PermissionStatus
 import io.github.olbartek.agentctl.Reducer
 import io.github.olbartek.agentctl.ScreenDoc
 import io.github.olbartek.agentctl.StepFormatter
@@ -20,10 +16,10 @@ import io.github.olbartek.agentctl.Store
 import io.github.olbartek.agentctl.SummaryItem
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
 import io.github.olbartek.agentctl.next
-import io.github.olbartek.agentctl.runtime.AppFactory
+import io.github.olbartek.agentctl.runtime.AgentAppFactory
+import io.github.olbartek.agentctl.runtime.AgentStoreDriver
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.RunStatus
-import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.testsupport.AgentCoverage
 import java.io.File
 import java.nio.file.Files
@@ -52,12 +48,12 @@ object Gadget {
     sealed interface Action {
         data object OnAppear : Action
         data object CameraTapped : Action
-        data class CameraAnswered(val status: PermissionStatus) : Action
+        data class CameraAnswered(val status: AgentDevice.PermissionStatus) : Action
         data object UnlockTapped : Action
-        data class Unlocked(val result: BiometryResult) : Action
+        data class Unlocked(val result: AgentDevice.BiometryResult) : Action
         data class OnlineChanged(val online: Boolean) : Action
-        data class LocationChanged(val location: DeviceLocation?) : Action
-        data class PhaseChanged(val phase: DevicePhase) : Action
+        data class LocationChanged(val location: AgentDevice.Location?) : Action
+        data class PhaseChanged(val phase: AgentDevice.Phase) : Action
         data class LinkOpened(val link: String) : Action
         data object Pinged : Action
         data object FetchTapped : Action
@@ -128,7 +124,7 @@ object Gadget {
     val device = AgentDeviceConfig<Action>(
         permissions = listOf("camera", "location"),
         openUrl = { if (it.scheme == "gadget") Action.LinkOpened(it.toString()) else null },
-        pushes = listOf(AgentPush("ping", help = "A ping.", received = Action.Pinged, opened = Action.LinkOpened("ping"))),
+        pushes = listOf(AgentDevice.Push("ping", help = "A ping.", received = Action.Pinged, opened = Action.LinkOpened("ping"))),
         scenePhase = { Action.PhaseChanged(it) },
         relaunch = true,
         offlineErrorCode = "offline",
@@ -193,9 +189,9 @@ object Notebook {
     /** Builds its client once per host: a relaunch keeps it. */
     fun preparedHost() = HeadlessHost(
         Screen, emptyList(), relaunch,
-        AppFactory { _ ->
+        AgentAppFactory { _ ->
             val notes = Notes()
-            return@AppFactory { scope -> store(notes, scope) }
+            return@AgentAppFactory { scope -> store(notes, scope) }
         },
     )
 
@@ -206,7 +202,7 @@ object Notebook {
 /** What this guards: the `device` runtime command (CONTRACT.md §2.4). Its texts are agentctl-ios's, byte for byte. */
 class DeviceTest {
     /** The steps of `script` after `(launch)`, as text. */
-    private fun run(script: String, host: HeadlessHost<StoreDriver<Gadget.State, Gadget.Action>, Gadget.Action> = Gadget.host()): Pair<String, RunStatus> =
+    private fun run(script: String, host: HeadlessHost<AgentStoreDriver<Gadget.State, Gadget.Action>, Gadget.Action> = Gadget.host()): Pair<String, RunStatus> =
         runBlocking {
             val runner = host.makeRunner()
             runner.launch()
@@ -402,7 +398,7 @@ class DeviceTest {
         assertEquals(RunStatus.OK, status, text)
     }
 
-    /** CONTRACT.md §2.4: what the app's clients stored stays. An [AppFactory] builds them once per host. */
+    /** CONTRACT.md §2.4: what the app's clients stored stays. An [AgentAppFactory] builds them once per host. */
     @Test
     fun relaunchKeepsWhatAPreparedAppsClientsStored() = runBlocking {
         for ((host, after) in listOf(Notebook.preparedHost() to "hi", Notebook.rebuildingHost() to "none")) {

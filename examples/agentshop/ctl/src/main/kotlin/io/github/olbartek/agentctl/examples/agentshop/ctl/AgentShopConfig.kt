@@ -1,8 +1,8 @@
 package io.github.olbartek.agentctl.examples.agentshop.ctl
 
+import io.github.olbartek.agentctl.AgentDevice
 import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentEnvironment
-import io.github.olbartek.agentctl.AgentPush
 import io.github.olbartek.agentctl.DocsText
 import io.github.olbartek.agentctl.MockLatency
 import io.github.olbartek.agentctl.MockMethod
@@ -19,14 +19,14 @@ import io.github.olbartek.agentctl.examples.agentshop.clients.OrdersClient
 import io.github.olbartek.agentctl.examples.agentshop.clients.SessionStorage
 import io.github.olbartek.agentctl.examples.agentshop.models.DeepLink
 import io.github.olbartek.agentctl.examples.agentshop.models.ScheduledFaults
+import io.github.olbartek.agentctl.runtime.AgentAppFactory
+import io.github.olbartek.agentctl.runtime.AgentStoreDriver
 import io.github.olbartek.agentctl.runtime.AppCheck
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
-import io.github.olbartek.agentctl.runtime.AppFactory
 import io.github.olbartek.agentctl.runtime.GradleTasks
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.HelpExamples
 import io.github.olbartek.agentctl.runtime.LiveHost
-import io.github.olbartek.agentctl.runtime.StoreDriver
 import io.github.olbartek.agentctl.runtime.VirtualTimeDispatcher
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.time.Duration
@@ -69,13 +69,13 @@ object AgentShopConfig {
             permissions = listOf("notifications", "location"),
             openUrl = AppFeature::actionOpening,
             pushes = listOf(
-                AgentPush(
+                AgentDevice.Push(
                     "order-shipped",
                     help = "Order #1002 has shipped.",
                     received = AppFeature.Action.OrderPushReceived,
                     opened = AppFeature.Action.DeepLinkOpened(DeepLink.Order(1002)),
                 ),
-                AgentPush("promo", help = "A new promo code: SAVE10.", opened = AppFeature.Action.DeepLinkOpened(DeepLink.Shop)),
+                AgentDevice.Push("promo", help = "A new promo code: SAVE10.", opened = AppFeature.Action.DeepLinkOpened(DeepLink.Shop)),
             ),
             scenePhase = { AppFeature.Action.ScenePhaseChanged(it) },
             relaunch = true,
@@ -132,7 +132,7 @@ object AgentShopConfig {
     )
 
     /** What `shopctl` runs on: headlessly the session lives in memory, so there is nothing on disk to clear. */
-    val appCtl: AppCtlConfig<StoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> get() = appCtl(SessionStorage.inMemory())
+    val appCtl: AppCtlConfig<AgentStoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> get() = appCtl(SessionStorage.inMemory())
 
     /**
      * The config the debug app hands its agent bridge: its live store keeps the session in `sessionStorage`, which
@@ -141,7 +141,7 @@ object AgentShopConfig {
     fun appCtl(
         sessionStorage: SessionStorage,
         scheduledFaults: ScheduledFaults = ScheduledFaults(),
-    ): AppCtlConfig<StoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> = AppCtlConfig(
+    ): AppCtlConfig<AgentStoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> = AppCtlConfig(
         name = "AgentShop",
         // Without APPCTL_ROOT the CLI walks up to the directory that holds the wrapper: examples/agentshop.
         rootMarker = "appctl",
@@ -170,8 +170,8 @@ object AgentShopConfig {
      * A deterministic store: fresh in-memory backends and session, and the headless host's pinned environment. The
      * auth server measures codes' age on the host's virtual clock, so `advance 5m` expires them.
      */
-    fun headless(): HeadlessHost<StoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> =
-        HeadlessHost(AppFeatureAgent, mockMethods, device, AppFactory { environment ->
+    fun headless(): HeadlessHost<AgentStoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> =
+        HeadlessHost(AppFeatureAgent, mockMethods, device, AgentAppFactory { environment ->
             // Once per host: `device relaunch` builds the next store on the same session storage and backends.
             AgentShop.prepare(environment, SessionStorage.inMemory(), uptime = virtualUptime(environment))
         })
@@ -185,8 +185,8 @@ object AgentShopConfig {
         dispatcher: CoroutineDispatcher,
         sessionStorage: SessionStorage,
         scheduledFaults: ScheduledFaults = ScheduledFaults(),
-    ): LiveHost<StoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> =
-        LiveHost(AppFeatureAgent, mockMethods, latency, dispatcher, device, AppFactory { environment ->
+    ): LiveHost<AgentStoreDriver<AppFeature.State, AppFeature.Action>, AppFeature.Action> =
+        LiveHost(AppFeatureAgent, mockMethods, latency, dispatcher, device, AgentAppFactory { environment ->
             AgentShop.prepare(environment, sessionStorage, scheduledFaults)
         })
 

@@ -27,7 +27,7 @@ dependencies {
 | Artifact | Who depends on it | What for |
 |---|---|---|
 | `agentctl-core` | the modules holding your screens | `AgentScreen`, `AgentCommand`, `SummaryItem`, `Store`, `AgentEnvironment`, `MockBackend`, `AgentViewModel`, `AgentCoordinator`, `AgentTasks` |
-| `agentctl-runtime` | your config module, which only your debug app (`debugImplementation`), your CLI and your tests depend on | `AgentDriver` with `StoreDriver` and `ViewModelDriver`, `AppCtlConfig`, `ScriptRunner`, the deterministic headless host, the bridge's server |
+| `agentctl-runtime` | your config module, which only your debug app (`debugImplementation`), your CLI and your tests depend on | `AgentDriver` with `AgentStoreDriver` and `AgentViewModelDriver`, `AppCtlConfig`, `ScriptRunner`, the deterministic headless host, the bridge's server |
 | `agentctl-cli` | your CLI's module | `AgentCtl.main(config, args)` |
 | `agentctl-bridge` | your app, as `debugImplementation` | `AgentLaunch`, the debug-only in-app bridge |
 | `agentctl-test-support` | your tests | the coverage guards |
@@ -232,12 +232,12 @@ One value describes your app to AgentCtl:
 - the prose the generated command reference is rendered from;
 - the functions that build your store.
 
-Its type names the *driver* — how the engine reaches your app — and the action type: `StoreDriver<State, Action>` for
+Its type names the *driver* — how the engine reaches your app — and the action type: `AgentStoreDriver<State, Action>` for
 a store. Abridged from
 [`TinyAppConfig.kt`](../../examples/tinyapp-config/src/main/kotlin/io/github/olbartek/agentctl/examples/tinyapp/TinyAppConfig.kt):
 
 ```kotlin
-val appCtl: AppCtlConfig<StoreDriver<TinyRoot.State, TinyRoot.Action>, TinyRoot.Action>
+val appCtl: AppCtlConfig<AgentStoreDriver<TinyRoot.State, TinyRoot.Action>, TinyRoot.Action>
     get() = AppCtlConfig(
         name = "TinyApp",
         rootMarker = "settings.gradle.kts",   // what the CLI walks up the tree for to find the repo root
@@ -370,12 +370,12 @@ exit=1
 
 The engine never sees your app's types: it talks to an `AgentDriver`, which answers a few questions — which screen is
 active, deliver this action, has anything changed (settling's fingerprint), relaunch, and dump the state. A store app
-uses `StoreDriver`; an app of view models under a coordinator uses `ViewModelDriver`. Scripts, scenarios, the step
+uses `AgentStoreDriver`; an app of view models under a coordinator uses `AgentViewModelDriver`. Scripts, scenarios, the step
 output and the generated docs are the same either way: [`examples/tinymvvm`](../../examples/tinymvvm) is TinyApp
 rebuilt as MVVM, and it runs TinyApp's scenario files byte for byte.
 
 A screen is an `AgentViewModel`: a view model (a Jetpack `ViewModel` here) whose agent surface is the `AgentScreen` you
-already know, computed from a value, `agentState`. Its commands are `ScreenIntent`s, functions of the view model on
+already know, computed from a value, `agentState`. Its commands are `AgentScreenIntent`s, functions of the view model on
 screen, and the screen is usually its companion object. Abridged from
 [`ItemsViewModel.kt`](../../examples/tinymvvm/src/main/kotlin/io/github/olbartek/agentctl/examples/tinymvvm/ItemsViewModel.kt):
 
@@ -406,14 +406,14 @@ class ItemsViewModel(private val environment: AgentEnvironment, private val clie
     override val agentState: UiState get() = state.value
     override val agentScreen get() = Companion
 
-    companion object : AgentScreen<UiState, ScreenIntent<ItemsViewModel>> {
+    companion object : AgentScreen<UiState, AgentScreenIntent<ItemsViewModel>> {
         override val screenName = "Items"
         override val screenPaths = listOf("items")
         override fun screenPath(state: UiState) = "items"
         // summaryKeys, summary(state), errorCode(state) exactly as for a store screen
-        override val onAppear = ScreenIntent<ItemsViewModel> { it.onAppear() }
+        override val onAppear = AgentScreenIntent<ItemsViewModel> { it.onAppear() }
         override val commands = listOf(
-            AgentCommand.action<UiState, ScreenIntent<ItemsViewModel>>("refresh", help = "Load the list again.", action = ScreenIntent { it.refresh() }),
+            AgentCommand.action<UiState, AgentScreenIntent<ItemsViewModel>>("refresh", help = "Load the list again.", action = AgentScreenIntent { it.refresh() }),
         )
     }
 }
@@ -421,11 +421,11 @@ class ItemsViewModel(private val environment: AgentEnvironment, private val clie
 
 The coordinator is an `AgentCoordinator`: it owns the back stack (a list, as Navigation 3's `NavDisplay(backStack)`
 renders it), creates each pushed view model, and returns the screen on top — `items.activeScreen()`, or a pushed view
-model's with its own `back` appended as an `AppIntent` — and `cancelAllWork()`. The config names
-`ViewModelDriver<AppCoordinator>`, and its hosts take the coordinator to build, on the environment of each launch:
+model's with its own `back` appended as an `AgentIntent` — and `cancelAllWork()`. The config names
+`AgentViewModelDriver<AppCoordinator>`, and its hosts take the coordinator to build, on the environment of each launch:
 
 ```kotlin
-fun headless(): HeadlessHost<ViewModelDriver<AppCoordinator>, AppIntent<AppCoordinator>> =
+fun headless(): HeadlessHost<AgentViewModelDriver<AppCoordinator>, AgentIntent<AppCoordinator>> =
     HeadlessHost(mockMethods, device) { AppCoordinator(it) }
 ```
 
@@ -456,11 +456,12 @@ In the app, `AgentLaunch(config, intent)` works as it does for a store; `launch.
 0.7 put the engine behind `AgentDriver`. A store host's scripts, scenarios and output are unchanged; its Kotlin
 changes as follows:
 
+- Every public name 0.7 adds starts with `Agent`, so none clashes with an app's own.
 - `AppCtlConfig<State, Action>`, `HeadlessHost<State, Action>` and `LiveHost<State, Action>` become
-  `…<StoreDriver<State, Action>, Action>`, and `ScriptRunner<State, Action>` becomes `ScriptRunner<Action>`. The
+  `…<AgentStoreDriver<State, Action>, Action>`, and `ScriptRunner<State, Action>` becomes `ScriptRunner<Action>`. The
   `HeadlessHost(container, mockMethods, …)` and `LiveHost(container, …)` calls are unchanged.
-- The test helpers: `AgentCoverage<Action>` and `AgentScenarioChecks<StoreDriver<State, Action>, Action>`. A test that
-  reads `host.store` imports `io.github.olbartek.agentctl.runtime.store`.
+- The test helpers: `AgentCoverage<Action>` and `AgentScenarioChecks<AgentStoreDriver<State, Action>, Action>`. A
+  test that reads `host.store` imports `io.github.olbartek.agentctl.runtime.store`.
 - `AgentLaunch.store` and `stores` are now `launch.app` and `apps` (the old names still compile, with a deprecation
   warning), and `AgentLaunch.isRequested(intent)` is also `AgentLaunchArguments.isRequested(intent)`.
 - A host that built a `ScriptRunner` itself passes `driver = host.driver` instead of the store and the container.
@@ -472,6 +473,6 @@ changes as follows:
   by a relaunch.
 - `LiveHost.onRelaunch: (AgentStore) -> Unit` is `host.driver.onRelaunch: () -> Unit`; read the new store from
   `host.store`.
-- Other type parameters: `AgentLaunch<State, Action>` is `AgentLaunch<StoreDriver<State, Action>, Action,
+- Other type parameters: `AgentLaunch<State, Action>` is `AgentLaunch<AgentStoreDriver<State, Action>, Action,
   AgentStore<State, Action>>`, `AgentLaunchSession<Driver, Action>`, `BridgeRouter<Action>`, and `applySeed` and
   `ScenarioRunner.run` are generic over the action only.

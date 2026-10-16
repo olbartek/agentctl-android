@@ -6,11 +6,11 @@ import io.github.olbartek.agentctl.StepFormatter
 import io.github.olbartek.agentctl.examples.tinyapp.TinyAppConfig
 import io.github.olbartek.agentctl.examples.tinymvvm.AppCoordinator
 import io.github.olbartek.agentctl.examples.tinymvvm.TinyMVVMConfig
+import io.github.olbartek.agentctl.runtime.AgentViewModelDriver
 import io.github.olbartek.agentctl.runtime.HeadlessHost
 import io.github.olbartek.agentctl.runtime.LiveHost
 import io.github.olbartek.agentctl.runtime.ScenarioRunner
 import io.github.olbartek.agentctl.runtime.ScriptRunner
-import io.github.olbartek.agentctl.runtime.ViewModelDriver
 import io.github.olbartek.agentctl.testsupport.AgentCoverage
 import io.github.olbartek.agentctl.testsupport.AgentScenarioChecks
 import kotlin.test.Test
@@ -20,8 +20,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
 /**
- * What this guards: the engine is architecture-neutral. TinyApp (a store, `StoreDriver`) and TinyMVVM (Jetpack
- * ViewModels under a coordinator, `ViewModelDriver`) are the same app, and every script prints the same bytes and
+ * What this guards: the engine is architecture-neutral. TinyApp (a store, `AgentStoreDriver`) and TinyMVVM (Jetpack
+ * ViewModels under a coordinator, `AgentViewModelDriver`) are the same app, and every script prints the same bytes and
  * exits the same way on both: TinyApp's scenarios, failures of every kind, `advance`, `mock`, `device` and a relaunch
  * (agentctl-ios's DriverParityTests, the same scripts).
  */
@@ -91,7 +91,7 @@ class DriverParityTest {
         val methods = TinyMVVMConfig.mockMethods
         val device = TinyMVVMConfig.device
         val byCoordinator = HeadlessHost(methods, device) { AppCoordinator(it) }
-        val byDriver = HeadlessHost(methods, device) { ViewModelDriver(it) { environment -> AppCoordinator(environment) } }
+        val byDriver = HeadlessHost(methods, device) { AgentViewModelDriver(it) { environment -> AppCoordinator(environment) } }
         val relaunching = HeadlessHost(methods, AgentDeviceConfig(relaunch = true)) { AppCoordinator(it) }
         val live = LiveHost(methods, MockLatency.ZERO, Dispatchers.Unconfined, device) { AppCoordinator(it) }
         val expected = run(TinyMVVMConfig.headless().makeRunner(), "open 2; save")
