@@ -5,6 +5,17 @@ Tags are bare `X.Y.Z`; before 0.4.1 this port had its own numbers and `v`-prefix
 every tag as `com.github.olbartek.agentctl-android:<module>:<tag>`. This port and agentctl-ios share MAJOR.MINOR,
 released together; a PATCH is one repository's own fix, so the two patch numbers can differ.
 
+## 0.12.1 (2026-11-01)
+
+An Android-only patch on 0.12.0: `app test` and `check --ui` no longer leave their `adb forward` behind. Each scenario's
+launch (and L4's) removes the forward it made once it has run, so the next run of the same app, from any checkout,
+finds that port free instead of moving on to 8766; no other forward is touched. `app launch` keeps its forward, which
+`app run` needs, and the next launch removes it as before. So `app run` right after `app test` or `check --ui` needs an
+`app launch` first, where agentctl-ios's still reaches the app the last scenario left running
+([the platform differences](platform-differences.md)). Its message is unchanged and says the port from
+`bridge.json` is stale once the app has quit; after `app test` the app has not quit, but the advice holds: run
+`app launch` again. The contract, CLI and scenario files are as in 0.12.0; agentctl-ios stayed at 0.12.0. [Release notes](https://github.com/olbartek/agentctl-android/releases/tag/0.12.1).
+
 ## 0.12.0 (2026-10-31)
 
 The runtime command `wait` blocks until the app matches or changes, so neither a scenario nor a bridge client polls

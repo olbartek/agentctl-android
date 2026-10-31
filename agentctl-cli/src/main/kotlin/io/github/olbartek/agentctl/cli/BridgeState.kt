@@ -193,8 +193,14 @@ internal object Ports {
      */
     fun ownForward(recorded: BridgeState?, serial: String, appId: String, forwardList: String): Int? {
         if (recorded == null || recorded.platform != BridgeState.PLATFORM || recorded.device != serial || recorded.appId != appId) return null
-        return forwards(forwardList).firstOrNull { it.serial == serial && it.host == recorded.port }?.host
+        return recorded.port.takeIf { launchForward(serial, it, forwardList) }
     }
+
+    /**
+     * Whether [forwardList] shows the forward a launch on [serial] makes for [port]: `tcp:<port> tcp:<port>` on that
+     * device. One on another device, or from that port to another device port, is someone else's.
+     */
+    fun launchForward(serial: String, port: Int, forwardList: String): Boolean = Forward(serial, port, port) in forwards(forwardList)
 
     private fun environmentPort(environment: Map<String, String>): Int? {
         val value = environment[ENVIRONMENT_VARIABLE]?.takeIf { it.isNotEmpty() } ?: return null
