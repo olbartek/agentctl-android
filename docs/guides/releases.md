@@ -22,7 +22,7 @@ API changes, but four things a host may see:
 - **`wait` is now a runtime command,** and a runtime command takes precedence over a screen's: an app command named
   `wait` no longer runs. Rename it.
 - **The unknown-command message lists it:** `Valid here: …, expect, advance, mock, wait, device`. A scenario or a
-  test that compares that line changes with it; regenerate `agent-commands.md` with `docs`.
+  test that compares that line changes with it.
 - **The command docs and the coverage check count it.** Regenerate the command docs with `docs` (they gain a `wait`
   row), and use `wait` in at least one scenario, or the coverage check ("every command is used by a scenario") fails
   with `wait` unused.
