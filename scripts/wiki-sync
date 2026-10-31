@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""Builds this repository's GitHub wiki from README.md and docs/guides, and publishes it.
+
+The repository is the source; the wiki is its reading layer and is never edited in the browser. The page list, the
+titles and each page's opening sentence are shared with the sibling library (agentctl-ios and agentctl-android), so
+both wikis have the same pages in the same order; this script is the same in both repositories.
+
+    scripts/wiki-sync                  build the pages, commit and push them to <repo>.wiki.git
+    scripts/wiki-sync --check          exit 1, naming the stale pages, when the wiki is not what the repo builds
+    scripts/wiki-sync --out DIR        only write the pages into DIR, for a look before publishing
+    scripts/wiki-sync --wiki-dir DIR   use an existing checkout of the wiki instead of cloning one
+
+Exit codes: 0 done (or up to date), 1 the wiki is out of date (--check), 2 usage, 3 git, the network or a source file.
+"""
+
+import argparse
+import os
+import posixpath
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+# (wiki page, title, source file, the one sentence that opens the page). Shared with the sibling library: change it
+# on both sides, agreed through nzoz-lead (nzozopole-hub plans/2026-10-31-agentctl-wiki.md).
+PAGES = [
+    ("Home", "AgentCtl", "docs/guides/overview.md",
+     "What AgentCtl is, the pages of this wiki and the current version."),
+    ("Getting-Started", "Getting started", "docs/guides/integration.md",
+     "How to add AgentCtl to an app, step by step."),
+    ("Commands", "Commands", "docs/guides/commands.md",
+     "Every command a host's CLI gets, the exit codes and the runtime commands."),
+    ("Bridge", "The in-app bridge", "docs/guides/bridge.md",
+     "Driving the real app through the debug-only bridge, with its token and its security."),
+    ("Device-Environment", "The device environment", "docs/guides/device-environment.md",
+     "The simulated device that `device` drives: permissions, links, pushes, the lifecycle, the network, location "
+     "and biometry."),
+    ("Verification-Ladder", "The verification ladder", "docs/guides/verification-ladder.md",
+     "`check`, from a build to the real app, and verifying at the cheapest rung that proves a change."),
+    ("Coverage-and-Checks", "Coverage and checks", "docs/guides/coverage-and-checks.md",
+     "The guards that fail a build when the agent surface drifts, and the scenario checks a host's tests need."),
+    ("Platform-Differences", "Platform differences", "docs/guides/platform-differences.md",
+     "Which type plays which role on iOS and on Android where the names differ."),
+    ("Contract", "The contract", "docs/guides/contract.md",
+     "The CONTRACT.md version this library implements, and what the contract covers."),
+    ("Releases", "Releases", "docs/guides/releases.md",
+     "Every version, newest first, and what a host changes to move to it."),
+    ("Before-1.0", "Before 1.0", "docs/guides/before-1.0.md",
+     "What may still change before 1.0, and what is to be settled by then."),
+]
+
+# Files that are wiki pages besides the sources above: README.md is the top of Home.
+PAGE_OF = {source: page for page, _, source, _ in PAGES}
+PAGE_OF["README.md"] = "Home"
+
+SOURCES = ["README.md", "CONTRACT.md", "docs/guides", "scripts/wiki-sync"]
+VERSION_HEADING = re.compile(r"^## (\d+\.\d+\.\d+) \((\d{4}-\d{2}-\d{2})\)$", re.M)
+LINK = re.compile(r"(!?\[[^\]]*\]\()([^)\s]+)(\s+\"[^\"]*\")?\)")
+
+
+class Failure(Exception):
+    """A git, network or source problem: exit 3."""
+
+
+def git(*args, cwd, check=True):
+    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    if check and result.returncode != 0:
+        raise Failure(f"git {' '.join(args)} failed: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def read(root, path):
+    try:
+        with open(os.path.join(root, path), encoding="utf-8") as file:
+            return file.read()
+    except OSError as error:
+        raise Failure(f"cannot read {path}: {error.strerror}")
+
+
+class Repo:
+    def __init__(self, root):
+        self.root = root
+        origin = git("remote", "get-url", "origin", cwd=root)
+        # Any host, so an SSH alias for github.com (`git@github-work:owner/repo.git`) works too.
+        match = re.search(r"[:/]([^/:]+)/([^/:]+?)(?:\.git)?/?$", origin)
+        if not match:
+            raise Failure(f"origin is not an owner/repository URL: {origin}")
+        self.owner, self.name = match.groups()
+        self.wiki_url = re.sub(r"(\.git)?$", ".wiki.git", origin, count=1)
+        self.sibling = (self.name.replace("-ios", "-android") if self.name.endswith("-ios")
+                        else self.name.replace("-android", "-ios"))
+        # The last commit that changed what the pages are built from, so the footer only changes with them.
+        self.sha = git("log", "-1", "--format=%H", "--", *SOURCES, cwd=root)
+
+    def url(self, kind, ref, path):
+        return f"https://github.com/{self.owner}/{self.name}/{kind}/{ref}/{path}"
+
+
+def rewrite_links(text, base, repo):
+    """Links relative to `base` (a directory in the repository) become wiki pages, or files on GitHub at main.
+    Fenced code is left alone."""
+
+    def rewrite(match):
+        prefix, target, title = match.group(1), match.group(2), match.group(3) or ""
+        if re.match(r"[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith("#"):
+            return match.group(0)
+        path, _, fragment = target.partition("#")
+        fragment = "#" + fragment if fragment else ""
+        resolved = posixpath.normpath(posixpath.join(base, path)) if path else base
+        if resolved in PAGE_OF and not prefix.startswith("!"):
+            return f"{prefix}{PAGE_OF[resolved]}{fragment}{title})"
+        # An image is served raw, so the wiki shows it; a blob URL is a page about the file.
+        kind = ("raw" if prefix.startswith("!") else
+                "tree" if os.path.isdir(os.path.join(repo.root, resolved)) else "blob")
+        return f"{prefix}{repo.url(kind, 'main', resolved)}{fragment}{title})"
+
+    parts = re.split(r"(^[ \t]*```.*?^[ \t]*```[^\n]*$)", text, flags=re.S | re.M)
+    return "".join(part if part.lstrip().startswith("```") else LINK.sub(rewrite, part) for part in parts)
+
+
+def body(text, path):
+    """A guide without its `# ` title line."""
+    if not text.startswith("# "):
+        raise Failure(f"{path} does not start with a `# ` title")
+    return text.split("\n", 1)[1].lstrip("\n")
+
+
+def page(title, sentence, content):
+    return f"# {title}\n\n{sentence}\n\n{content.rstrip()}\n"
+
+
+def build(repo):
+    """The wiki's files, as {file name: text}."""
+    root = repo.root
+    releases = read(root, "docs/guides/releases.md")
+    current = VERSION_HEADING.search(releases)
+    if not current:
+        raise Failure("docs/guides/releases.md has no `## X.Y.Z (YYYY-MM-DD)` heading")
+    version, date = current.groups()
+    files = {}
+    for name, title, source, sentence in PAGES:
+        content = body(read(root, source), source)
+        if name == "Home":
+            readme = read(root, "README.md")
+            intro = body(readme, "README.md").split("\n## ", 1)[0]
+            listing = "\n".join(f"- [{t}]({n}): {s}" for n, t, _, s in PAGES if n != "Home")
+            # The overview's own opening sentence describes the overview, not Home.
+            overview = content.split("\n\n", 1)[1] if "\n\n" in content else ""
+            content = (
+                rewrite_links(intro.rstrip(), "", repo)
+                + f"\n\nThe current version is **{version}**, released on {date}"
+                + f" ([what changed](Releases)).\n\n## Pages\n\n{listing}\n\n"
+                + rewrite_links(overview, posixpath.dirname(source), repo)
+            )
+        else:
+            content = rewrite_links(content, posixpath.dirname(source), repo)
+        if name == "Contract":
+            content = contract_line(repo, version) + "\n\n" + content
+        files[f"{name}.md"] = page(title, sentence, content)
+    files["_Sidebar.md"] = "**[AgentCtl](Home)**\n\n" + "\n".join(
+        f"- [{title}]({name})" for name, title, _, _ in PAGES if name != "Home"
+    ) + "\n"
+    files["_Footer.md"] = (
+        f"Generated from [{repo.owner}/{repo.name}@{repo.sha[:7]}](https://github.com/{repo.owner}/{repo.name}/commit/"
+        f"{repo.sha}) by `scripts/wiki-sync`. Do not edit here: change the repository and run it again. "
+        f"The sibling library's wiki: [{repo.sibling}](https://github.com/{repo.owner}/{repo.sibling}/wiki).\n"
+    )
+    return files
+
+
+def contract_version(text):
+    match = re.match(r"Contract version: (\d+)", text)
+    return match.group(1) if match else None
+
+
+def contract_line(repo, version):
+    main = contract_version(read(repo.root, "CONTRACT.md"))
+    if main is None:
+        raise Failure("CONTRACT.md does not start with `Contract version: N`")
+    tagged = git("show", f"{version}:CONTRACT.md", cwd=repo.root, check=False)
+    released = contract_version(tagged) if tagged else None
+    at_tag = f"[CONTRACT.md at {version}]({repo.url('blob', version, 'CONTRACT.md')})"
+    on_main = f"[on main]({repo.url('blob', 'main', 'CONTRACT.md')})"
+    if released is None or released == main:
+        return f"{version} implements **CONTRACT.md version {released or main}**: {at_tag}, {on_main}."
+    return (f"{version} implements **CONTRACT.md version {released}** ({at_tag}); main has version {main}, not yet "
+            f"released ({on_main}).")
+
+
+def stale(files, directory):
+    """The pages whose file in `directory` differs from what the repo builds, and the stray pages to remove."""
+    changed = [name for name, text in files.items()
+               if not os.path.exists(os.path.join(directory, name))
+               or open(os.path.join(directory, name), encoding="utf-8").read() != text]
+    extra = [name for name in os.listdir(directory) if name.endswith(".md") and name not in files]
+    return changed, extra
+
+
+def write(files, directory):
+    os.makedirs(directory, exist_ok=True)
+    for name, text in files.items():
+        with open(os.path.join(directory, name), "w", encoding="utf-8") as file:
+            file.write(text)
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="scripts/wiki-sync", description=__doc__.split("\n\n")[0])
+    parser.add_argument("--check", action="store_true", help="exit 1 when the wiki is out of date; change nothing")
+    parser.add_argument("--out", metavar="DIR", help="only write the pages into DIR")
+    parser.add_argument("--wiki-dir", metavar="DIR",
+                        help="an existing clone of the wiki (it is pulled first), instead of a fresh clone")
+    arguments = parser.parse_args()
+    if arguments.out and (arguments.check or arguments.wiki_dir):
+        parser.error("--out writes the pages only; it takes neither --check nor --wiki-dir")
+
+    root = git("rev-parse", "--show-toplevel", cwd=os.path.dirname(os.path.abspath(__file__)))
+    repo = Repo(root)
+    files = build(repo)
+    if arguments.out:
+        write(files, arguments.out)
+        print(f"wiki-sync: wrote {len(files)} pages to {arguments.out}")
+        return 0
+
+    clone = None
+    try:
+        if arguments.wiki_dir:
+            directory = arguments.wiki_dir
+            if not os.path.isdir(os.path.join(directory, ".git")):
+                raise Failure(f"{directory} is not a clone of the wiki")
+            git("pull", "--ff-only", "-q", cwd=directory)
+        else:
+            clone = tempfile.mkdtemp(prefix="wiki-sync-")
+            directory = os.path.join(clone, "wiki")
+            result = subprocess.run(["git", "clone", "-q", repo.wiki_url, directory], capture_output=True, text=True)
+            if result.returncode != 0:
+                raise Failure(f"cannot clone {repo.wiki_url}: {result.stderr.strip()} (a wiki can be cloned once its "
+                              f"first page exists: create it on the repository's Wiki tab)")
+        changed, extra = stale(files, directory)
+        if arguments.check:
+            if changed or extra:
+                names = [n[:-3] for n in changed] + [f"{n[:-3]} (to remove)" for n in extra]
+                print(f"wiki-sync: the wiki is out of date: {', '.join(names)}. Run scripts/wiki-sync.")
+                return 1
+            print(f"wiki-sync: the wiki is up to date with {repo.name}@{repo.sha[:7]}")
+            return 0
+        if not changed and not extra:
+            print(f"wiki-sync: the wiki is already up to date with {repo.name}@{repo.sha[:7]}")
+            return 0
+        write(files, directory)
+        for name in extra:
+            os.remove(os.path.join(directory, name))
+        git("add", "-A", cwd=directory)
+        git("commit", "-q", "-m", f"wiki-sync: {repo.name}@{repo.sha[:7]}", cwd=directory)
+        git("push", "-q", "origin", "HEAD", cwd=directory)
+        print(f"wiki-sync: published {len(changed)} changed and removed {len(extra)} pages, from "
+              f"{repo.name}@{repo.sha[:7]}")
+        return 0
+    finally:
+        if clone:
+            shutil.rmtree(clone, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Failure as failure:
+        print(f"wiki-sync: {failure}", file=sys.stderr)
+        sys.exit(3)
+    except OSError as error:
+        # A setup problem, never "out of date": exit 3, not 1.
+        print(f"wiki-sync: {error}", file=sys.stderr)
+        sys.exit(3)

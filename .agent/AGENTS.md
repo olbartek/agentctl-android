@@ -17,8 +17,8 @@ modules.
 3. **The public API is explicit** (`explicitApi()` in every library module): every public declaration says so and
    has a KDoc.
 4. **Keep the two ports parallel.** Name things as the Swift package does (`ScriptRunner`, `HeadlessHost`,
-   `AppCtlConfig`, `AgentCoverage`…) unless Kotlin makes that wrong, and record any deliberate difference in the
-   README's contract section.
+   `AppCtlConfig`, `AgentCoverage`…) unless Kotlin makes that wrong, and record any deliberate difference in
+   docs/guides/platform-differences.md.
 5. **Two ports, one product: every change lands in both repositories.** The same features, the same CLI commands
    and options, the same example apps (TinyApp, AgentShop) with byte-identical scenario files (edit them in
    agentctl-ios, copy them here), and the same MAJOR.MINOR version (see Releases). A fix found here is checked
@@ -42,6 +42,7 @@ examples/agentshop/     the showcase (iOS's AgentShop): shop/ ctl/ shopctl/ app/
 tests/                  the suite, driven against TinyApp (like AgentCtlTests in Swift)
 build-logic/            convention plugins: agentctl.jvm.library, agentctl.published, agentctl.release.check
 Templates/appctl        the wrapper hosts copy
+scripts/wiki-sync       builds the GitHub wiki from README.md and docs/guides (agentctl-ios's copy, byte for byte)
 ```
 
 ## Commands
@@ -74,10 +75,27 @@ The two repositories share MAJOR.MINOR; PATCH is each repository's own.
   of both repositories.
 
 Tags are bare `X.Y.Z` on `main`. (Tags before 0.4.1 were `vX.Y.Z`.) To release here: bump
-`agentctlVersion` in `gradle.properties`, the version pins (README.md and docs/guides/integration.md) and the
-README's Status, merge, then tag and push the tag; JitPack
-builds it (`jitpack.yml`) as `com.github.olbartek.agentctl-android:<module>:X.Y.Z`. For a minor or major release, tag
-agentctl-ios with the same number.
+`agentctlVersion` in `gradle.properties` and the version pins (README.md, docs/guides/integration.md and
+docs/guides/overview.md), add the version's section to docs/guides/releases.md (`## X.Y.Z (YYYY-MM-DD)`, newest
+first, with its "Moving a host to X.Y"), merge, then tag and push the tag, run `scripts/wiki-sync` and check it with
+`scripts/wiki-sync --check`; JitPack builds the tag (`jitpack.yml`) as
+`com.github.olbartek.agentctl-android:<module>:X.Y.Z`. For a minor or major release, tag agentctl-ios with the same
+number.
+
+## The wiki
+
+The [wiki](https://github.com/olbartek/agentctl-android/wiki) is built from README.md and docs/guides by
+`scripts/wiki-sync`; it is never edited in the browser.
+
+Every change that touches public API, CONTRACT, CLI, docs/guides, README or a release updates the wiki in the same
+cycle: after the merge, run `scripts/wiki-sync` and push the wiki; a release is not done until
+`scripts/wiki-sync --check` passes. The page list and format are shared with the sibling library
+(nzozopole-hub plans/2026-10-31-agentctl-wiki.md); changing them is agreed through nzoz-lead and done on both.
+
+- A wiki page's source is one file: Home is README.md's intro and docs/guides/overview.md; every other page is the
+  docs/guides file `scripts/wiki-sync`'s page table names. Write in those files, never in the wiki.
+- `scripts/wiki-sync --out <dir>` writes the pages without publishing, for a look first.
+- `scripts/wiki-sync` is the same file in both repositories: change it in agentctl-ios and copy it here.
 
 ## Git workflow
 
