@@ -41,7 +41,7 @@ output usable as a committed fixture. `HeadlessHost` hands your store exactly th
 
 | Field | Headless value |
 |---|---|
-| `scope` | a `VirtualTimeDispatcher`: every effect runs on one thread, in a fixed order, and `delay` waits on virtual time that only `advance` moves |
+| `scope` | a `VirtualTimeDispatcher`: every effect runs on one thread, in a fixed order, and `delay` waits on virtual time that only `advance` and `wait` move |
 | `clock` | `now()` is 2026-01-01T09:00:00Z plus whatever `advance` has added; `sleep` is virtual and counted for `pending=` |
 | `uuids` | `00000000-0000-0000-0000-000000000000`, then `…0001`, … |
 | `random` | SplitMix64, seed 0 |

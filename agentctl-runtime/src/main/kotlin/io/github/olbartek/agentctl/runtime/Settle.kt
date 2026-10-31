@@ -12,7 +12,7 @@ import kotlinx.coroutines.delay
 public data class SettleResult(
     /** `false` when the real-time limit was reached before the app went quiet. */
     val settled: Boolean,
-    /** Sleeps waiting on the clock (e.g. a countdown). Headlessly, `advance` releases them. */
+    /** Sleeps waiting on the clock (e.g. a countdown). Headlessly, `advance` and `wait` release them. */
     val pending: Int,
 )
 

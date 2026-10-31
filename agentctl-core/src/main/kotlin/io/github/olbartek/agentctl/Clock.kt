@@ -9,7 +9,7 @@ import kotlinx.coroutines.delay
 
 /**
  * The app's source of time: what "now" is, and how an effect waits. Headlessly both are virtual — `now` is fixed
- * and `sleep` only returns when `advance` moves the clock — which is what makes a script's output reproducible
+ * and `sleep` only returns when `advance` or `wait` moves the clock — which is what makes a script's output reproducible
  * (CONTRACT.md §6). An app reads time only through this, never through `System.currentTimeMillis()` or a bare
  * `delay` outside its store's scope.
  */
@@ -26,7 +26,7 @@ public interface AgentClock {
 
 /**
  * Counts the sleeps currently waiting on it. The count is `pending` in step summaries: effects waiting for time
- * to pass, such as a countdown before a button becomes available again. Headlessly, `advance` releases them.
+ * to pass, such as a countdown before a button becomes available again. Headlessly, `advance` and `wait` release them.
  * Counting sleeps (rather than all running effects) keeps long-lived effects out of the number.
  *
  * Its `sleep` is `delay`, so it runs on whatever clock the calling coroutine's dispatcher keeps: virtual time on
