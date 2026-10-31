@@ -13,7 +13,8 @@ fun everyCommandIsUsedByAScenario() {
 }
 ```
 
-- `unusedCommands()`: a command no scenario ever sends.
+- `unusedCommands()`: a command no scenario ever sends, the runtime commands (`expect`, `advance`, `mock`, `wait`, and
+  `device` when the app has it) included.
 - `undocumentedSummaryKeys()`: a key a run emits that the screen's `summaryKeys` does not list.
 - `unvisitedScreens()`: a documented screen path no scenario reaches. An `<id>` segment matches any concrete one.
 - `unusedDeviceCommands()`: a `device` subcommand, or a push, the app configures and no scenario sends.

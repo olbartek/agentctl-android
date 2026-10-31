@@ -17,12 +17,15 @@ running app it waits in real time, and `app run` allows a script its waits plus 
 0.12 adds the runtime command `wait [<duration>] [k=v …]` (CONTRACT.md version 5, §2.5): it waits until the pairs
 match or, with none, until the screen changes, moving the clock headlessly and in real time in the running app. A
 scenario that waited in a shell loop, or a bridge client that polled `GET /snapshot`, uses it instead. No breaking
-API changes, but three things a host may see:
+API changes, but four things a host may see:
 
 - **`wait` is now a runtime command,** and a runtime command takes precedence over a screen's: an app command named
   `wait` no longer runs. Rename it.
 - **The unknown-command message lists it:** `Valid here: …, expect, advance, mock, wait, device`. A scenario or a
   test that compares that line changes with it; regenerate `agent-commands.md` with `docs`.
+- **The command docs and the coverage check count it.** Regenerate the command docs with `docs` (they gain a `wait`
+  row), and use `wait` in at least one scenario, or the coverage check ("every command is used by a scenario") fails
+  with `wait` unused.
 - **A host that builds its own headless `RunnerEnvironment`** with the three-argument constructor gets a `wait` that
   waits in real time and never moves its virtual clock; pass `timeUntilNextSleep` (as `HeadlessHost.makeRunner`
   does) for one that moves it.
