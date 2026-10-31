@@ -84,7 +84,7 @@ public data class Expectation(val pairs: List<Pair>) {
 
 /**
  * `wait [<duration>] [k=v …]` (CONTRACT.md §2.5): how long to wait, and for what. With pairs, until they all match,
- * as `expect` would check them; with none, until the screen's line changes. The reference's `WaitArguments`.
+ * as `expect` would check them; with none, until the screen's line changes.
  */
 public data class AgentWaitArguments(
     /** How long the wait lasts at most. */
