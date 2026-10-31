@@ -74,10 +74,10 @@ The two repositories share MAJOR.MINOR; PATCH is each repository's own.
 - **A change to step output, the CLI's surface, CONTRACT.md or a scenario is never a patch.** It is a minor release
   of both repositories.
 
-Tags are bare `X.Y.Z` on `main`. (Tags before 0.4.1 were `vX.Y.Z`.) To release here: bump
-`agentctlVersion` in `gradle.properties` and the version pins (README.md, docs/guides/integration.md and
-docs/guides/overview.md), add the version's section to docs/guides/releases.md (`## X.Y.Z (YYYY-MM-DD)`, newest
-first, with its "Moving a host to X.Y"), merge, then tag and push the tag, run `scripts/wiki-sync` and check it with
+Tags are bare `X.Y.Z` on `main`. (Tags before 0.4.1 were `vX.Y.Z`.) To release here: bump `agentctlVersion` in
+`gradle.properties` and the version pins (README.md, docs/guides/integration.md and docs/guides/overview.md) and the
+README's Status, add the version's section to docs/guides/releases.md (`## X.Y.Z (YYYY-MM-DD)`, newest first, with its
+"Moving a host to X.Y"), merge, then tag and push the tag, run `scripts/wiki-sync` and check it with
 `scripts/wiki-sync --check`; JitPack builds the tag (`jitpack.yml`) as
 `com.github.olbartek.agentctl-android:<module>:X.Y.Z`. For a minor or major release, tag agentctl-ios with the same
 number.

@@ -1,7 +1,7 @@
 # The contract
 
-[`CONTRACT.md`](../../CONTRACT.md) is copied unchanged from agentctl-ios; the Swift package is its reference
-implementation; a change to it lands there first and is always a minor release of both libraries. It specifies:
+[`CONTRACT.md`](../../CONTRACT.md) is copied unchanged from agentctl-ios, whose Swift package is its reference
+implementation. A change to it lands there first, and is always a minor release of both libraries. It specifies:
 
 - the script language and command resolution;
 - the runtime commands (`expect`, `advance`, `mock`, and `device` when the app configures one);
@@ -9,7 +9,8 @@ implementation; a change to it lands there first and is always a minor release o
 - the determinism requirements;
 - the bridge protocol.
 
-On the contract's open questions, this port follows the reference in every case, so fixtures are shared:
+On the contract's [open questions](../../CONTRACT.md#open-questions), this port follows the reference in every case,
+so fixtures are shared:
 
 - escapes are generic;
 - a duration takes a single unit;

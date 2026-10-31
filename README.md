@@ -80,24 +80,31 @@ The whole integration, in five steps — each is a few lines of real code in
 
 ## Documentation
 
-The documentation is on [the wiki](https://github.com/olbartek/agentctl-android/wiki), generated from the guides
-below, which are versioned with the code and read the same on GitHub:
+The [wiki](https://github.com/olbartek/agentctl-android/wiki) is where to read it all. It is generated from this
+repository's [`docs/guides`](docs/guides) by [`scripts/wiki-sync`](scripts/wiki-sync), so the same pages are here, at
+every tag:
 
-| Guide | What it covers |
+| Page | What it covers |
 |---|---|
-| [Overview](docs/guides/overview.md) | How much faster headless is, the requirements, the five modules, the example apps, building this repository. |
-| [Integration](docs/guides/integration.md) | The five steps above in full: screens, commands (`action`, `parsing`, `text`, `onOff`, `choice`), gates, containers and inherited commands, mocked clients and `MockBackend.call`, the config, debug-only builds, the wrapper; MVVM apps. |
+| [Overview](docs/guides/overview.md) | How much faster headless is, what it needs and is not, the five modules, the example apps, building this repository. |
+| [Getting started](docs/guides/integration.md) | The five steps above in full: screens, commands (`action`, `parsing`, `text`, `onOff`, `choice`), gates, containers and inherited commands, mocked clients and `MockBackend.call`, the config, debug-only builds, the wrapper; MVVM apps. |
 | [Commands](docs/guides/commands.md) | Every command your CLI gets (`run`, `test`, `docs`, `check`, `app …`), the exit codes, the runtime commands, and what a headless run pins to stay deterministic. |
 | [The in-app bridge](docs/guides/bridge.md) | Driving the real app on a device: `AgentLaunch`, launch extras and seeds, the launch token, `advance` on real time, `app test`. |
 | [The device environment](docs/guides/device-environment.md) | `device …`: permissions and system prompts, links, pushes, background, foreground and relaunch, the network, location and biometry — one row per capability, with what your app wires and the real-OS `app` wrapper. |
 | [The verification ladder](docs/guides/verification-ladder.md) | `check`, from the Gradle build to the real app on an emulator, and verifying at the cheapest rung that proves a change. |
-| [Coverage and scenario checks](docs/guides/coverage-and-checks.md) | The guards that fail your build when the agent surface drifts, and the scenario checks every host's tests need. |
-| [Differences from agentctl-ios](docs/guides/platform-differences.md) | Where this port adapts the reference rather than copying it, one item each. |
-| [Contract](docs/guides/contract.md) | The CONTRACT.md version this port implements, and its answers to the contract's open questions. |
-| [Releases](docs/guides/releases.md) | Every release, newest first, with what a host changes to move to it; how the two ports share versions. |
-| [Before 1.0](docs/guides/before-1.0.md) | What is still to be settled before 1.0. |
-| [CONTRACT.md](CONTRACT.md) | The engine specified independently of Swift: what a port implements. |
+| [Coverage and checks](docs/guides/coverage-and-checks.md) | The guards that fail your build when the agent surface drifts, and the scenario checks every host's tests need. |
+| [Platform differences](docs/guides/platform-differences.md) | Where this port adapts [agentctl-ios](https://github.com/olbartek/agentctl-ios) rather than copying it, and which type plays which role where the names differ. |
+| [The contract](docs/guides/contract.md) | [`CONTRACT.md`](CONTRACT.md), the engine specified independently of Swift: what a port implements, and this port's answers to its open questions. |
+| [Releases](docs/guides/releases.md) | Every version, and what a host changes to move to it. |
+| [Before 1.0](docs/guides/before-1.0.md) | What may still change, and what is to be settled by 1.0. |
 
-## License
+## Status
 
-MIT licensed; see [LICENSE](LICENSE).
+Version 0.11.0 ([releases](docs/guides/releases.md)). The API may still change between minor versions before 1.0
+([before 1.0](docs/guides/before-1.0.md)). The example apps in this repository are the integrations CI exercises. MIT
+licensed.
+
+This port and [agentctl-ios](https://github.com/olbartek/agentctl-ios) move in lockstep: the same features, the same
+example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.11.x here and 0.11.x there implement
+the same [`CONTRACT.md`](CONTRACT.md). A patch release is one repository's own fix, so the two patch numbers can
+differ.

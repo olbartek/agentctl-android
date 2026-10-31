@@ -1,11 +1,9 @@
 # Releases
 
-This port and [agentctl-ios](https://github.com/olbartek/agentctl-ios) move in lockstep: the same features, the same
-example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.11.x here and 0.11.x there implement
-the same [`CONTRACT.md`](../../CONTRACT.md). A patch release is one repository's own fix, so the two patch numbers can
-differ. Tags are bare `X.Y.Z`; before 0.4.1 this port had its own numbers and `v`-prefixed tags (v0.1.0–v0.2.0).
-Each release's full notes are on [GitHub](https://github.com/olbartek/agentctl-android/releases), and JitPack serves
-every tag as `com.github.olbartek.agentctl-android:<module>:<tag>`.
+Tags are bare `X.Y.Z`; before 0.4.1 this port had its own numbers and `v`-prefixed tags (v0.1.0–v0.2.0). From
+0.5.0, each release's full notes are on [GitHub](https://github.com/olbartek/agentctl-android/releases); JitPack serves
+every tag as `com.github.olbartek.agentctl-android:<module>:<tag>`. This port and agentctl-ios share MAJOR.MINOR,
+released together; a PATCH is one repository's own fix, so the two patch numbers can differ.
 
 ## 0.11.0 (2026-10-31)
 
@@ -16,18 +14,21 @@ launch types ([the platform differences](platform-differences.md)), the bridge g
 the same way in a Views app and a Compose app, and [Before 1.0](before-1.0.md) lists what is still to be settled.
 Scripts, scenarios, step output and CONTRACT.md (version 4) are as in 0.9. [Release notes](https://github.com/olbartek/agentctl-android/releases/tag/0.11.0).
 
-### Moving a host to 0.10 and 0.11
+### Moving a host to 0.11
 
-Nothing changes for an Android host: bump the version. agentctl-ios 0.10 lowered its floor to iOS 16, and 0.11 gave
-iOS 16 and UIKit apps the bridge launch (its `AgentLaunchSession`), which `AgentLaunch` already is here, in a Views
-app or a Compose one. Scripts, scenarios, step output and CONTRACT.md are as in 0.9.
+Nothing changes for an Android host: bump the version. agentctl-ios 0.11 gave iOS 16 and UIKit apps the bridge launch
+(its `AgentLaunchSession`), which `AgentLaunch` already is here, in a Views app or a Compose one. Scripts, scenarios,
+step output and CONTRACT.md are as in 0.9.
 
 ## 0.10.0 (2026-10-31)
 
 Released together with agentctl-ios 0.10.0, which lowers the iOS floor to iOS 16. There is no Android API change and
 the library still needs minSdk 28: this release only bumps the version, so both ports keep the same MAJOR.MINOR.
-Scripts, scenarios, step output and CONTRACT.md (version 4) are as in 0.9. A host moves to it as to 0.11
-([Moving a host to 0.10 and 0.11](#moving-a-host-to-010-and-011)). [Release notes](https://github.com/olbartek/agentctl-android/releases/tag/0.10.0).
+Scripts, scenarios, step output and CONTRACT.md (version 4) are as in 0.9. [Release notes](https://github.com/olbartek/agentctl-android/releases/tag/0.10.0).
+
+### Moving a host to 0.10
+
+Nothing changes for an Android host: bump the version.
 
 ## 0.9.0 (2026-10-16)
 
