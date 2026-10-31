@@ -1,5 +1,6 @@
 package io.github.olbartek.agentctl.runtime
 
+import io.github.olbartek.agentctl.AgentDuration
 import io.github.olbartek.agentctl.AgentContainer
 import io.github.olbartek.agentctl.AgentCoordinator
 import io.github.olbartek.agentctl.AgentDevice
@@ -119,6 +120,18 @@ public class HeadlessHost<D : AgentDriver<A, *>, A>(
             settle = { settle() },
             advance = { duration -> dispatcher.advanceBy(duration.saturatedMilliseconds) },
             synthesizesAppearance = true,
+            timeUntilNextSleep = {
+                clock.earliestDeadline?.let { deadline ->
+                    val left = try {
+                        java.time.Duration.between(clock.now(), deadline).toMillis()
+                    } catch (_: ArithmeticException) {
+                        Long.MAX_VALUE
+                    }
+                    // A deadline that has passed with nothing due on the dispatcher is a sleep that is not on virtual
+                    // time (one off this dispatcher): nothing the clock can move ends it, so `wait` goes to its end.
+                    if (left <= 0 && !dispatcher.hasDueTasks) null else AgentDuration.ofMilliseconds(maxOf(left, 0))
+                }
+            },
         ),
         mockMethods = mockMethods,
         device = device,

@@ -5,6 +5,28 @@ Tags are bare `X.Y.Z`; before 0.4.1 this port had its own numbers and `v`-prefix
 every tag as `com.github.olbartek.agentctl-android:<module>:<tag>`. This port and agentctl-ios share MAJOR.MINOR,
 released together; a PATCH is one repository's own fix, so the two patch numbers can differ.
 
+## 0.12.0 (2026-10-31)
+
+The runtime command `wait` blocks until the app matches or changes, so neither a scenario nor a bridge client polls
+(CONTRACT.md version 5): headlessly it moves the virtual clock one timer at a time and stops at the match, in the
+running app it waits in real time, and `app run` allows a script its waits plus a minute. Released with agentctl-ios
+0.12.0. [Release notes](https://github.com/olbartek/agentctl-android/releases/tag/0.12.0).
+
+### Moving a host to 0.12
+
+0.12 adds the runtime command `wait [<duration>] [k=v …]` (CONTRACT.md version 5, §2.5): it waits until the pairs
+match or, with none, until the screen changes, moving the clock headlessly and in real time in the running app. A
+scenario that waited in a shell loop, or a bridge client that polled `GET /snapshot`, uses it instead. No breaking
+API changes, but three things a host may see:
+
+- **`wait` is now a runtime command,** and a runtime command takes precedence over a screen's: an app command named
+  `wait` no longer runs. Rename it.
+- **The unknown-command message lists it:** `Valid here: …, expect, advance, mock, wait, device`. A scenario or a
+  test that compares that line changes with it; regenerate `agent-commands.md` with `docs`.
+- **A host that builds its own headless `RunnerEnvironment`** with the three-argument constructor gets a `wait` that
+  waits in real time and never moves its virtual clock; pass `timeUntilNextSleep` (as `HeadlessHost.makeRunner`
+  does) for one that moves it.
+
 ## 0.11.0 (2026-10-31)
 
 Released together with agentctl-ios 0.11.0, which gives iOS 16 and UIKit apps the bridge launch through its new

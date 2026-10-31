@@ -24,12 +24,15 @@ Exit codes are part of the contract:
 | `2` | A usage or parse error, the CLI's own command line included. |
 | `3` | An internal or environment error: a scenario file that does not exist, no scenario files to run, no repo root, a build that failed. |
 
-Three runtime commands work on every screen, and a fourth when the app configures a device:
+Four runtime commands work on every screen, and a fifth when the app configures a device:
 
 - `expect k=v [k=v …]`;
 - `advance <duration>`: the virtual clock headlessly; in the running app, the app's real-time clock jumped forward
   (see [the bridge](bridge.md));
 - `mock <client.method> <error>`;
+- `wait [<duration>] [k=v …]`: waits (10 s unless told otherwise) until the pairs match or, with none, until the
+  screen's line changes; headlessly by moving the clock to each timer due, in the running app in real time
+  (CONTRACT.md §2.5). A runtime command takes precedence over a screen's, so an app does not name a command `wait`;
 - `device <subcommand>`: the simulated device (permissions and their prompts, links, pushes, background, relaunch,
   network, location, biometry), when the app configures one; see [the device environment](device-environment.md).
 

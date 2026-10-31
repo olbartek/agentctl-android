@@ -192,7 +192,7 @@
     "auth-otp-resend-countdown": {
       "comparable": false,
       "group": "auth",
-      "steps": 12
+      "steps": 11
     },
     "auth-otp-unknown-email": {
       "assertions_checked_in_ui": 5,

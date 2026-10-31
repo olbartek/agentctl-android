@@ -139,6 +139,13 @@ A UI that stays busy for more than a second (a spinner on screen) is animating w
 stops holding the step. A launch seed does not wait for the UI: it runs behind the splash, before the store's screens
 are shown.
 
+`wait` blocks until the app gets somewhere, so a client never polls `GET /snapshot`: `app run 'wait 30s
+screen=items/2'` returns as soon as the app has settled on that screen, and a bare `app run 'wait 30s'` as soon as it
+has settled on any change to the screen's line (path, summary, error or prompt), from the state the previous step
+settled on. Either fails with exit 1 and the screen as it stands once the time runs out. A driver that cannot name the
+next state loops: act, `wait`, read the step, decide. Requests are answered one at a time, so a waiting `POST /run`
+holds the ones behind it; closing its connection ends the wait.
+
 `app test` runs the scenario files this way, as `test` runs them headlessly: it builds and installs once, then for
 each file launches the app with no saved session (`clear-session`) and sends the file through the bridge.
 `--latency <ms>` sets the mock latency (0 unless given, as for L4, so the first screen has loaded when the script

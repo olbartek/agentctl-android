@@ -82,5 +82,43 @@ public data class Expectation(val pairs: List<Pair>) {
     }
 }
 
+/**
+ * `wait [<duration>] [k=v …]` (CONTRACT.md §2.5): how long to wait, and for what. With pairs, until they all match,
+ * as `expect` would check them; with none, until the screen's line changes. The reference's `WaitArguments`.
+ */
+public data class AgentWaitArguments(
+    /** How long the wait lasts at most. */
+    val duration: AgentDuration = DEFAULT_DURATION,
+    /** `null`: wait for the screen's path, summary, error or prompt to change. */
+    val expectation: Expectation? = null,
+) {
+    public companion object {
+        /** How long a `wait` that names no duration waits: 10 s. */
+        public val DEFAULT_DURATION: AgentDuration = AgentDuration.ofSeconds(10)
+
+        /**
+         * Parses the argument of `wait`: an optional duration first (`30s`, as `advance` takes it), then `key=value`
+         * pairs, as `expect` takes them.
+         */
+        @Throws(ExpectationSyntaxError::class)
+        public fun parse(argument: String?): AgentWaitArguments {
+            var tokens = ArgumentText.pairs(argument ?: "")
+            var duration = DEFAULT_DURATION
+            val first = tokens.firstOrNull()
+            if (first != null && first.second == null) {
+                duration = ScriptParser.parseDuration(first.first) ?: throw ExpectationSyntaxError(
+                    "usage: wait [<duration>] [key=value …]; a duration such as 500ms, 30s, 5m or 1h, got '${first.first}'",
+                )
+                tokens = tokens.drop(1)
+            }
+            val pairs = tokens.map { (token, pair) ->
+                pair ?: throw ExpectationSyntaxError("expected key=value, got '$token'")
+                Expectation.Pair(pair.first, pair.second)
+            }
+            return AgentWaitArguments(duration, if (pairs.isEmpty()) null else Expectation(pairs))
+        }
+    }
+}
+
 /** An `expect` argument that is not a list of `key=value` pairs. Maps to exit code 2. */
 public class ExpectationSyntaxError(message: String) : Exception(message)

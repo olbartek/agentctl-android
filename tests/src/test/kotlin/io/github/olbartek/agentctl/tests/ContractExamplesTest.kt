@@ -61,7 +61,7 @@ class ContractExamplesTest {
     @Test
     fun everyRunAndTestExampleIsReproducedByteForByte() {
         val examples = examples()
-        assertEquals(10, examples.size, "the examples found in CONTRACT.md: ${examples.map { it.command }}")
+        assertEquals(11, examples.size, "the examples found in CONTRACT.md: ${examples.map { it.command }}")
         for (example in examples) {
             val result = tinyctl(*example.args.toTypedArray())
             assertEquals(example.expected, result.combined, example.command)

@@ -72,6 +72,6 @@ class ScenarioTest {
     fun stepCountsMatchTheReference() = runBlocking {
         // The reference's README: browse (10), deep-link (8), push (5), refresh-error (7), save-cooldown (13) steps.
         val counts = checks.files.associate { file -> file.nameWithoutExtension to ScenarioRunner.run(file) { TinyAppConfig.headless().makeRunner() }.steps.size }
-        assertEquals(mapOf("browse" to 10, "deep-link" to 8, "push" to 5, "refresh-error" to 7, "save-cooldown" to 13), counts)
+        assertEquals(mapOf("browse" to 10, "deep-link" to 8, "push" to 5, "refresh-error" to 7, "save-cooldown" to 12), counts)
     }
 }

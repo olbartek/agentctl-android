@@ -4,7 +4,7 @@
 implementation. A change to it lands there first, and is always a minor release of both libraries. It specifies:
 
 - the script language and command resolution;
-- the runtime commands (`expect`, `advance`, `mock`, and `device` when the app configures one);
+- the runtime commands (`expect`, `advance`, `mock`, `wait`, and `device` when the app configures one);
 - the exact step output and the exit codes;
 - the determinism requirements;
 - the bridge protocol.

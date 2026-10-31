@@ -8,7 +8,7 @@ resend
 expect error=resendNotAvailable
 advance 10s
 expect resendIn=20 pending=1
-advance 20s
-expect resendIn=0 pending=0
+# `wait` moves the clock tick by tick until the countdown is over (10 s unless told otherwise).
+wait 30s resendIn=0 pending=0
 resend
 expect call=auth.sendOTP resendIn=30

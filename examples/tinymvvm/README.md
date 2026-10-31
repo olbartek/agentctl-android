@@ -2,7 +2,7 @@
 
 [TinyApp](../tinyapp) rebuilt as MVVM: Jetpack `ViewModel`s under a coordinator that owns the back stack, no store.
 It runs TinyApp's own scenario files, unchanged, and prints what TinyApp prints byte for byte. That is the proof that
-the engine — the script language, `expect`, `advance`, `mock`, `device`, the step output — does not depend on how an
+the engine — the script language, `expect`, `advance`, `mock`, `wait`, `device`, the step output — does not depend on how an
 app is built.
 
 ```sh

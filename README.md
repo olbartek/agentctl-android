@@ -14,7 +14,7 @@ the real app on a device, through a debug-only in-app bridge that answers only r
 launch that started it (a fresh token per launch), so what you assert headlessly is what the app does.
 
 This is the Kotlin port of [agentctl-ios](https://github.com/olbartek/agentctl-ios). Both implement the same
-contract, [CONTRACT.md](CONTRACT.md) (version 4): the same script prints the same bytes in both. This repository's
+contract, [CONTRACT.md](CONTRACT.md) (version 5): the same script prints the same bytes in both. This repository's
 suite runs every example in the contract and compares the output byte for byte.
 
 ```
@@ -54,11 +54,11 @@ This one is from [`examples/tinyapp/scenarios/save-cooldown.appctl`](examples/ti
 ## Install
 
 The modules are published through [JitPack](https://jitpack.io/#olbartek/agentctl-android); the current version is
-0.11.0 ([the releases](docs/guides/releases.md)). Add `maven("https://jitpack.io")` to your repositories, then:
+0.12.0 ([the releases](docs/guides/releases.md)). Add `maven("https://jitpack.io")` to your repositories, then:
 
 ```kotlin
-implementation("com.github.olbartek.agentctl-android:agentctl-core:0.11.0")         // your screens
-debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.11.0")  // the debug app
+implementation("com.github.olbartek.agentctl-android:agentctl-core:0.12.0")         // your screens
+debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.12.0")  // the debug app
 ```
 
 [The overview](docs/guides/overview.md#packages) lists all five modules and who depends on each.
@@ -68,7 +68,7 @@ debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.11.0
 The whole integration, in five steps — each is a few lines of real code in
 [the integration guide](docs/guides/integration.md):
 
-1. **Add the dependency** — `com.github.olbartek.agentctl-android:<module>:0.11.0` from JitPack, and only the modules
+1. **Add the dependency** — `com.github.olbartek.agentctl-android:<module>:0.12.0` from JitPack, and only the modules
    each Gradle module needs (`agentctl-core` for screens, `agentctl-runtime` for the config, `agentctl-cli` for your
    CLI, `agentctl-bridge` for the debug app, `agentctl-test-support` for tests).
 2. **Describe your screens** — beside each reducer (or view model), an `AgentScreen` object: its path, a `key=value`
@@ -100,11 +100,11 @@ every tag:
 
 ## Status
 
-Version 0.11.0 ([releases](docs/guides/releases.md)). The API may still change between minor versions before 1.0
+Version 0.12.0 ([releases](docs/guides/releases.md)). The API may still change between minor versions before 1.0
 ([before 1.0](docs/guides/before-1.0.md)). The example apps in this repository are the integrations CI exercises. MIT
 licensed.
 
 This port and [agentctl-ios](https://github.com/olbartek/agentctl-ios) move in lockstep: the same features, the same
-example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.11.x here and 0.11.x there implement
+example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.12.x here and 0.12.x there implement
 the same [`CONTRACT.md`](CONTRACT.md). A patch release is one repository's own fix, so the two patch numbers can
 differ.
