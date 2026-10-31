@@ -123,6 +123,9 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         try {
             BridgeState(BridgeState.PLATFORM, target.serial, port, config.applicationId, Instant.now(), token).save(layout)
         } catch (error: IOException) {
+            // Unrecorded, the launch would be no one's to clean up: leave nothing half-launched.
+            stop(target, log)
+            Shell.run(listOf(adb, "-s", target.serial, "forward", "--remove", "tcp:$port"), root, log, append = true)
             throw AppCtlException("cannot write ${config.outputPath}/bridge.json: $error")
         }
         val seconds = String.format(Locale.ROOT, "%.1f", start.elapsedNow().inWholeMilliseconds / 1000.0)
@@ -163,6 +166,15 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
         Ports.ownForward(recorded, device.serial, config.applicationId, forwards)?.let { own ->
             Shell.run(listOf(adb, "-s", device.serial, "forward", "--remove", "tcp:$own"), root, log, append = true)
         }
+    }
+
+    /**
+     * Removes the forward [launched] made, once the run that launched it is over (`app test`'s scenario, `check --ui`'s
+     * L4), so the next run finds its port free whatever `bridge.json` records by then. The app keeps running.
+     */
+    fun release(launched: Launched) {
+        val log = File(layout.logs, "app-launch.log")
+        releaseForward(adb, launched.device.serial, launched.port) { Shell.run(it, root, log, append = true) }
     }
 
     /**
@@ -303,6 +315,17 @@ internal class AppLauncher(private val cli: Cli<*, *>, private val root: File) {
             false
         } catch (_: IOException) {
             true
+        }
+
+        /**
+         * Removes the forward a launch on [serial] made for [port], and only while `adb forward --list` still shows it
+         * as the launch made it ([Ports.launchForward]): another device's, another port's, or one that now leads
+         * elsewhere is never touched. Whether it was removed.
+         */
+        fun releaseForward(adb: String, serial: String, port: Int, run: (List<String>) -> Int): Boolean {
+            val forwards = Shell.captureResult(listOf(adb, "forward", "--list"))?.takeIf { it.status == 0 } ?: return false
+            if (!Ports.launchForward(serial, port, forwards.output)) return false
+            return run(listOf(adb, "-s", serial, "forward", "--remove", "tcp:$port")) == 0
         }
 
         /**

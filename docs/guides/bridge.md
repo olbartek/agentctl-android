@@ -100,9 +100,10 @@ Mac never need a port by hand. Each command's port is `--port` if given, else `A
 else 8765. `app launch` and `app test` take `--port` or `APPCTL_PORT` as the exact port to use, and otherwise scan as
 above. `app test` and `check --ui` rewrite the file on every launch. A relaunch keeps its port: the app is stopped
 first, and the forward its last launch on that device left (as `bridge.json` records it) is removed, whatever port
-the new launch takes, so forwards do not pile up per device; no other forward is touched. When the recorded app has quit,
-`app run` says the file is stale and to relaunch. The file is written exactly as agentctl-ios writes it (CONTRACT.md
-§8.6).
+the new launch takes, so forwards do not pile up per device; no other forward is touched. `app test` and `check --ui`
+remove each launch's forward once its scenario has run (the app keeps running), so they leave none behind. When the
+recorded app has quit, or `app test` or `check --ui` has ended, `app run` says the file is stale and to relaunch:
+run `app launch` again. The file is written exactly as agentctl-ios writes it (CONTRACT.md §8.6).
 
 **Who answers.** The bridge names its app and its platform on every response (`X-Appctl-App: <application id>` and
 `X-Appctl-Platform: android`, §8.4), so the CLI never drives the wrong app, not even the same app's iOS build, which

@@ -15,6 +15,12 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   reducers. A date rule (a code's expiry, say) lives in the reducer, which reads `environment.clock`, and the state
   carries its result. The reference computes screens inside the store's `withDependencies` instead, because a SwiftUI
   feature's summary can read `@Dependency(\.date)` directly.
+- `app test` and `check --ui` remove the `adb forward` each launch made once its scenario has run, so the next run
+  of the app, from any checkout, finds the port free. The app keeps running, but `app run` right after them needs an
+  `app launch` first, where the reference's `app run` still reaches the app the last scenario left running: a
+  simulator app holds its port on the Mac itself, and nothing outlives it. The message `app run` then prints is the shared
+  one, `… which is stale once that app has quit: relaunch with <appctl> app launch`: here the app has not quit, but its
+  forward has gone, and running `app launch` again is still the way back. (Both ports reword it together in 0.13.)
 - The device commands (`app screenshot`, `app record`, `app statusbar`, `app info`) take `--device` where the reference
   takes `--sim`. `app record` runs `adb shell screenrecord` in back-to-back chunks under its three-minute limit,
   joined with `ffmpeg`, with the last frame held until the stop, since `screenrecord` writes frames only when the

@@ -123,13 +123,15 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
             io.print("  cannot read ${file.path}")
             return RunStatus.INTERNAL_ERROR.code
         }
+        val launcher = AppLauncher(cli, root)
+        // Its forward goes with the rung, so none is left behind for the next run to step around.
+        var made: AppLauncher.Launched? = null
         return try {
-            val launcher = AppLauncher(cli, root)
             // Zero mock latency: the bridge answers as soon as it listens, while the first screen's own appearance
             // may still be loading, and a scenario's first `expect` reads the state as it is.
             // APPCTL_PORT names the port, as for app launch (a malformed one fails the rung); else a free one is found.
             val port = Ports.explicit(null, cli.environment)
-            val launched = launcher.launch(check.seed, device, latency = 0, clearSession = true, build = true, port = port)
+            val launched = launcher.launch(check.seed, device, latency = 0, clearSession = true, build = true, port = port).also { made = it }
             val script = ScriptParser.read(file)
             val bridge = BridgeClient(launched.port, launched.token)
             val run = bridge.send("POST", "/run", script)
@@ -174,6 +176,8 @@ internal class Ladder(private val cli: Cli<*, *>, private val root: File, privat
             report("L4 app", false, "error", start)
             io.print("  ${error.message ?: error}")
             RunStatus.INTERNAL_ERROR.code
+        } finally {
+            made?.let(launcher::release)
         }
     }
 

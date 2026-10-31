@@ -54,11 +54,11 @@ This one is from [`examples/tinyapp/scenarios/save-cooldown.appctl`](examples/ti
 ## Install
 
 The modules are published through [JitPack](https://jitpack.io/#olbartek/agentctl-android); the current version is
-0.12.0 ([the releases](docs/guides/releases.md)). Add `maven("https://jitpack.io")` to your repositories, then:
+0.12.1 ([the releases](docs/guides/releases.md)). Add `maven("https://jitpack.io")` to your repositories, then:
 
 ```kotlin
-implementation("com.github.olbartek.agentctl-android:agentctl-core:0.12.0")         // your screens
-debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.12.0")  // the debug app
+implementation("com.github.olbartek.agentctl-android:agentctl-core:0.12.1")         // your screens
+debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.12.1")  // the debug app
 ```
 
 [The overview](docs/guides/overview.md#packages) lists all five modules and who depends on each.
@@ -68,7 +68,7 @@ debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.12.0
 The whole integration, in five steps — each is a few lines of real code in
 [the integration guide](docs/guides/integration.md):
 
-1. **Add the dependency** — `com.github.olbartek.agentctl-android:<module>:0.12.0` from JitPack, and only the modules
+1. **Add the dependency** — `com.github.olbartek.agentctl-android:<module>:0.12.1` from JitPack, and only the modules
    each Gradle module needs (`agentctl-core` for screens, `agentctl-runtime` for the config, `agentctl-cli` for your
    CLI, `agentctl-bridge` for the debug app, `agentctl-test-support` for tests).
 2. **Describe your screens** — beside each reducer (or view model), an `AgentScreen` object: its path, a `key=value`
@@ -100,7 +100,7 @@ every tag:
 
 ## Status
 
-Version 0.12.0 ([releases](docs/guides/releases.md)). The API may still change between minor versions before 1.0
+Version 0.12.1 ([releases](docs/guides/releases.md)). The API may still change between minor versions before 1.0
 ([before 1.0](docs/guides/before-1.0.md)). The example apps in this repository are the integrations CI exercises. MIT
 licensed.
 

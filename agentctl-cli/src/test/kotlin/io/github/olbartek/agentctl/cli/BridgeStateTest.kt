@@ -226,6 +226,8 @@ class BridgeStateTest {
         assertNull(Ports.ownForward(null, "emulator-5556", mine.appId, forwardList))
         // A recorded port with no forward any more: nothing to remove.
         assertNull(Ports.ownForward(mine.copy(port = 8799), "emulator-5556", mine.appId, forwardList))
+        // A forward on the recorded port that leads to another device port is not one a launch made.
+        assertNull(Ports.ownForward(mine.copy(port = 8770), "emulator-5556", mine.appId, forwardList))
     }
 
     /** A listener on the other loopback is not beside the port but on it: the other platform's CLI may connect there. */

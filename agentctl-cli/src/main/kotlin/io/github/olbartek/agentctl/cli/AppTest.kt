@@ -124,6 +124,23 @@ internal class AppTest(private val cli: Cli<*, *>, private val root: File) {
             return Result(name, Outcome.Broken("launch failed: ${error.message}"))
         }
         onLaunched()
+        // Its forward goes with the run, so none is left behind for the next run to step around.
+        return try {
+            drive(name, lines, source, launched, options, start)
+        } finally {
+            launcher.release(launched)
+        }
+    }
+
+    /** The script through [launched]'s bridge: whole, or a line at a time. */
+    private fun drive(
+        name: String,
+        lines: List<ScriptLine>,
+        source: String,
+        launched: AppLauncher.Launched,
+        options: Options,
+        start: TimeSource.Monotonic.ValueTimeMark,
+    ): Result {
         // The launch's own token, kept here: bridge.json may be another launch's by now.
         val client = BridgeClient(launched.port, launched.token)
         // One request for the script, or one per line: the app keeps one runner across requests, so `expect` still
