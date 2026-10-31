@@ -1,4 +1,4 @@
-Contract version: 4
+Contract version: 5
 
 # The AgentCtl contract
 
@@ -9,7 +9,7 @@ reproduce so that the same script produces the same steps everywhere. A Swift im
 Kotlin implementation are two ports of this contract, not two designs.
 
 **Scope.** This contract defines the *engine*: how a script is parsed, how a line is dispatched to
-whatever commands the host app declares, how the runtime commands (`expect`, `advance`, `mock`,
+whatever commands the host app declares, how the runtime commands (`expect`, `advance`, `mock`, `wait`,
 and `device` for an app that simulates its device) behave, how one step is rendered as text, and the exit codes and determinism guarantees
 that make a script's output reproducible. For an implementation that can also run scripts inside
 the real app, §8 specifies the in-app bridge's wire protocol. The contract does **not** define
@@ -117,12 +117,12 @@ Where this text and the reference implementation disagree, one of them has a bug
       screen=items/2 title="Second item" saved=false cooldown=0
     > frobnicate
       screen=items/2 title="Second item" saved=false cooldown=0
-      FAIL unknown command 'frobnicate' on items/2. Valid here: save, back, expect, advance, mock, device
+      FAIL unknown command 'frobnicate' on items/2. Valid here: save, back, expect, advance, mock, wait, device
     ```
     The listed commands are exactly what would currently resolve on that screen, in the same
     leaf-first order — here the detail screen's own `save`, then its container's `back` — with the
-    runtime commands always appended last: `expect, advance, mock`, then `device` when the app has
-    it (§2.4). An app without `device` ends the list at `mock`.
+    runtime commands always appended last: `expect, advance, mock, wait`, then `device` when the app
+    has it (§2.4). An app without `device` ends the list at `wait`.
   - **Disabled (gated)** — `retry` is offered only while the list reports an error:
     ```
     $ swift run tinyctl run retry
@@ -181,8 +181,10 @@ lines before it have run, and it is reported on its own step.
 
 ## 2. Runtime commands
 
-Three commands work identically on every screen; the app never sees them as its own actions. A
-fourth, `device` (§2.4), exists only in an app that simulates its device.
+Four commands work identically on every screen; the app never sees them as its own actions:
+`expect`, `advance`, `mock` and `wait` (§2.5). A fifth, `device` (§2.4), exists only in an app that
+simulates its device. A runtime command's name takes precedence over an app command of the same
+name, so an app does not declare one.
 
 ### 2.1 `expect k=v [k=v …]`
 
@@ -399,6 +401,63 @@ biometry is unavailable; enrolled, a biometric prompt opens (`prompt=biometry`) 
 Setting a status, the network, the location or enrollment to the value it already has is allowed.
 `device` lines are replayed like any other in a session, and a launch seed (§8.3) may contain them.
 
+### 2.5 `wait [<duration>] [k=v …]`
+
+Waits until the app gets somewhere, for at most `<duration>` (10 s when the line names none):
+
+- **With pairs**, until every pair matches, checked exactly as `expect` checks them (§4) against
+  the active screen — except that `call` means a call made since the wait began, and a key the
+  screen does not have yet is not a match yet rather than a failure.
+- **With none**, until the screen's line changes: its path, a summary value, its error or its
+  prompt. `calls=` and `pending=` do not count.
+
+The duration is written as for `advance` (§2.2), and comes first. A malformed duration, a token
+after it that is not `key=value`, or a duration after a pair is a usage error (exit 2), with
+`usage: wait [<duration>] [key=value …]; a duration such as 500ms, 30s, 5m or 1h, got '<token>'`
+for the duration and `expected key=value, got '<token>'` for a pair.
+
+The step is printed like any other, as the screen stands when the wait ends; its `calls=` are those
+made during the wait. A wait that already matches when it starts ends at once. When the time runs
+out, it fails (exit 1) with the screen as it stands then, and two or more `FAIL` lines: `wait timed
+out after <duration>` (the duration in the largest unit that holds it exactly: `1500ms`, `90s`,
+`5m`, `1h`), then what kept it from matching — one line per unmet pair as `expect` prints it, or
+`nothing changed`:
+
+```
+$ swift run tinyctl run 'open 2; save; wait cooldown=1; wait; wait 2s screen=items'
+> (launch)
+  screen=items items=3 loading=false calls=items.fetch
+> open 2
+  screen=items/2 title="Second item" saved=false cooldown=0
+> save
+  screen=items/2 title="Second item" saved=true cooldown=3 pending=1
+> wait cooldown=1
+  screen=items/2 title="Second item" saved=true cooldown=1 pending=1
+> wait
+  screen=items/2 title="Second item" saved=true cooldown=0
+> wait 2s screen=items
+  screen=items/2 title="Second item" saved=true cooldown=0
+  FAIL wait timed out after 2s
+  FAIL expected screen=items, got screen=items/2
+```
+
+**Headlessly**, where no time passes on its own, `wait` moves the virtual clock as `advance` would,
+but one deadline at a time: to the earliest timer the app is waiting on (those `pending=` counts),
+then lets the app settle, checks, and goes on to the next, never past `<duration>`. It stops at the
+deadline that brings the match, so `wait cooldown=1` above leaves one tick still pending. A wait that
+times out has moved the clock its whole duration, and counts toward the clock limit as `advance`
+does (`wait would take the clock past 9223372036854775807 seconds`, exit 2).
+
+**In the running app** (§8.5) real time passes and the clock is not moved: the runtime looks at the
+screen every few milliseconds (the reference: 20 ms). The wait starts from the state the previous
+step settled on, and what it sees counts once the app has settled on it, so a transition's passing
+frames are never reported and a state the app only passes through is waited past. Without pairs,
+the first state the app settles on that differs from the start ends the wait: with a countdown
+ticking once a second, that is the next tick. An app that keeps changing faster than settling's
+quiet moment never settles, and the wait fails as any unsettled step does (§3.3). Over the bridge,
+`POST /run` with a `wait` is how a client blocks until the app changes rather than polling
+`GET /snapshot` (§8.4).
+
 ## 3. Step output format
 
 After every command the runtime waits for the app to settle (§6) and prints exactly one step: an
@@ -457,7 +516,7 @@ line per line of the failure message — for `expect`, one per unmet pair:
 ```
 > frobnicate
   screen=items items=3 loading=false
-  FAIL unknown command 'frobnicate' on items. Valid here: open <id>, refresh, retry, expect, advance, mock, device
+  FAIL unknown command 'frobnicate' on items. Valid here: open <id>, refresh, retry, expect, advance, mock, wait, device
 ```
 
 ```
@@ -748,7 +807,7 @@ request`, as before) and is routed:
 | `POST /run` | Runs the body, a UTF-8 script, on the app's live store, from whatever state the app is in — there is no `(launch)` step. The body is the steps in the text form of §3, ending in a newline; for a parse error, `error: <message>` and a newline instead. With `?format=json`, the JSON form below. Status 200 whatever the outcome: the outcome is the exit code. |
 | `GET /state` | A dump of the app's root state (the reference uses `customDump`), exit 0. Informational: its format is not specified. |
 | `GET /screens` | Every screen and its commands, as the CLI's `screens` prints them, exit 0. Informational. |
-| `GET /snapshot` | The active screen as one step (§3) whose command echo is `(snapshot)`, exit 0. It runs nothing; its `calls=` are those of the last step that ran. |
+| `GET /snapshot` | The active screen as one step (§3) whose command echo is `(snapshot)`, exit 0. It runs nothing; its `calls=` are those of the last step that ran. A client that waits for the app to change sends `POST /run` with a `wait` (§2.5) instead of polling this. |
 | another method on one of those paths | 405, body `method not allowed`, exit 2 |
 | any other path | 404, body `not found; endpoints: POST /run, GET /state, GET /screens, GET /snapshot`, exit 2 |
 | a request that cannot be parsed, or over the cap | 400, body `bad request` (or `incomplete request` when the connection closed mid-request), exit 2 |
@@ -843,6 +902,10 @@ and the steps — none — under `steps`.
   tick has fired on its own.
 - **Views appear by themselves.** The app's views send their own appearance actions, so the bridge
   does not send them — except during a launch seed (§8.3), when there are no views yet.
+- **`wait` takes real time.** It waits in real time, without moving the clock, and counts a state
+  once the app has settled on it (§2.5). Requests are handled one at a time (§8.1), so a `POST /run`
+  that waits holds the requests behind it until it ends; a client that closes its connection ends
+  the wait.
 - **State carries over.** Each `POST /run` continues from the app's current state; nothing is reset
   between requests.
 - **`device` is simulated in the app, as headlessly.** The bridge's runtime changes the same in-process
@@ -918,6 +981,13 @@ command that launches sends the token it made, kept in memory.
 - When the port came from the file and nothing answers there, the command exits 3, as it would for
   any unreachable bridge, and the message says the file may be stale and to launch again.
 
+**How long it waits for an answer.** The bridge answers `POST /run` only once the script has
+ended, and sends nothing before, so a CLI applies no idle timeout to it, only a limit on the whole
+request. That limit is at least the sum of the script's `wait` durations (§2.5) plus a margin for
+each one's last settle and the round trip, so a `wait` always ends on the app's side, with its own
+exit code, and never on the client's (the reference: one hour, or the waits plus 60 s when that is
+longer). A request that runs nothing has an ordinary timeout (the reference: 60 s).
+
 **Checking who answers.** Two apps cannot share a port (§8.1), but a port can still be taken
 between the CLI's check and the app's start, or be one the user named. So the CLI compares the
 bridge's `X-Appctl-App` and `X-Appctl-Platform` (§8.4) with the app it means, on every response it
@@ -971,7 +1041,7 @@ choice:
    format (§3.1) treats as meaningful. Is that an intentional simplification for JSON consumers, or
    an oversight that a port's own machine-readable form should avoid repeating?
 6. **Literal composition of the "valid here" list.** §1.3's unknown-command message always appends
-   exactly `expect, advance, mock` (and `device`, where the app has it) after the screen's own commands. Is a port required to reproduce
+   exactly `expect, advance, mock, wait` (and `device`, where the app has it) after the screen's own commands. Is a port required to reproduce
    that exact tail, or is the actual requirement just "list the commands that would currently
    resolve, including the runtime ones," with the reference's specific wording being incidental?
 7. **The bridge proving who it is.** The token (§8.2) ties requests to the launch; it does not

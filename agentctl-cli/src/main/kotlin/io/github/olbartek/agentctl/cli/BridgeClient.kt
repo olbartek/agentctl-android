@@ -1,5 +1,10 @@
 package io.github.olbartek.agentctl.cli
 
+import io.github.olbartek.agentctl.AgentText
+import io.github.olbartek.agentctl.AgentWaitArguments
+import io.github.olbartek.agentctl.ExpectationSyntaxError
+import io.github.olbartek.agentctl.ScriptError
+import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.HttpParser
 import java.io.IOException
@@ -15,7 +20,8 @@ import kotlin.time.TimeSource
 
 /**
  * Talks to the agent bridge in the running app over loopback HTTP (through `adb forward` on a device). `POST /run` may
- * take [scriptLimit] in all; every other request [IDLE_TIMEOUT] without an answer. Every request carries [token] in
+ * take [scriptLimit] in all, or its `wait` lines' durations plus [WAIT_MARGIN] when they add up to more ([limit]);
+ * every other request [IDLE_TIMEOUT] without an answer. Every request carries [token] in
  * `X-Appctl-Token`, when there is one.
  */
 internal class BridgeClient(
@@ -59,7 +65,7 @@ internal class BridgeClient(
 
     /**
      * Sends one request. [timeout] bounds a request that runs nothing, without an answer; `POST /run` is limited by
-     * [scriptLimit] on the whole request instead, and throws [ScriptTimedOut] past it. A bridge's `401` or `403` (one
+     * [limit] on the whole request instead, and throws [ScriptTimedOut] past it. A bridge's `401` or `403` (one
      * with `X-Appctl-Exit`) throws [Refused].
      */
     @Throws(IOException::class)
@@ -68,11 +74,13 @@ internal class BridgeClient(
         // The bridge answers a script only once it is done (CONTRACT.md §8.4), so one that waits on the app's real time
         // stays silent for as long as it runs: its limit is on the whole request, and generous.
         val runsScript = method == "POST" && path.startsWith("/run")
+        val limit = if (runsScript) limit(body, scriptLimit) else scriptLimit
         val expired = AtomicBoolean(false)
         var connected = false
         val deadline = if (runsScript) {
             Timer("agentctl-run-limit", true).apply {
-                schedule(scriptLimit.inWholeMilliseconds) {
+                // Bounded so that now plus the delay cannot overflow: a limit that long is no limit.
+                schedule(limit.inWholeMilliseconds.coerceAtMost(Long.MAX_VALUE / 4)) {
                     expired.set(true)
                     connection.disconnect()
                 }
@@ -83,7 +91,12 @@ internal class BridgeClient(
         try {
             connection.requestMethod = method
             connection.connectTimeout = timeout.inWholeMilliseconds.toInt()
-            connection.readTimeout = (if (runsScript) scriptLimit else timeout).inWholeMilliseconds.toInt()
+            // 0, no read timeout, for a script limit past an Int's milliseconds: the timer above bounds it.
+            connection.readTimeout = if (runsScript) {
+                limit.inWholeMilliseconds.takeIf { it <= Int.MAX_VALUE }?.toInt() ?: 0
+            } else {
+                timeout.inWholeMilliseconds.toInt()
+            }
             // Connected explicitly: only a script that reached the bridge can have run past its limit. A connection
             // that times out never reached it, and stays "cannot reach".
             connection.setRequestProperty("Connection", "close")
@@ -114,7 +127,7 @@ internal class BridgeClient(
         } catch (error: Refused) {
             throw error
         } catch (error: IOException) {
-            if (runsScript && connected && (expired.get() || error is SocketTimeoutException)) throw ScriptTimedOut(port, scriptLimit)
+            if (runsScript && connected && (expired.get() || error is SocketTimeoutException)) throw ScriptTimedOut(port, limit)
             throw error
         } finally {
             deadline?.cancel()
@@ -149,5 +162,32 @@ internal class BridgeClient(
         /** The limit a new client gets: [SCRIPT_LIMIT], shorter only in a test. */
         @Volatile
         var scriptLimit: Duration = SCRIPT_LIMIT
+
+        /**
+         * What a script's `wait` lines are allowed on top of their durations: each may settle once more at its end, and
+         * the request has its round trip (CONTRACT.md §8.6).
+         */
+        val WAIT_MARGIN: Duration = 60.seconds
+
+        /**
+         * How long `POST /run` with [script] may take: [base], or the durations of its `wait` lines plus [WAIT_MARGIN]
+         * when they add up to more, so a wait never ends on the client's side first (CONTRACT.md §8.6).
+         */
+        fun limit(script: String?, base: Duration = scriptLimit): Duration {
+            val lines = try {
+                ScriptParser.parse(script ?: return base)
+            } catch (_: ScriptError) {
+                return base
+            }
+            val waits = lines.filter { AgentText.canonical(it.name) == "wait" }.mapNotNull { line ->
+                try {
+                    AgentWaitArguments.parse(line.argument).duration.toDuration()
+                } catch (_: ExpectationSyntaxError) {
+                    null
+                }
+            }
+            if (waits.isEmpty()) return base
+            return maxOf(base, waits.fold(Duration.ZERO, Duration::plus) + WAIT_MARGIN)
+        }
     }
 }

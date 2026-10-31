@@ -45,7 +45,7 @@ class ExecutorTest {
         val (_, result) = run("frobnicate")
         assertEquals(RunStatus.FAILED, result.status)
         assertEquals(
-            "unknown command 'frobnicate' on items. Valid here: open <id>, refresh, retry, expect, advance, mock, device",
+            "unknown command 'frobnicate' on items. Valid here: open <id>, refresh, retry, expect, advance, mock, wait, device",
             result.steps.last().message,
         )
     }

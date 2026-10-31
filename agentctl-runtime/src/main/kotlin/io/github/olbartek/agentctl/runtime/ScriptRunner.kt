@@ -6,6 +6,7 @@ import io.github.olbartek.agentctl.AgentDeviceConfig
 import io.github.olbartek.agentctl.AgentDuration
 import io.github.olbartek.agentctl.AgentRegistry
 import io.github.olbartek.agentctl.AgentText
+import io.github.olbartek.agentctl.AgentWaitArguments
 import io.github.olbartek.agentctl.ArgumentText
 import io.github.olbartek.agentctl.Expectation
 import io.github.olbartek.agentctl.ExpectationSyntaxError
@@ -18,7 +19,10 @@ import io.github.olbartek.agentctl.ScriptParser
 import io.github.olbartek.agentctl.StepRecord
 import java.net.URI
 import java.net.URISyntaxException
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 
 /** How a [ScriptRunner] waits for the app and whether it can control time. */
@@ -31,7 +35,19 @@ public class RunnerEnvironment(
     public val advance: (suspend (AgentDuration) -> Unit)?,
     /** Headless runs send each screen's `onAppear` action when it becomes active (no views exist to do it). */
     public val synthesizesAppearance: Boolean,
-)
+    /**
+     * Headlessly, how long until the earliest sleep on the virtual clock ends (`null` when nothing sleeps): `wait`
+     * moves the clock from one deadline to the next. `null` in the running app, where `wait` waits in real time.
+     */
+    public val timeUntilNextSleep: (() -> AgentDuration?)? = null,
+) {
+    /** The environment as 0.11 built it, with no [timeUntilNextSleep]: `wait` then waits in real time. */
+    public constructor(
+        settle: suspend () -> SettleResult,
+        advance: (suspend (AgentDuration) -> Unit)?,
+        synthesizesAppearance: Boolean,
+    ) : this(settle, advance, synthesizesAppearance, null)
+}
 
 /** The exit codes of CONTRACT.md §5. */
 public enum class RunStatus(public val code: Int) {
@@ -130,13 +146,14 @@ public class ScriptRunner<A>(
     }
 
     /**
-     * Runs one command (`expect`, `advance`, `mock`, `device`, or one the current screen offers) and returns its step
+     * Runs one command (`expect`, `advance`, `mock`, `wait`, `device`, or one the current screen offers) and returns its step
      * and status.
      */
     public suspend fun execute(line: ScriptLine): StepOutcome = when (AgentText.canonical(line.name)) {
         "expect" -> expect(line)
         "advance" -> advance(line)
         "mock" -> mock(line)
+        "wait" -> wait(line)
         "device" -> if (deviceSurface.exists) device(line) else command(line)
         else -> command(line)
     }
@@ -175,6 +192,84 @@ public class ScriptRunner<A>(
         advanceClock(duration)
         val settle = settleAndAppear()
         return finish(line.text, start, settle, before)
+    }
+
+    // wait (CONTRACT.md §2.5)
+
+    /**
+     * Waits until the screen matches the line's pairs, or, with none, until its line changes; fails once the duration
+     * has passed. Headlessly the virtual clock moves from one sleep's deadline to the next, settling after each, and
+     * stops at the one that brings the match; in the running app real time passes, and what the screen shows counts
+     * once the app has settled on it.
+     */
+    private suspend fun wait(line: ScriptLine): StepOutcome {
+        val arguments = try {
+            AgentWaitArguments.parse(line.argument)
+        } catch (error: ExpectationSyntaxError) {
+            return fail(line, RunStatus.USAGE, error.message ?: "")
+        }
+        val duration = arguments.duration
+        val start = callLog.count
+        val before = driver.stateSnapshot()
+        val initial = snapshot(line.text)
+
+        /** What still keeps the wait from matching, judged on the step as it stands with the calls since it began. */
+        fun unmet(settle: SettleResult): List<String> {
+            val step = record(line.text, callLog.entries(since = start), settle)
+            val expectation = arguments.expectation
+            if (expectation == null) {
+                val changed = step.screen != initial.screen || step.summary != initial.summary ||
+                    step.error != initial.error || step.prompt != initial.prompt
+                return if (changed) emptyList() else listOf("nothing changed")
+            }
+            return expectation.evaluate(step.snapshot)
+        }
+
+        var settle = SettleResult(true, pending())
+        val timeUntilNextSleep = environment.timeUntilNextSleep
+        val advanceClock = environment.advance
+        if (timeUntilNextSleep != null && advanceClock != null) {
+            if (duration > ADVANCE_LIMIT - advanced) {
+                return fail(line, RunStatus.USAGE, "wait would take the clock past ${Long.MAX_VALUE} seconds")
+            }
+            var waited = AgentDuration.ZERO
+            // A bound, in case a sleep keeps its deadline where it is without ever finishing.
+            var rounds = 0
+            while (rounds++ < 10_000 && waited < duration && unmet(settle).isNotEmpty()) {
+                val step = minOf(maxOf(timeUntilNextSleep() ?: duration, AgentDuration.ZERO), duration - waited)
+                advanceClock(step)
+                advanced += step
+                waited += step
+                settle = settleAndAppear()
+                if (!settle.settled) break
+            }
+        } else {
+            // The start is the state the previous step settled on. A change or match counts once the app has settled
+            // on it, so a transition's passing frames are never reported, and a state the app only passes through is
+            // waited past.
+            val began = TimeSource.Monotonic.markNow()
+            val limit = duration.toDuration()
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                if (unmet(settle).isNotEmpty()) {
+                    val left = limit - began.elapsedNow()
+                    if (left <= kotlin.time.Duration.ZERO) break
+                    delay(minOf(WAIT_POLL_INTERVAL, left))
+                    continue
+                }
+                settle = settleAndAppear()
+                if (!settle.settled || unmet(settle).isEmpty()) break
+            }
+        }
+
+        val outcome = finish(line.text, start, settle, before)
+        if (outcome.status != RunStatus.OK) return outcome
+        val unmet = unmet(settle)
+        if (unmet.isNotEmpty()) {
+            val message = (listOf("wait timed out after ${ScriptParser.formatDuration(duration)}") + unmet).joinToString("\n")
+            return StepOutcome(outcome.step.copy(ok = false, message = message), RunStatus.FAILED)
+        }
+        return outcome
     }
 
     private fun mock(line: ScriptLine): StepOutcome {
@@ -406,6 +501,9 @@ public class ScriptRunner<A>(
          * saturates long before that, which no app can observe.
          */
         public val ADVANCE_LIMIT: AgentDuration = AgentDuration.ofSeconds(Long.MAX_VALUE)
+
+        /** How often a `wait` in the running app looks at the screen (the reference's interval). */
+        private val WAIT_POLL_INTERVAL = 20.milliseconds
 
         private val URL_SCHEME = Regex("[A-Za-z][A-Za-z0-9+.-]*")
 

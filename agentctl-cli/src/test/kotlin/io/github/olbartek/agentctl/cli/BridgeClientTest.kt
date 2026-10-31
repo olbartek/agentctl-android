@@ -1,7 +1,10 @@
 package io.github.olbartek.agentctl.cli
 
 import io.github.olbartek.agentctl.DocsText
+import io.github.olbartek.agentctl.runtime.AgentLaunchOptions
 import io.github.olbartek.agentctl.runtime.AgentStoreDriver
+import io.github.olbartek.agentctl.runtime.BridgeResponse
+import io.github.olbartek.agentctl.runtime.BridgeServer
 import io.github.olbartek.agentctl.runtime.AppCtlConfig
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -10,13 +13,18 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.file.Files
+import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 
 /**
  * What this guards: `POST /run` is limited by a generous limit on the whole request, not by the 60 s that every other
@@ -124,6 +132,46 @@ class BridgeClientTest {
             "error: the app did not finish the script within 1 s (agent bridge on 127.0.0.1:${silent.localPort}); it may still be running it\n",
             err.toString(Charsets.UTF_8),
         )
+    }
+
+    /**
+     * A `wait` keeps `POST /run` silent for as long as it waits, so the client allows a script its waits plus a margin
+     * whenever that is longer than its usual limit (CONTRACT.md §8.6).
+     */
+    @Test
+    fun aScriptIsAllowedItsWaits() {
+        assertEquals(10.seconds, BridgeClient.limit("open 1", 10.seconds))
+        assertEquals(65.seconds, BridgeClient.limit("wait 5s screen=a", 10.seconds))
+        assertEquals((120 + 30 + 10 + 60).seconds, BridgeClient.limit("wait 2m; wait 30s; wait", 10.seconds))
+        assertEquals(61500.milliseconds, BridgeClient.limit("wait 1500ms", 10.seconds))
+        assertEquals(10.seconds, BridgeClient.limit("wait \"open", 10.seconds))
+        assertEquals(7260.seconds, BridgeClient.limit("wait 2h", BridgeClient.SCRIPT_LIMIT))
+    }
+
+    /**
+     * The claim above, end to end: a bridge that takes its `wait`'s three seconds to answer, reached through a client
+     * whose script limit and idle timeout are far below that, answers (exit 1, the app's own timeout) rather than
+     * being cut off on the client's side.
+     */
+    @Test
+    fun aWaitIsNotCutOffByTheClient() {
+        val token = AgentLaunchOptions.makeToken()
+        val executor = Executors.newSingleThreadExecutor()
+        val server = BridgeServer(executor.asCoroutineDispatcher(), "x", "android", token) { request ->
+            delay(3.seconds)
+            BridgeResponse(200, "> ${request.body}\n  FAIL wait timed out after 3s\n", exitCode = 1)
+        }
+        try {
+            val port = server.start(0)
+            val start = TimeSource.Monotonic.markNow()
+            val answer = BridgeClient(port, token, scriptLimit = 1.seconds).send("POST", "/run", "wait 3s screen=nowhere", timeout = 1.seconds)
+            assertTrue(start.elapsedNow() >= 3.seconds)
+            assertEquals(1, answer.exitCode)
+            assertTrue(answer.body.endsWith("FAIL wait timed out after 3s\n"), answer.body)
+        } finally {
+            server.stop()
+            executor.shutdownNow()
+        }
     }
 
     private val config = AppCtlConfig<AgentStoreDriver<Unit, Unit>, Unit>(

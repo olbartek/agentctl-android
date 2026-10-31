@@ -67,13 +67,13 @@ release APK carries none of them.
 // the app module
 implementation(project(":feature-screens"))               // your screens, on agentctl-core
 debugImplementation(project(":app-agentctl-config"))      // your AppCtlConfig, on agentctl-runtime
-debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.11.0")
+debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.12.0")
 
 // the CLI module (application plugin)
-implementation("com.github.olbartek.agentctl-android:agentctl-cli:0.11.0")
+implementation("com.github.olbartek.agentctl-android:agentctl-cli:0.12.0")
 
 // a test source set
-testImplementation("com.github.olbartek.agentctl-android:agentctl-test-support:0.11.0")
+testImplementation("com.github.olbartek.agentctl-android:agentctl-test-support:0.12.0")
 ```
 
 The project names are placeholders; [TinyApp's Android app](../../examples/tinyapp-android/build.gradle.kts) takes

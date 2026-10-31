@@ -9,7 +9,7 @@ public object AgentRegistry {
     public const val DEFAULT_MOCK_EXAMPLE: String = "mock <client.method> <error>"
 
     /** The names the runner handles itself, in the order the "Valid here" list appends them (CONTRACT.md §1.3). */
-    public val runtimeCommandNames: List<String> = listOf("expect", "advance", "mock")
+    public val runtimeCommandNames: List<String> = listOf("expect", "advance", "mock", "wait")
 
     /**
      * @param mockExample the example in `mock`'s help, e.g. `mock orders.fetchOrders network`. The client and
@@ -38,6 +38,14 @@ public object AgentRegistry {
             name = "mock",
             argument = "<client.method> <error>",
             help = "Make the next call to that method fail, e.g. $mockExample.",
+            source = "runtime",
+        ),
+        CommandDoc(
+            name = "wait",
+            argument = "[<duration>] [k=v …]",
+            help = "Wait (10s unless a duration is given) until the pairs match, as expect checks them; with no pairs, " +
+                "until the screen's line changes. In the running app time is real; headlessly the clock moves to each timer due. " +
+                "Fails if the time runs out.",
             source = "runtime",
         ),
     ) + device.commandDocs

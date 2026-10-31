@@ -159,6 +159,28 @@ class BridgeServerTest {
         }
     }
 
+    /**
+     * `wait` in the running app takes real time, and reports a state only once the app has settled on it: the
+     * cooldown's first tick, a second after `save`, is the change a bare `wait` sees (CONTRACT.md §2.5, §8.5).
+     */
+    @Test
+    fun waitWaitsInRealTime() {
+        val port = startBridge()
+        val start = System.nanoTime()
+        val match = request("POST", "/run", port, "open 2; save; wait 5s cooldown=2")
+        assertEquals("0", match.exit, match.body)
+        assertTrue(System.nanoTime() - start >= 700_000_000L, "the first tick came too early")
+        val change = request("POST", "/run", port, "wait 5s")
+        assertEquals("0", change.exit, change.body)
+        assertTrue(change.body.contains("cooldown=1"), change.body)
+        val timeout = request("POST", "/run", port, "wait 300ms screen=nowhere")
+        assertEquals("1", timeout.exit)
+        assertTrue(
+            timeout.body.endsWith("  FAIL wait timed out after 300ms\n  FAIL expected screen=nowhere, got screen=items/2\n"),
+            timeout.body,
+        )
+    }
+
     private data class Answer(val status: Int, val body: String, val exit: String?)
 
     private fun request(method: String, path: String, port: Int, body: String? = null, token: String? = TOKEN): Answer {

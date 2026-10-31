@@ -16,9 +16,7 @@
   screen=auth/otp/code email=alice@example.com resendIn=20 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable pending=1
 > expect resendIn=20 pending=1
   screen=auth/otp/code email=alice@example.com resendIn=20 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable pending=1
-> advance 20s
-  screen=auth/otp/code email=alice@example.com resendIn=0 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable
-> expect resendIn=0 pending=0
+> wait 30s resendIn=0 pending=0
   screen=auth/otp/code email=alice@example.com resendIn=0 attemptsLeft=3 canVerify=false loading=false error=resendNotAvailable
 > resend
   screen=auth/otp/code email=alice@example.com resendIn=30 attemptsLeft=3 canVerify=false loading=false calls=auth.sendOTP pending=1

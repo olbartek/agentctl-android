@@ -156,6 +156,21 @@ public object ScriptParser {
         }
         return null
     }
+
+    /** A duration as a script writes it, in the largest unit that holds it exactly: `90s`, `5m`, `1h`, `1500ms`. */
+    public fun formatDuration(duration: AgentDuration): String {
+        val milliseconds = duration.totalMilliseconds
+        val thousand = java.math.BigInteger.valueOf(1000)
+        if (milliseconds.mod(thousand).signum() != 0) return "${milliseconds}ms"
+        val seconds = milliseconds / thousand
+        if (seconds.signum() != 0 && seconds.mod(java.math.BigInteger.valueOf(3600)).signum() == 0) {
+            return "${seconds / java.math.BigInteger.valueOf(3600)}h"
+        }
+        if (seconds.signum() != 0 && seconds.mod(java.math.BigInteger.valueOf(60)).signum() == 0) {
+            return "${seconds / java.math.BigInteger.valueOf(60)}m"
+        }
+        return "${seconds}s"
+    }
 }
 
 /**

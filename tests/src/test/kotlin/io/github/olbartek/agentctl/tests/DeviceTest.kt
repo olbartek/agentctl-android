@@ -314,9 +314,9 @@ class DeviceTest {
     fun noDeviceConfigurationMeansNoDeviceCommand() {
         val (text, status) = run("device network offline", Gadget.host(AgentDeviceConfig.none()))
         assertEquals(RunStatus.FAILED, status)
-        assertTrue(text.endsWith("  FAIL unknown command 'device' on gadget. Valid here: camera, unlock, fetch, expect, advance, mock"), text)
+        assertTrue(text.endsWith("  FAIL unknown command 'device' on gadget. Valid here: camera, unlock, fetch, expect, advance, mock, wait"), text)
         val (configured, _) = run("nope")
-        assertTrue(configured.endsWith("Valid here: camera, unlock, fetch, expect, advance, mock, device"), configured)
+        assertTrue(configured.endsWith("Valid here: camera, unlock, fetch, expect, advance, mock, wait, device"), configured)
     }
 
     @Test
@@ -438,7 +438,7 @@ class DeviceTest {
         val docs = AgentRegistry.runtimeCommands(device = Gadget.device.surface).map { it.usage }
         assertEquals(
             listOf(
-                "expect k=v [k=v …]", "advance <duration>", "mock <client.method> <error>",
+                "expect k=v [k=v …]", "advance <duration>", "mock <client.method> <error>", "wait [<duration>] [k=v …]",
                 "device permission <service> <not-determined|granted|denied|limited>", "device prompt <allow|deny|limited>",
                 "device open-url <url>", "device push <name> [tap]", "device background", "device foreground",
                 "device relaunch", "device network <online|offline>", "device location <lat>,<lon>|none",
@@ -446,7 +446,7 @@ class DeviceTest {
             ),
             docs,
         )
-        assertEquals(3, AgentRegistry.runtimeCommands().size)
+        assertEquals(4, AgentRegistry.runtimeCommands().size)
         assertTrue(
             "error=<code|none>, pending=<n> or prompt=<service|none>" in
                 AgentRegistry.runtimeCommands(device = Gadget.device.surface)[0].help,

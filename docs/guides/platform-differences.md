@@ -89,6 +89,11 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   closures. This port's `AgentLaunchSession` is the piece below it, free of Android (the live host, the seed, the
   server, `start()` returning the port), which a JVM host uses directly. `AgentLaunchOptions` is a top-level type in
   both; the reference keeps `AgentLaunch.Options` as an alias for it.
+- `wait`'s duration (0.12) is an `AgentDuration`, as `advance`'s. `RunnerEnvironment` takes the headless clock's
+  `timeUntilNextSleep` as an optional last parameter; its three-parameter constructor from 0.11 stays.
+- Headlessly, a sleep whose deadline has passed while nothing is due on the virtual dispatcher is one that is not on
+  virtual time (a `CountingClock.sleep` called off the host's dispatcher, which the reference's clock cannot have), and
+  `wait` goes straight to the end of its duration rather than stepping the clock by nothing.
 - `--latency` is read as a 64-bit number, as the reference's `Int`, but reaches the app as an intent extra, which is
   32-bit: a value past about 25 days is clamped to the largest one, where the reference passes it on as it is.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,

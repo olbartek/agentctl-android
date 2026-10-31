@@ -44,6 +44,7 @@ Scenarios in `scenarios/*.appctl` use the same syntax plus `expect` lines; `./ap
 | `expect k=v [k=v …]` | Assert on screen, any summary key, call=<client.method> (called during the previous step), error=<code\|none>, pending=<n> or prompt=<service\|none>. A failed assertion fails the script. |
 | `advance <duration>` | Move the app's clock forward, e.g. 500ms, 30s, 5m, 1h, firing the timers due. |
 | `mock <client.method> <error>` | Make the next call to that method fail, e.g. mock orders.fetchOrders network. |
+| `wait [<duration>] [k=v …]` | Wait (10s unless a duration is given) until the pairs match, as expect checks them; with no pairs, until the screen's line changes. In the running app time is real; headlessly the clock moves to each timer due. Fails if the time runs out. |
 | `device permission <service> <not-determined\|granted\|denied\|limited>` | Set a permission as if changed in Settings. Services: notifications, location. |
 | `device prompt <allow\|deny\|limited>` | Answer the system permission prompt the app is showing (prompt=<service>). |
 | `device open-url <url>` | Open a link in the app, as a tapped deep link or universal link. |
