@@ -78,9 +78,10 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   through `adb forward`, so the `Host` they carry is the Mac's `127.0.0.1:<port>`, which the bridge accepts as it
   would on a simulator.
 - Until 1.0, `BridgeServer` keeps the constructors from 0.8, deprecated, so code built against them still links; a
-  server made with one checks every request but the token. The reference's `BridgeServer` always takes a token, as
-  this port's other constructor does. What a launch starts, `AgentLaunchSession` on the JVM and `AgentLaunch` on
-  Android, never listens without a well-formed one (CONTRACT.md §8.2).
+  server made with one checks every request but the token ([Before 1.0](before-1.0.md) lists what goes then). The
+  reference's `BridgeServer` always takes a token, as this port's other constructor does. What a launch starts,
+  `AgentLaunchSession` on the JVM and `AgentLaunch` on Android, never listens without a well-formed one
+  (CONTRACT.md §8.2).
 - The launch types (0.11) share names but not roles. The reference's `AgentLaunchSession` is the UI-agnostic launch
   an iOS 16 or UIKit app holds (`options`, `app`, `isReady`, `start()`, `onAppChange`/`onReady`), and its
   `AgentLaunch` an `@Observable` wrapper over it for iOS 17. Here `AgentLaunch` is that launch: it needs neither
@@ -93,3 +94,7 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
   which Gradle can drop per build type; the reference, whose SwiftPM cannot, compiles its runtime, CLI and test
   support to nothing unless `DEBUG` or `AGENTCTL_RELEASE` is set. The same gate here is the release APK check.
+
+## Before 1.0
+
+The differences above that are to be settled by 1.0 are listed in [Before 1.0](before-1.0.md).

@@ -14,7 +14,7 @@ the real app on a device, through a debug-only in-app bridge that answers only r
 launch that started it (a fresh token per launch), so what you assert headlessly is what the app does.
 
 This is the Kotlin port of [agentctl-ios](https://github.com/olbartek/agentctl-ios). Both implement the same
-contract, [CONTRACT.md](CONTRACT.md) (version 2): the same script prints the same bytes in both. This repository's
+contract, [CONTRACT.md](CONTRACT.md) (version 4): the same script prints the same bytes in both. This repository's
 suite runs every example in the contract and compares the output byte for byte.
 
 ```
@@ -51,47 +51,17 @@ expect cooldown=2 pending=1 error=cooldown
 This one is from [`examples/tinyapp/scenarios/save-cooldown.appctl`](examples/tinyapp/scenarios/save-cooldown.appctl).
 `./tinyctl test` runs it, and so does this repository's own test suite.
 
-## How much faster
+## Install
 
-[`examples/agentshop`](examples/agentshop) (sign-in, onboarding, a shop) has 99 scenarios that run unchanged in
-three modes: headlessly, through the bridge in the real app on an emulator, and as Compose UI tests generated from
-the same files. On an Apple M4 Max, with a Pixel 7 emulator (API 36):
+The modules are published through [JitPack](https://jitpack.io/#olbartek/agentctl-android); the current version is
+0.11.0 ([the releases](docs/guides/releases.md)). Add `maven("https://jitpack.io")` to your repositories, then:
 
-| | Headless | Emulator, via the bridge | Compose UI tests |
-|---|---|---|---|
-| All 99 scenarios (1,104 steps) | **291 ms** | 5 min 48 s | 5 min 12 s |
-| A typical 12-step scenario | **32 ms** | 3.7 s | 3.3 s |
-| Change a line of a reducer, then check it | **1.1 s** | — | 5.0 s |
+```kotlin
+implementation("com.github.olbartek.agentctl-android:agentctl-core:0.11.0")         // your screens
+debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.11.0")  // the debug app
+```
 
-Headless has nothing to wait for: no emulator, no app to launch, no views, and a virtual clock instead of real time.
-Starting its JVM (143 ms) is about half of that total. The bridge pays for a real app, a launch per scenario and a
-250 ms quiet window per command. The Compose UI tests run inside the app's process and wait only until the app is
-idle, so here they cost about what the bridge does, far less than the XCUITests of
-[the iOS port](https://github.com/olbartek/agentctl-ios#how-much-faster) (30 minutes for the same scenarios). They
-also share one process per group instead of relaunching the app for every test.
-[The full report](docs/benchmarks/2026-09-29-agentshop.md) explains where the time goes, and
-[this video](docs/benchmarks/2026-09-29-agentshop.mp4) runs three scenarios side by side.
-
-The modes check different things, so this is not a case for deleting UI tests. It is a case for which one an agent
-runs hundreds of times a day.
-
-## Requirements, and what this is not
-
-- **JDK 17+ to run, Kotlin 2.4, kotlinx.coroutines 1.11.** The engine is plain Kotlin on the JVM. The bridge is an
-  Android library: minSdk 28, compiled against SDK 36.
-- **The app is built on a store, or as MVVM.** The engine talks to an `AgentDriver`, never to your app's types, and
-  both drivers run the same scripts with the same output:
-  - `AgentStoreDriver` drives a store. `agentctl-core` ships a small unidirectional one (`Store`, `Reducer`, `Effect`:
-    run, cancellable, send, cancel, map, scoped), which plays the part TCA plays in the Swift version; TinyApp is
-    built on it. Any other store implements `AgentStore`: the states, `send`, and the effects in flight.
-  - `AgentViewModelDriver` drives MVVM: Jetpack `ViewModel`s under a coordinator that owns the back stack (see
-    [MVVM](docs/guides/integration.md#mvvm-apps-without-a-store)).
-- **Screens are driven through state, not through the UI.** Nothing taps and nothing reads pixels; a headless run
-  has no views at all. Rendering is verified separately, by screenshot tests (see
-  [the ladder](docs/guides/verification-ladder.md)).
-- **The CLI cannot ship as a prebuilt binary.** It builds your app's store in its own process and sends your
-  actions to it, so `agentctl-cli` is a *library*. Each host compiles a small `main` into its own CLI: an import,
-  its `AppCtlConfig` and one call.
+[The overview](docs/guides/overview.md#packages) lists all five modules and who depends on each.
 
 ## Get started
 
@@ -108,97 +78,33 @@ The whole integration, in five steps — each is a few lines of real code in
 4. **Copy the wrapper** — [`Templates/appctl`](Templates/appctl) rebuilds the CLI quietly before every call.
 5. **Run something** — `./appctl screens`, `./appctl run "…"`, `./appctl test`.
 
-## Guides
+## Documentation
 
-| Guide | What it covers |
+The [wiki](https://github.com/olbartek/agentctl-android/wiki) is where to read it all. It is generated from this
+repository's [`docs/guides`](docs/guides) by [`scripts/wiki-sync`](scripts/wiki-sync), so the same pages are here, at
+every tag:
+
+| Page | What it covers |
 |---|---|
-| [Integration](docs/guides/integration.md) | The five steps above in full: screens, commands (`action`, `parsing`, `text`, `onOff`, `choice`), gates, containers and inherited commands, mocked clients and `MockBackend.call`, the config, debug-only builds, the wrapper; MVVM apps, and moving a host to 0.7. |
+| [Overview](docs/guides/overview.md) | How much faster headless is, what it needs and is not, the five modules, the example apps, building this repository. |
+| [Getting started](docs/guides/integration.md) | The five steps above in full: screens, commands (`action`, `parsing`, `text`, `onOff`, `choice`), gates, containers and inherited commands, mocked clients and `MockBackend.call`, the config, debug-only builds, the wrapper; MVVM apps. |
 | [Commands](docs/guides/commands.md) | Every command your CLI gets (`run`, `test`, `docs`, `check`, `app …`), the exit codes, the runtime commands, and what a headless run pins to stay deterministic. |
+| [The in-app bridge](docs/guides/bridge.md) | Driving the real app on a device: `AgentLaunch`, launch extras and seeds, the launch token, `advance` on real time, `app test`. |
 | [The device environment](docs/guides/device-environment.md) | `device …`: permissions and system prompts, links, pushes, background, foreground and relaunch, the network, location and biometry — one row per capability, with what your app wires and the real-OS `app` wrapper. |
 | [The verification ladder](docs/guides/verification-ladder.md) | `check`, from the Gradle build to the real app on an emulator, and verifying at the cheapest rung that proves a change. |
-| [Coverage and scenario checks](docs/guides/coverage-and-checks.md) | The guards that fail your build when the agent surface drifts, and the scenario checks every host's tests need. |
-| [The in-app bridge](docs/guides/bridge.md) | Driving the real app on a device: `AgentLaunch`, launch extras and seeds, the launch token, `advance` on real time, `app test`. |
-| [Differences from agentctl-ios](docs/guides/platform-differences.md) | Where this port adapts the reference rather than copying it, one item each. |
-| [CONTRACT.md](CONTRACT.md) | The engine specified independently of Swift: what a port implements. |
-
-## The contract
-
-[`CONTRACT.md`](CONTRACT.md) is copied unchanged from agentctl-ios; the Swift package is its reference
-implementation. It specifies:
-
-- the script language and command resolution;
-- the runtime commands (`expect`, `advance`, `mock`, and `device` when the app configures one);
-- the exact step output and the exit codes;
-- the determinism requirements;
-- the bridge protocol.
-
-On the contract's open questions, this port follows the reference in every case, so fixtures are shared:
-
-- escapes are generic;
-- a duration takes a single unit;
-- summary values are not escaped;
-- settling uses the same thresholds;
-- the JSON uses sorted keys laid out as Foundation's encoder lays them out;
-- the "Valid here" list ends in the same tail.
-
-It also counts script columns in grapheme clusters, and compares a script's text by canonical equivalence
-(`AgentText`), as Swift does. Two public helpers have no Swift counterpart, because the modules that need them are
-separate here: `AgentText` (Swift's `String ==` is canonical already) and `ScriptParser.read` (strict UTF-8, as
-`String(contentsOf:encoding: .utf8)` reads).
-
-## Differences from agentctl-ios
-
-Where Android differs from iOS, this port adapts the reference rather than copying it: L3's Roborazzi or Paparazzi
-tasks, `adb` for the device commands, Compose's idleness for live settling, `AgentEnvironment.device` and
-`AgentAppFactory` for the simulated device, and a few Kotlin-forced API shapes.
-[The list, one difference per item](docs/guides/platform-differences.md).
-
-## The example apps
-
-[`examples/tinyapp`](examples/tinyapp) is the smallest complete integration and this repository's fixture: two
-screens, one mocked client, five scenarios, its own `tinyctl` CLI and a committed
-[generated command reference](examples/tinyapp/agent-commands.md). Most snippets in
-[the integration guide](docs/guides/integration.md) are from it, and
-[`examples/tinyapp-android`](examples/tinyapp-android) runs it as an Android app with the bridge.
-
-[`examples/tinymvvm`](examples/tinymvvm) is TinyApp rebuilt as MVVM: Jetpack `ViewModel`s under a coordinator, no
-store. It runs TinyApp's scenario files unchanged and prints the same output byte for byte (`./tinymvvmctl test`).
-See [its README](examples/tinymvvm/README.md).
-
-[`examples/agentshop`](examples/agentshop) is the showcase: a real Compose app (sign-in, onboarding, a shop with a
-cart and checkout, and the simulated device: permissions, links, pushes, relaunch, offline, Face ID), the port of the
-iOS one, with 123 scenarios that print the same bytes on both ports, UI tests generated from them, and the benchmark behind [the numbers above](#how-much-faster). See
-[its README](examples/agentshop/README.md) and [the app, screen by screen](examples/agentshop/docs/APP.md).
-
-## Building this repository
-
-```bash
-./gradlew build          # every module, the Android bridge and sample app included, and the whole suite
-./tinyctl test           # the example's scenarios
-./tinyctl check          # the ladder: L0 build, L1 tests, L2 scenarios, docs (--ui adds the emulator)
-```
-
-You need JDK 17+ (`JAVA_HOME`) and an Android SDK (`local.properties` with `sdk.dir`, or `ANDROID_HOME`) for the
-Android modules.
+| [Coverage and checks](docs/guides/coverage-and-checks.md) | The guards that fail your build when the agent surface drifts, and the scenario checks every host's tests need. |
+| [Platform differences](docs/guides/platform-differences.md) | Where this port adapts [agentctl-ios](https://github.com/olbartek/agentctl-ios) rather than copying it, and which type plays which role where the names differ. |
+| [The contract](docs/guides/contract.md) | [`CONTRACT.md`](CONTRACT.md), the engine specified independently of Swift: what a port implements, and this port's answers to its open questions. |
+| [Releases](docs/guides/releases.md) | Every version, and what a host changes to move to it. |
+| [Before 1.0](docs/guides/before-1.0.md) | What may still change, and what is to be settled by 1.0. |
 
 ## Status
 
-Version 0.11.0, released together with agentctl-ios 0.11.0, which gives iOS 16 and UIKit apps the bridge launch
-through its new `AgentLaunchSession`. There is no Android API change: `AgentLaunch` already starts the bridge in any
-Android app, with Views or Compose, from minSdk 28, and `AgentLaunchOptions` was already its own type ([the platform
-differences](docs/guides/platform-differences.md) map the two ports' launch types). 0.10.0, which lowered the iOS
-floor to iOS 16, changed nothing here either. Scripts, scenarios, step output and CONTRACT.md (version 4) are
-unchanged from 0.9: the debug bridge answers only whoever launched the app, with a token per launch that the CLI
-records in `bridge.json` (mode 0600) and sends with every request. Like 0.9.0, it was checked on the two NZOZ apps the
-two ports were extracted for, run side by side, before it was tagged. The example apps in this repository are the
-integrations CI exercises, and the API may still change between minor versions before 1.0. MIT licensed.
-
-Settled before 1.0: `BridgeServer`'s tokenless constructors from 0.8, deprecated since 0.9, go; and
-`AgentLaunchSession`, which names the Android-free piece below `AgentLaunch` here but the launch itself in
-agentctl-ios, gets one meaning in both ports.
+Version 0.11.0 ([releases](docs/guides/releases.md)). The API may still change between minor versions before 1.0
+([before 1.0](docs/guides/before-1.0.md)). The example apps in this repository are the integrations CI exercises. MIT
+licensed.
 
 This port and [agentctl-ios](https://github.com/olbartek/agentctl-ios) move in lockstep: the same features, the same
 example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.11.x here and 0.11.x there implement
 the same [`CONTRACT.md`](CONTRACT.md). A patch release is one repository's own fix, so the two patch numbers can
 differ.
-(Before 0.4.1 this port had its own numbers: v0.1.0–v0.2.0.)
