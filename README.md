@@ -98,7 +98,7 @@ runs hundreds of times a day.
 The whole integration, in five steps — each is a few lines of real code in
 [the integration guide](docs/guides/integration.md):
 
-1. **Add the dependency** — `com.github.olbartek.agentctl-android:<module>:0.10.0` from JitPack, and only the modules
+1. **Add the dependency** — `com.github.olbartek.agentctl-android:<module>:0.11.0` from JitPack, and only the modules
    each Gradle module needs (`agentctl-core` for screens, `agentctl-runtime` for the config, `agentctl-cli` for your
    CLI, `agentctl-bridge` for the debug app, `agentctl-test-support` for tests).
 2. **Describe your screens** — beside each reducer (or view model), an `AgentScreen` object: its path, a `key=value`
@@ -183,17 +183,22 @@ Android modules.
 
 ## Status
 
-Version 0.10.0, released together with agentctl-ios 0.10.0, which lowers the iOS floor to iOS 16. There is no
-Android API change: the library still needs minSdk 28, and scripts, scenarios, step output and CONTRACT.md (version 4)
-are unchanged from 0.9. Since 0.9 the debug bridge answers only whoever launched the app: each launch passes a token,
-which the CLI records in `bridge.json` (mode 0600) and sends with every request; a request without it, from a host
-other than the loopback, or with an `Origin` is refused, and an app launched without a token starts no bridge.
-`BridgeServer`'s tokenless constructors from 0.8 stay deprecated until 1.0. Like 0.9.0, it was checked on the two
-NZOZ apps the two ports were extracted for, run side by side, before it was tagged. The example apps in this
-repository are the integrations CI exercises, and the API may still change between minor versions before 1.0. MIT
-licensed.
+Version 0.11.0, released together with agentctl-ios 0.11.0, which gives iOS 16 and UIKit apps the bridge launch
+through its new `AgentLaunchSession`. There is no Android API change: `AgentLaunch` already starts the bridge in any
+Android app, with Views or Compose, from minSdk 28, and `AgentLaunchOptions` was already its own type ([the platform
+differences](docs/guides/platform-differences.md) map the two ports' launch types). 0.10.0, which lowered the iOS
+floor to iOS 16, changed nothing here either. Scripts, scenarios, step output and CONTRACT.md (version 4) are
+unchanged from 0.9: the debug bridge answers only whoever launched the app, with a token per launch that the CLI
+records in `bridge.json` (mode 0600) and sends with every request. Like 0.9.0, it was checked on the two NZOZ apps the
+two ports were extracted for, run side by side, before it was tagged. The example apps in this repository are the
+integrations CI exercises, and the API may still change between minor versions before 1.0. MIT licensed.
+
+Settled before 1.0: `BridgeServer`'s tokenless constructors from 0.8, deprecated since 0.9, go; and
+`AgentLaunchSession`, which names the Android-free piece below `AgentLaunch` here but the launch itself in
+agentctl-ios, gets one meaning in both ports.
 
 This port and [agentctl-ios](https://github.com/olbartek/agentctl-ios) move in lockstep: the same features, the same
-example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.10.x here and 0.10.x there implement the
-same [`CONTRACT.md`](CONTRACT.md). A patch release is one repository's own fix, so the two patch numbers can differ.
+example apps with the same scenario files, and the same MAJOR.MINOR version, so 0.11.x here and 0.11.x there implement
+the same [`CONTRACT.md`](CONTRACT.md). A patch release is one repository's own fix, so the two patch numbers can
+differ.
 (Before 0.4.1 this port had its own numbers: v0.1.0–v0.2.0.)

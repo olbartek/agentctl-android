@@ -21,7 +21,7 @@ dependencyResolutionManagement {
 
 // a module's build.gradle.kts
 dependencies {
-    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.10.0")
+    implementation("com.github.olbartek.agentctl-android:agentctl-core:0.11.0")
 }
 ```
 
@@ -278,7 +278,7 @@ which you can copy).
 dependencies {
     implementation(project(":feature:items"))           // screens and store: agentctl-core
     debugImplementation(project(":appctl-config"))      // the AppCtlConfig: agentctl-runtime
-    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.10.0")
+    debugImplementation("com.github.olbartek.agentctl-android:agentctl-bridge:0.11.0")
 }
 ```
 
@@ -523,3 +523,9 @@ what it changes:
 - `BridgeRequest` has a `headers` map, and `BridgeServer` a constructor that takes the expected token. 0.8's
   constructors are deprecated (removed in 1.0): code built against them still links, and a `BridgeServer` built with
   them checks no token. Pass the token instead.
+
+### Moving a host to 0.10 and 0.11
+
+Nothing changes for an Android host: bump the version. agentctl-ios 0.10 lowered its floor to iOS 16, and 0.11 gave
+iOS 16 and UIKit apps the bridge launch (its `AgentLaunchSession`), which `AgentLaunch` already is here, in a Views
+app or a Compose one. Scripts, scenarios, step output and CONTRACT.md are as in 0.9.

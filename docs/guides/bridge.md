@@ -7,7 +7,9 @@ permission the bridge's manifest adds. The server listens on
 that started it (see [Who may ask](#who-may-ask)).
 
 [`examples/tinyapp-android`](../../examples/tinyapp-android) is TinyApp as a real app: plain views that render the store
-and send it the same actions the commands do. Its debug build's store, the whole integration
+and send it the same actions the commands do. `AgentLaunch` starts the same way in a Views app and a Compose one, on
+every API level the library supports (a Views app adds its transitions to `isUIIdle`: see below). Its debug build's
+store, the whole integration
 ([`src/debug/…/AppStore.kt`](../../examples/tinyapp-android/src/debug/kotlin/io/github/olbartek/agentctl/examples/tinyapp/android/AppStore.kt)):
 
 ```kotlin

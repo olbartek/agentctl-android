@@ -81,6 +81,13 @@ Where Android differs from iOS, the port adapts the reference rather than copyin
   server made with one checks every request but the token. The reference's `BridgeServer` always takes a token, as
   this port's other constructor does. What a launch starts, `AgentLaunchSession` on the JVM and `AgentLaunch` on
   Android, never listens without a well-formed one (CONTRACT.md §8.2).
+- The launch types (0.11) share names but not roles. The reference's `AgentLaunchSession` is the UI-agnostic launch
+  an iOS 16 or UIKit app holds (`options`, `app`, `isReady`, `start()`, `onAppChange`/`onReady`), and its
+  `AgentLaunch` an `@Observable` wrapper over it for iOS 17. Here `AgentLaunch` is that launch: it needs neither
+  Compose nor a newer API level, and its `apps` and `isReady` are `StateFlow`s, which stand in for the reference's
+  closures. This port's `AgentLaunchSession` is the piece below it, free of Android (the live host, the seed, the
+  server, `start()` returning the port), which a JVM host uses directly. `AgentLaunchOptions` is a top-level type in
+  both; the reference keeps `AgentLaunch.Options` as an alias for it.
 - `--latency` is read as a 64-bit number, as the reference's `Int`, but reaches the app as an intent extra, which is
   32-bit: a value past about 25 days is clamped to the largest one, where the reference passes it on as it is.
 - A release build leaves AgentCtl's runtime out because the config module is a `debugImplementation` dependency,
